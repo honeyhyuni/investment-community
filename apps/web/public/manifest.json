@@ -1,0 +1,11 @@
+{
+  "name": "Private Investment Community",
+  "short_name": "Invest",
+  "description": "Private PWA investment community for approved members.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
+  "icons": []
+}

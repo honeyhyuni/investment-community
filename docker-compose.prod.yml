@@ -1,0 +1,74 @@
+services:
+  web:
+    image: investment-community-web:prod
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://example.com/api}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  api:
+    image: investment-community-api:prod
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      WEB_ORIGIN: ${WEB_ORIGIN}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      KIS_APP_KEY: ${KIS_APP_KEY}
+      KIS_APP_SECRET: ${KIS_APP_SECRET}
+      KIS_ACCOUNT_NO: ${KIS_ACCOUNT_NO}
+      KIS_ACCOUNT_PRODUCT_CODE: ${KIS_ACCOUNT_PRODUCT_CODE}
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET}
+      DART_API_KEY: ${DART_API_KEY}
+    ports:
+      - "${API_PORT:-4000}:4000"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:

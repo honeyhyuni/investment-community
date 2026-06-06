@@ -1,0 +1,80 @@
+services:
+  web:
+    image: investment-community-web:dev
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.dev
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:4000/api}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    volumes:
+      - ./apps/web:/app
+      - web_node_modules:/app/node_modules
+      - web_next:/app/.next
+    depends_on:
+      - api
+
+  api:
+    image: investment-community-api:dev
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 4000
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://invest:change-me@postgres:5432/invest}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-me-access}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh}
+      KIS_APP_KEY: ${KIS_APP_KEY:-}
+      KIS_APP_SECRET: ${KIS_APP_SECRET:-}
+      KIS_ACCOUNT_NO: ${KIS_ACCOUNT_NO:-}
+      KIS_ACCOUNT_PRODUCT_CODE: ${KIS_ACCOUNT_PRODUCT_CODE:-}
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
+      DART_API_KEY: ${DART_API_KEY:-}
+    ports:
+      - "${API_PORT:-4000}:4000"
+    volumes:
+      - ./apps/api:/app
+      - api_node_modules:/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-invest}
+      POSTGRES_USER: ${POSTGRES_USER:-invest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  web_node_modules:
+  web_next:
+  api_node_modules:
+  postgres_data:
+  redis_data:

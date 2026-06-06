@@ -1,0 +1,20 @@
+{
+  "name": "investment-community",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm --prefix apps/web run dev",
+    "dev:api": "npm --prefix apps/api run start:dev",
+    "build:web": "npm --prefix apps/web run build",
+    "build:api": "npm --prefix apps/api run build",
+    "lint:web": "npm --prefix apps/web run lint",
+    "lint:api": "npm --prefix apps/api run lint",
+    "test:api": "npm --prefix apps/api run test",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down"
+  }
+}
