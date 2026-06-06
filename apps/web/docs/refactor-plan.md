@@ -35,22 +35,20 @@
 - `common/utils/`: `format.ts`(공유 formatMoney/formatNumber/convertMoneyValue — MarketPulse·StockTagQuote 중복 제거), `stock-search.ts`, `community.ts`
 - `common/lib/api.ts` (기존 `src/lib/api.ts` 이동)
 
+- 종목 뷰 `domain/markets/components/StocksPage.tsx`로 추출 완료 → `(auth)/page.tsx`는 13줄 래퍼. 종목 전용 formatter는 `domain/markets/utils/format.ts`, 타입은 `domain/markets/types.ts`. (데드코드 `convertQuote` 제거)
+
 **남은 것**
-- 종목(stocks) 뷰 본체가 아직 `(auth)/page.tsx`에 인라인(~1.2k줄) → `domain/markets`로 추출하면 5개 라우트 모두 얇아짐. (종목 전용 formatter: convertQuote/formatMarketCap/buildMetricItems/pickMetric도 함께)
 - 승인 계정으로 로그인→앱→로그아웃 + 라우트 이동/언어영속 브라우저 QA.
+- (선택) `StocksPage.tsx`(901줄) 내 sub-component(StockDetailPanel/RealtimeChart/QuoteCard 등) 개별 파일 분리, 기존 eslint warning(exhaustive-deps) 정리.
 
 ## Phase 진행표
 
 - [x] **Phase 0 — 문서화**: `docs/` + AGENTS.md 연결
-- [~] **Phase 1 — 순수 유틸/타입 추출**
-  - [x] `common/types.ts`, `common/utils/{stock-search,community,format}.ts`, `common/lib/api.ts`
-  - [ ] 종목 전용 formatter(convertQuote/formatMarketCap/buildMetricItems/pickMetric/translateDetailLabel)는 Step 2에서 `domain/markets`로 함께 이동
+- [x] **Phase 1 — 순수 유틸/타입 추출** — `common/types.ts`, `common/utils/{stock-search,community,format}.ts`, `common/lib/api.ts`, `domain/markets/{types,utils/format}.ts`
 - [x] **Phase 2 — leaf/도메인 컴포넌트 추출** — auth/markets/community/news/admin/profile + 공용(StatusBadge/Notice/TextInput/SessionLoading/MarkdownContent)
 - [x] **Phase 3 — zustand 스토어 + 상태 리프팅** — session/market-data/preferences 전부, providers로 라이프사이클 일원화
-- [~] **Phase 4 — 라우트 분리**
-  - [x] `(guest)/login`, `(auth)/layout` 공유 셸, 뷰 라우트 5개, nav(usePathname)+URL 점프, `Home()` 해체
-  - [ ] 종목 뷰 본체 `domain/markets` 추출(현재 `(auth)/page.tsx` 인라인)
-- [ ] **Phase 5 — 정리 + QA**: 데드코드 제거, docker 앱으로 로그인/종목/커뮤니티/관리자 흐름 확인
+- [x] **Phase 4 — 라우트 분리** — `(guest)/login`, `(auth)/layout` 공유 셸, 뷰 라우트 5개 전부 얇은 래퍼, nav(usePathname)+URL 점프, `Home()` 해체, 종목 `StocksPage` 추출
+- [ ] **Phase 5 — 정리 + QA**: 승인 계정 브라우저 QA, sub-component 추가 분리(선택), warning 정리
 
 ## 상태 분류 참조 (Phase 3에서 사용)
 

@@ -35,8 +35,10 @@ src/
       profile/page.tsx      # → <ProfilePage/>
   domain/                   # 도메인 특화 (그 도메인 없어지면 같이 사라지는 것)
     markets/
-      components/           # MarketPulse, (stocks 뷰 본체는 현재 (auth)/page.tsx에 인라인 — 추후 도메인으로 추출)
-      hooks/                # useStockRouteSelection (URL ?symbol= 동기화) ...
+      components/           # StocksPage, MarketPulse, StocksView, StockDetailPanel, RealtimeChart, QuoteCard, RelatedPosts
+      hooks/                # useStockRouteSelection (URL ?symbol= 동기화)
+      utils/                # format.ts (formatMarketCap, translateDetailLabel, buildMetricItems — 종목 전용)
+      types.ts              # StockTab, ChartPeriod, StockDetail, CandlePoint
     community/
       components/           # CommunityPage, PostCard, PostEditor, CommentThread, StockTagQuote ...
       types.ts
@@ -58,7 +60,7 @@ src/
     types.ts                # Language, DisplayCurrency, MarketQuote, StockSymbol, TradeTick (도메인 안 가리는 공유 타입)
 ```
 
-> **`*Page` 컨벤션:** 각 (auth) 라우트의 `page.tsx`는 `domain/<name>/components/<Name>Page.tsx`를 렌더하는 **얇은 Suspense 래퍼**다. 뷰 로직(state/effect/핸들러 + 콘텐츠 JSX)은 그 `*Page` 컴포넌트에 산다. 예외: 종목 뷰는 아직 `(auth)/page.tsx`에 인라인(추후 `domain/markets`로 추출 예정).
+> **`*Page` 컨벤션:** 각 (auth) 라우트의 `page.tsx`는 `domain/<name>/components/<Name>Page.tsx`를 렌더하는 **얇은 Suspense 래퍼**다. 뷰 로직(state/effect/핸들러 + 콘텐츠 JSX)은 그 `*Page` 컴포넌트에 산다. (종목 `/` = `StocksPage`, community/news/admin/profile도 동일 패턴.)
 
 ### domain vs common 판단 기준
 > **"이게 이 도메인 없어지면 같이 사라지나?"** → 예면 `domain/<name>/`, 아니면 `common/`.
