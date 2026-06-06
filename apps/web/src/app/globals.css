@@ -139,6 +139,13 @@ body {
   outline: none;
   min-height: 480px;
 }
+.tiptap-content p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #9aa6b6;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
 .dark-app .tiptap-content :where(code),
 .dark-app .tiptap-content :where(pre) {
   background: #1b222c;

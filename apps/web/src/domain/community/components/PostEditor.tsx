@@ -1,10 +1,11 @@
 "use client";
 
-import { Dispatch, SetStateAction, useMemo, useRef } from "react";
+import { Dispatch, SetStateAction, useEffect, useMemo, useRef } from "react";
 import { Image as ImageIcon, X } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
+import Placeholder from "@tiptap/extension-placeholder";
 import { encodeImageForPost, makeEditorBlockId } from "@/common/utils/community";
 import { stockSearchScore } from "@/common/utils/stock-search";
 import { CommunityContentBlock, StockTag } from "@/domain/community/types";
@@ -47,10 +48,18 @@ export function PostEditor({
   onCancel: () => void;
 }) {
   const blockIdRef = useRef(blocks[0]?.id ?? makeEditorBlockId());
+  const editorContent = blocks[0]?.text ?? "";
 
   const editor = useEditor({
-    extensions: [StarterKit.configure({ link: { openOnClick: false } }), Image],
-    content: blocks[0]?.text ?? "",
+    extensions: [
+      StarterKit.configure({ link: { openOnClick: false } }),
+      Image,
+      Placeholder.configure({
+        placeholder:
+          "자유롭게 글을 작성하세요. 예) 투자 근거 · 핵심 지표 · 리스크 점검",
+      }),
+    ],
+    content: editorContent,
     immediatelyRender: false,
     editorProps: {
       attributes: {
@@ -62,6 +71,16 @@ export function PostEditor({
       setBlocks([{ id: blockIdRef.current, type: "text", text: html }]);
     },
   });
+
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+    blockIdRef.current = blocks[0]?.id ?? blockIdRef.current;
+    if (editor.getHTML() !== editorContent) {
+      editor.commands.setContent(editorContent, { emitUpdate: false });
+    }
+  }, [blocks, editor, editorContent]);
 
   const suggestions = useMemo(() => {
     const query = tagQuery.trim();

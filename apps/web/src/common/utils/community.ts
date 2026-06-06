@@ -4,6 +4,16 @@ export function makeEditorBlockId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+/** 새 글 작성 시 에디터에 미리 채우는 섹션 템플릿(PR template 형식). */
+export const NEW_POST_TEMPLATE = [
+  "<h2>핵심 요약</h2>",
+  "<p></p>",
+  "<h2>투자 근거</h2>",
+  "<ul><li></li></ul>",
+  "<h2>리스크 점검</h2>",
+  "<ul><li></li></ul>",
+].join("");
+
 /** 글의 본문 HTML(TipTap 생성). contentBlocks의 text를 이어붙이고, 없으면 content로 폴백. */
 export function getPostHtml(post: CommunityPost): string {
   if (post.contentBlocks.length) {

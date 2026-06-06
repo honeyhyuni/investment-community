@@ -5,7 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Users } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
 import { apiRequest } from "@/common/lib/api";
-import { makeEditorBlockId, getPostHtml, htmlToPlainText } from "@/common/utils/community";
+import {
+  NEW_POST_TEMPLATE,
+  makeEditorBlockId,
+  getPostHtml,
+  htmlToPlainText,
+} from "@/common/utils/community";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { useSessionStore } from "@/common/stores/session";
 import {
@@ -37,7 +42,7 @@ export function CommunityPage() {
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [postTitle, setPostTitle] = useState("");
   const [postBlocks, setPostBlocks] = useState<CommunityContentBlock[]>([
-    { id: makeEditorBlockId(), type: "text", text: "" },
+    { id: makeEditorBlockId(), type: "text", text: NEW_POST_TEMPLATE },
   ]);
   const [postTagQuery, setPostTagQuery] = useState("");
   const [postTags, setPostTags] = useState<StockTag[]>([]);
@@ -94,7 +99,7 @@ export function CommunityPage() {
   function resetEditor() {
     setEditingPostId(null);
     setPostTitle("");
-    setPostBlocks([{ id: makeEditorBlockId(), type: "text", text: "" }]);
+    setPostBlocks([{ id: makeEditorBlockId(), type: "text", text: NEW_POST_TEMPLATE }]);
     setPostTagQuery("");
     setPostTags([]);
   }
