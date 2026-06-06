@@ -9,10 +9,6 @@ import {
   useState,
 } from "react";
 import {
-  LogOut,
-  Moon,
-  Sun,
-  UserPen,
   Search,
   TrendingDown,
   TrendingUp,
@@ -32,6 +28,7 @@ import { Notice } from "@/common/components/Notice";
 import { SessionLoading } from "@/common/components/SessionLoading";
 import { useSessionStore } from "@/common/stores/session";
 import { useMarketDataStore } from "@/common/stores/market-data";
+import { usePreferencesStore } from "@/common/stores/preferences";
 import {
   DisplayCurrency,
   MarketQuote,
@@ -39,11 +36,8 @@ import {
   TradeTick,
 } from "@/common/types";
 import { CommunityPost } from "@/domain/community/types";
-import { MarketPulse } from "@/domain/markets/components/MarketPulse";
 import { useStockRouteSelection } from "@/domain/markets/hooks/useStockRouteSelection";
 
-type View = "stocks";
-type MenuView = View | "news" | "community" | "admin";
 type Language = "en" | "ko";
 type StockTab = "US" | "KR";
 
@@ -83,13 +77,6 @@ type CandlePoint = {
 };
 
 const chartPeriods: ChartPeriod[] = ["1D", "1M", "1Y", "3Y", "5Y", "ALL"];
-
-const menus: Array<{ id: MenuView; label: string }> = [
-  { id: "stocks", label: "Stocks" },
-  { id: "news", label: "News" },
-  { id: "community", label: "Community" },
-  { id: "admin", label: "Admin" },
-];
 
 const copy = {
   en: {
@@ -139,22 +126,15 @@ export default function Home() {
 }
 
 function HomeContent() {
-  const [view, setView] = useState<View>("stocks");
-  const [language, setLanguage] = useState<Language>("en");
   const [stockTab, setStockTab] = useState<StockTab>("US");
   const accessToken = useSessionStore((s) => s.accessToken);
-  const user = useSessionStore((s) => s.user);
-  const authChecking = useSessionStore((s) => s.authChecking);
-  const logoutSession = useSessionStore((s) => s.logout);
-  const pulse = useMarketDataStore((s) => s.pulse);
+  const language = usePreferencesStore((s) => s.language);
   const usStocks = useMarketDataStore((s) => s.usStocks);
   const usSymbols = useMarketDataStore((s) => s.usSymbols);
   const krStocks = useMarketDataStore((s) => s.krStocks);
   const krSymbols = useMarketDataStore((s) => s.krSymbols);
   const livePrices = useMarketDataStore((s) => s.livePrices);
   const liveSeries = useMarketDataStore((s) => s.liveSeries);
-  const marketLoading = useMarketDataStore((s) => s.marketLoading);
-  const loadMarketData = useMarketDataStore((s) => s.loadMarketData);
   const router = useRouter();
   const [relatedPosts, setRelatedPosts] = useState<CommunityPost[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState("AAPL");
@@ -165,12 +145,9 @@ function HomeContent() {
   const [chartLoading, setChartLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
-  const [darkMode, setDarkMode] = useState(
-    () => typeof window !== "undefined" && window.localStorage.getItem("darkMode") === "true",
-  );
 
-  const isAdmin = user?.role === "ADMIN";
-  const openStocksView = useCallback(() => setView("stocks"), []);
+  // 셸(레이아웃)에서 stocks가 곧 기본 라우트라 별도 전환 불필요.
+  const openStocksView = useCallback(() => {}, []);
 
   useStockRouteSelection({
     selectedSymbol,
@@ -183,16 +160,6 @@ function HomeContent() {
     setPriceCurrency,
     setSearch,
   });
-
-  useEffect(() => {
-    if (!authChecking && user?.status !== "APPROVED") {
-      router.replace("/login");
-    }
-  }, [authChecking, user?.status, router]);
-
-  useEffect(() => {
-    window.localStorage.setItem("darkMode", String(darkMode));
-  }, [darkMode]);
 
   const visibleSymbols = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -284,7 +251,7 @@ function HomeContent() {
   }
 
   useEffect(() => {
-    if (!accessToken || user?.status !== "APPROVED" || !selectedSymbol) {
+    if (!accessToken || !selectedSymbol) {
       return;
     }
 
@@ -293,125 +260,12 @@ function HomeContent() {
       loadCandles(selectedSymbol, chartPeriod, accessToken);
       loadRelatedPosts(selectedSymbol, accessToken);
     });
-  }, [accessToken, selectedSymbol, chartPeriod, stockTab, user?.status]);
-
-  async function logout() {
-    // 세션 클리어 → user=null → 리다이렉트 가드가 /login으로 보냄(이 컴포넌트 언마운트되며 로컬 state 초기화).
-    await logoutSession();
-  }
-
-  // 승인 전(로딩/비로그인/대기/거절)에는 로딩만 보여주고, 가드 effect가 /login으로 보냄.
-  if (authChecking || user?.status !== "APPROVED") {
-    return (
-      <main
-        className={`min-h-screen bg-[#f6f7fb] text-[#161a22] ${
-          darkMode ? "dark-app" : ""
-        }`}
-      >
-        <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-6 sm:px-8">
-          <SessionLoading />
-        </section>
-      </main>
-    );
-  }
+  }, [accessToken, selectedSymbol, chartPeriod, stockTab]);
 
   return (
-    <main
-      className={`min-h-screen bg-[#f6f7fb] text-[#161a22] ${
-        darkMode ? "dark-app" : ""
-      }`}
-    >
-      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-6 sm:px-8">
-        <header className="flex items-center justify-between border-b border-[#d9dee8] pb-5">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607086]">
-              Private
-            </p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal">
-              Investment Community
-            </h1>
-          </div>
-          {user ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setLanguage(language === "en" ? "ko" : "en")}
-                className="h-10 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#1f6f8b] shadow-sm hover:bg-[#eef1f6]"
-              >
-                {copy[language].translate}
-              </button>
-              <button
-                onClick={() => setDarkMode((current) => !current)}
-                title={darkMode ? "Light mode" : "Dark mode"}
-                aria-label={darkMode ? "Light mode" : "Dark mode"}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#c7ceda] bg-white text-[#344052] shadow-sm hover:bg-[#eef1f6]"
-              >
-                {darkMode ? <Sun size={17} /> : <Moon size={17} />}
-              </button>
-              <button
-                onClick={() => router.push("/profile")}
-                className="inline-flex h-10 items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#344052] shadow-sm hover:bg-[#eef1f6]"
-              >
-                <UserPen size={16} />
-                {language === "ko" ? "프로필 수정" : "Profile"}
-              </button>
-              <button
-                onClick={logout}
-                className="inline-flex h-10 items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-medium shadow-sm hover:bg-[#eef1f6]"
-              >
-                <LogOut size={16} />
-                {copy[language].logout}
-              </button>
-            </div>
-          ) : null}
-        </header>
-
-        <>
-            {error ? <Notice message="" error={error} /> : null}
-            <MarketPulse
-              pulse={pulse}
-              livePrices={livePrices}
-              loading={marketLoading}
-              refresh={() => {
-                if (accessToken) {
-                  loadMarketData(accessToken);
-                }
-              }}
-              title={copy[language].marketPulse}
-              refreshLabel={copy[language].refresh}
-            />
-            <nav className="mt-4 flex gap-2 border-b border-[#d9dee8]">
-              {menus
-                .filter((menu) => menu.id !== "admin" || isAdmin)
-                .map((menu) => (
-                  <button
-                    key={menu.id}
-                    onClick={() => {
-                      if (menu.id === "community") {
-                        router.push("/community");
-                        return;
-                      }
-                      if (menu.id === "news") {
-                        router.push("/news");
-                        return;
-                      }
-                      if (menu.id === "admin") {
-                        router.push("/admin");
-                        return;
-                      }
-                      setView(menu.id);
-                    }}
-                    className={`h-11 border-b-2 px-3 text-sm font-semibold ${
-                      view === menu.id
-                        ? "border-[#1f6f8b] text-[#1f6f8b]"
-                        : "border-transparent text-[#607086]"
-                    }`}
-                  >
-                    {copy[language][menu.id as keyof (typeof copy)["en"]] ??
-                      menu.label}
-                  </button>
-                ))}
-            </nav>
-            <div className="grid flex-1 gap-6 py-6 lg:grid-cols-[1fr]">
+    <>
+      {error ? <Notice message="" error={error} /> : null}
+      <div className="grid flex-1 gap-6 py-6 lg:grid-cols-[1fr]">
               <StocksView
                 stockTab={stockTab}
                 setStockTab={setStockTab}
@@ -437,9 +291,7 @@ function HomeContent() {
                 onRelatedPostClick={openRelatedPost}
               />
             </div>
-          </>
-      </section>
-    </main>
+    </>
   );
 }
 

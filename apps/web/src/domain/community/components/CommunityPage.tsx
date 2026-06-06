@@ -2,14 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LogOut, Moon, Plus, Sun, UserPen, Users } from "lucide-react";
+import { Plus, Users } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
-import { SessionLoading } from "@/common/components/SessionLoading";
 import { apiRequest } from "@/lib/api";
 import { makeEditorBlockId, communityBlocksToMarkdown } from "@/common/lib/community";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { useSessionStore } from "@/common/stores/session";
-import { MarketPulse } from "@/domain/markets/components/MarketPulse";
 import {
   CommunityContentBlock,
   CommunityPost,
@@ -26,16 +24,11 @@ export function CommunityPage() {
   const searchParams = useSearchParams();
   const accessToken = useSessionStore((s) => s.accessToken);
   const user = useSessionStore((s) => s.user);
-  const authChecking = useSessionStore((s) => s.authChecking);
-  const logoutSession = useSessionStore((s) => s.logout);
-  const pulse = useMarketDataStore((s) => s.pulse);
   const usStocks = useMarketDataStore((s) => s.usStocks);
   const usSymbols = useMarketDataStore((s) => s.usSymbols);
   const krStocks = useMarketDataStore((s) => s.krStocks);
   const krSymbols = useMarketDataStore((s) => s.krSymbols);
   const livePrices = useMarketDataStore((s) => s.livePrices);
-  const marketLoading = useMarketDataStore((s) => s.marketLoading);
-  const loadMarketData = useMarketDataStore((s) => s.loadMarketData);
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [users, setUsers] = useState<CommunityUser[]>([]);
@@ -51,39 +44,17 @@ export function CommunityPage() {
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [editorOpen, setEditorOpen] = useState(false);
-  const [language, setLanguage] = useState<"en" | "ko">("en");
-  const [darkMode, setDarkMode] = useState(
-    () => typeof window !== "undefined" && window.localStorage.getItem("darkMode") === "true",
-  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const selectedPostId = searchParams.get("post");
   const stockSymbols = useMemo(() => [...krSymbols, ...usSymbols], [krSymbols, usSymbols]);
-  const isAdmin = user?.role === "ADMIN";
-  const menuItems: Array<{ id: "stocks" | "news" | "community" | "admin"; label: string }> = [
-    { id: "stocks", label: language === "ko" ? "종목" : "Stocks" },
-    { id: "news", label: language === "ko" ? "뉴스" : "News" },
-    { id: "community", label: language === "ko" ? "커뮤니티" : "Community" },
-    { id: "admin", label: language === "ko" ? "관리자" : "Admin" },
-  ];
-
   useEffect(() => {
-    if (!authChecking && user?.status !== "APPROVED") {
-      router.replace("/login");
-    }
-  }, [authChecking, user?.status, router]);
-
-  useEffect(() => {
-    window.localStorage.setItem("darkMode", String(darkMode));
-  }, [darkMode]);
-
-  useEffect(() => {
-    if (!accessToken || user?.status !== "APPROVED") {
+    if (!accessToken) {
       return;
     }
     loadCommunity(accessToken, scope, sort);
-  }, [accessToken, user?.status, scope, sort]);
+  }, [accessToken, scope, sort]);
 
   async function loadCommunity(
     token = accessToken,
@@ -296,116 +267,19 @@ export function CommunityPage() {
     router.push(`/?symbol=${encodeURIComponent(tag.symbol)}&market=${tag.market}`);
   }
 
-  async function logout() {
-    await logoutSession();
-  }
-
-  if (authChecking || user?.status !== "APPROVED") {
-    return (
-      <main className={`min-h-screen bg-[#f6f7fb] text-[#161a22] ${darkMode ? "dark-app" : ""}`}>
-        <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-6 sm:px-8">
-          <SessionLoading />
-        </section>
-      </main>
-    );
-  }
-
   const visiblePosts = selectedPostId
     ? posts.filter((post) => post.id === selectedPostId)
     : posts;
 
+  if (!user) {
+    return null;
+  }
+
   return (
-    <main className={`min-h-screen bg-[#f6f7fb] text-[#161a22] ${darkMode ? "dark-app" : ""}`}>
-      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-6 sm:px-8">
-        <header className="flex items-center justify-between border-b border-[#d9dee8] pb-5">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607086]">
-              Private
-            </p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal">
-              Investment Community
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setLanguage(language === "en" ? "ko" : "en")}
-              className="h-10 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#1f6f8b] shadow-sm hover:bg-[#eef1f6]"
-            >
-              {language === "en" ? "한국어" : "English"}
-            </button>
-            <button
-              onClick={() => setDarkMode((current) => !current)}
-              title={darkMode ? "Light mode" : "Dark mode"}
-              aria-label={darkMode ? "Light mode" : "Dark mode"}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#c7ceda] bg-white text-[#344052] shadow-sm hover:bg-[#eef1f6]"
-            >
-              {darkMode ? <Sun size={17} /> : <Moon size={17} />}
-            </button>
-            <button
-              onClick={() => router.push("/profile")}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#344052] shadow-sm hover:bg-[#eef1f6]"
-            >
-              <UserPen size={16} />
-              {language === "ko" ? "프로필 수정" : "Profile"}
-            </button>
-            <button
-              onClick={logout}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-medium shadow-sm hover:bg-[#eef1f6]"
-            >
-              <LogOut size={16} />
-              {language === "ko" ? "로그아웃" : "Logout"}
-            </button>
-          </div>
-        </header>
+    <>
+      {error ? <Notice message="" error={error} /> : null}
 
-        <MarketPulse
-          pulse={pulse}
-          livePrices={livePrices}
-          loading={marketLoading}
-          refresh={() => {
-            if (accessToken) {
-              loadMarketData(accessToken);
-            }
-          }}
-          title={language === "ko" ? "시장 지표" : "Market pulse"}
-          refreshLabel={language === "ko" ? "새로고침" : "Refresh"}
-        />
-
-        <nav className="mt-4 flex gap-2 border-b border-[#d9dee8]">
-          {menuItems
-            .filter((item) => item.id !== "admin" || isAdmin)
-            .map((item) => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  if (item.id === "community") {
-                    router.push("/community");
-                    return;
-                  }
-                  if (item.id === "news") {
-                    router.push("/news");
-                    return;
-                  }
-                  if (item.id === "admin") {
-                    router.push("/admin");
-                    return;
-                  }
-                  router.push("/");
-                }}
-                className={`h-11 border-b-2 px-3 text-sm font-semibold ${
-                  item.id === "community"
-                    ? "border-[#1f6f8b] text-[#1f6f8b]"
-                    : "border-transparent text-[#607086]"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-        </nav>
-
-        {error ? <Notice message="" error={error} /> : null}
-
-        <div className="grid flex-1 gap-5 py-6 lg:grid-cols-[1fr_320px]">
+      <div className="grid flex-1 gap-5 py-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap gap-2">
@@ -544,7 +418,6 @@ export function CommunityPage() {
             </div>
           </aside>
         </div>
-      </section>
-    </main>
+    </>
   );
 }

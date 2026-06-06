@@ -6,6 +6,7 @@ import { API_ORIGIN } from "@/lib/api";
 import { TradeTick } from "@/common/types";
 import { useSessionStore } from "@/common/stores/session";
 import { useMarketDataStore } from "@/common/stores/market-data";
+import { usePreferencesStore } from "@/common/stores/preferences";
 
 /**
  * 라우트 위에서 살아야 하는 전역 라이프사이클을 한 곳에서 관리한다.
@@ -19,10 +20,15 @@ export function Providers({ children }: { children: ReactNode }) {
   const verify = useSessionStore((s) => s.verify);
   const loadMarketData = useMarketDataStore((s) => s.loadMarketData);
   const applyTrade = useMarketDataStore((s) => s.applyTrade);
+  const hydratePreferences = usePreferencesStore((s) => s.hydrate);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    hydratePreferences();
+  }, [hydratePreferences]);
 
   useEffect(() => {
     if (!accessToken || status !== "APPROVED") {

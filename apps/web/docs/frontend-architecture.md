@@ -22,39 +22,42 @@
 src/
   app/
     layout.tsx              # root: html/body/폰트 + <Providers>
-    providers.tsx           # 'use client' — 세션 라이프사이클(refresh + /auth/me 폴링)
-    page.tsx                # 랜딩: 승인 유저 앱 (현재는 거대 Home, 추후 /stocks 리다이렉트)
+    providers.tsx           # 'use client' — 전역 라이프사이클(세션 refresh/verify 폴링, 마켓 로드+웹소켓, prefs hydrate)
     (guest)/                # 권한축: 비로그인/미승인 전용 route group
       layout.tsx            # 최소 셸: 타이틀 헤더
       login/page.tsx        # AuthPanel + PendingPanel (APPROVED면 / 로 리다이렉트)
     (auth)/                 # 권한축: 승인 유저 전용 route group
-      layout.tsx            # 셸: 헤더 + MarketPulse + nav + 세션가드
-      stocks/page.tsx
-      news/page.tsx
-      community/page.tsx
-      admin/page.tsx
-      profile/page.tsx
+      layout.tsx            # ★ 공유 셸: 세션가드 + 헤더 + MarketPulse + nav. 라우트 간 유지됨
+      page.tsx              # / = 종목(stocks) 뷰  ← 이 그룹의 인덱스
+      community/page.tsx    # 얇은 래퍼: <Suspense><CommunityPage/></Suspense>
+      news/page.tsx         # → <NewsPage/>
+      admin/page.tsx        # → <AdminPage/>
+      profile/page.tsx      # → <ProfilePage/>
   domain/                   # 도메인 특화 (그 도메인 없어지면 같이 사라지는 것)
     markets/
-      components/           # MarketPulse, StocksView, StockDetailPanel, RealtimeChart, QuoteCard ...
-      hooks/                # useQuotes, useRealtimeTrades ...
-      types.ts
+      components/           # MarketPulse, (stocks 뷰 본체는 현재 (auth)/page.tsx에 인라인 — 추후 도메인으로 추출)
+      hooks/                # useStockRouteSelection (URL ?symbol= 동기화) ...
     community/
-      components/           # CommunityView, PostEditor, CommentThread, RelatedPosts ...
-      hooks/
+      components/           # CommunityPage, PostCard, PostEditor, CommentThread, StockTagQuote ...
       types.ts
-    auth/
-      components/           # AuthPanel, AuthForm, AccountPanel, ProfilePanel, PendingPanel
-      hooks/                # useSession ...
+    news/
+      components/           # NewsPage
       types.ts
     admin/
-      components/           # AdminPanel
+      components/           # AdminPage (AdminPanel 포함)
+    profile/
+      components/           # ProfilePage
+    auth/
+      components/           # AuthPanel, AuthForm, PendingPanel
+      types.ts              # AuthMode
   common/                   # 범용 (도메인 안 가림)
-    components/             # InfoRow, InfoBox, StatusBadge, Notice, TextInput, MarkdownContent, SessionLoading, Placeholder
-    lib/                    # format.ts, stock-search.ts, api.ts, community.ts (순수 유틸, 컴포넌트/훅 아님)
+    components/             # StatusBadge(+statusLabel), Notice, TextInput, SessionLoading, MarkdownContent
+    lib/                    # stock-search.ts, community.ts (순수 유틸, 컴포넌트/훅 아님)
     stores/                 # session.ts, preferences.ts, market-data.ts (zustand)
-    types.ts                # 도메인 안 가리는 공유 타입
+    types.ts                # Language, DisplayCurrency, MarketQuote, StockSymbol, TradeTick (도메인 안 가리는 공유 타입)
 ```
+
+> **`*Page` 컨벤션:** 각 (auth) 라우트의 `page.tsx`는 `domain/<name>/components/<Name>Page.tsx`를 렌더하는 **얇은 Suspense 래퍼**다. 뷰 로직(state/effect/핸들러 + 콘텐츠 JSX)은 그 `*Page` 컴포넌트에 산다. 예외: 종목 뷰는 아직 `(auth)/page.tsx`에 인라인(추후 `domain/markets`로 추출 예정).
 
 ### domain vs common 판단 기준
 > **"이게 이 도메인 없어지면 같이 사라지나?"** → 예면 `domain/<name>/`, 아니면 `common/`.
@@ -95,18 +98,22 @@ src/
 
 > **왜 `(guest)`?** 처음엔 `(public)`을 고려했으나, Next의 정적 에셋 폴더 `public/`과 글자가 겹쳐 검색·리뷰에서 헷갈린다. `(auth)`(로그인 필요) ↔ `(guest)`(로그인 불필요)가 정확한 반대쌍이라 이 이름을 쓴다.
 
-- **`(auth)` 그룹** — `(auth)/layout.tsx`가 셸을 그리고 세션을 가드한다.
-  - `authChecking` → 로딩
-  - 미승인/비로그인 → `/login`으로 `router.replace`
-- **`/login`** (= `(guest)/login`) = `AuthPanel + PendingPanel`. 이미 승인된 세션이면 → `/`(→`/stocks`)로 리다이렉트.
-- 세션 자체(`refresh`/`verify` 폴링)는 라우트 위 `app/providers.tsx`에서 1회 마운트해 `useSessionStore`로 공유한다. 두 그룹이 같은 세션을 본다.
-- `app/page.tsx` = 랜딩(추후 `/stocks`로 리다이렉트).
-- nav는 `next/navigation`의 `<Link>` / `usePathname`으로 활성표시.
+- **`(auth)/layout.tsx`가 셸 + 가드를 단독 소유한다.**
+  - `authChecking` → 로딩, 미승인/비로그인 → `/login`으로 `router.replace`. APPROVED일 때만 `{children}` 렌더.
+  - 헤더(언어/다크모드/프로필/로그아웃) + MarketPulse + nav를 여기서만 그린다.
+  - nav 활성표시는 `usePathname()`, 이동은 `router.push(href)` (admin 항목은 `isAdmin`일 때만).
+- **`/login`** (= `(guest)/login`) = `AuthPanel + PendingPanel`. 이미 승인된 세션이면 → `/`로 리다이렉트.
+- 전역 라이프사이클(세션 `refresh`/`verify`, 마켓 로드+웹소켓, prefs `hydrate`)은 라우트 위 `app/providers.tsx`에서 1회 마운트한다.
+
+### ★ 페이지 vs 셸 경계 (새 라우트 추가 시 핵심 규칙)
+- **route `page.tsx`와 `*Page` 컴포넌트는 "콘텐츠"만 렌더한다.** 셸(`<main>/<section>/<header>/MarketPulse/<nav>`)·세션가드·다크모드 래퍼를 **페이지에 다시 그리지 않는다** — 전부 `(auth)/layout.tsx` 소유. 페이지는 보통 `<>...</>` 프래그먼트를 반환.
+- 페이지는 APPROVED를 가정한다(레이아웃이 보장). 추가 권한이 필요하면 그것만 가드 (예: `AdminPage`의 `isAdmin` 체크 → 아니면 `router.replace("/")` + `return null`).
+- 공유 상태는 페이지에서 **스토어 selector로 직접 구독** (`usePreferencesStore((s) => s.language)` 등). 셸 전용 값(pulse/darkMode 등)은 페이지로 내려보내지 않는다.
 
 ### 라우트 간 점프 = URL 쿼리파라미터 (state 넘기기 금지)
-- community → stocks (종목 선택): `/stocks?symbol=AAPL&market=US`
+- community → stocks (종목 선택): `/?symbol=AAPL&market=US` (종목 뷰는 현재 `/`)
 - stocks → community (특정 글): `/community?post=<id>`
-- 각 라우트가 `useSearchParams`로 읽어서 초기 상태를 세팅한다.
+- 각 라우트가 `useSearchParams`로 읽어 초기 상태 세팅. 종목 동기화는 `useStockRouteSelection` 훅 사용.
 
 ---
 
@@ -117,12 +124,13 @@ src/
 
 | 스토어 | 보유 | 비고 |
 |---|---|---|
-| `useSessionStore` | `accessToken`, `user`, `authChecking` + `login/logout/refresh/verify` | 파생값 `isAdmin`은 selector로 |
-| `usePreferencesStore` | `language`, `darkMode` | localStorage 영속 |
-| `useMarketDataStore` | `pulse`, `usStocks/usSymbols/krStocks/krSymbols`, `livePrices`, `marketLoading` + `loadMarketData` | 웹소켓 라이프사이클 포함. 여러 라우트가 공유 |
+| `useSessionStore` | `accessToken`, `user`, `authChecking` + `login/register/logout/refresh/verify/setUser` | 파생값 `isAdmin`은 selector로 |
+| `usePreferencesStore` | `language`, `darkMode`, `hydrated` + `set/toggle` + `hydrate` | localStorage 영속. **하단 hydrate 패턴 필수** |
+| `useMarketDataStore` | `pulse`, `usStocks/usSymbols/krStocks/krSymbols`, `livePrices`, `liveSeries`, `marketLoading` + `loadMarketData`(구독할 심볼 반환), `applyTrade` | 소켓 인스턴스는 store에 두지 않음 — `providers`가 소유 |
 
 - **selector로 구독**해서 불필요한 리렌더 방지: `useSessionStore((s) => s.user)`.
-- 스토어에는 **직렬화 가능한 상태 + 액션**만. DOM/소켓 인스턴스는 provider effect에서 관리.
+- 스토어에는 **직렬화 가능한 상태 + 액션**만. DOM/소켓 인스턴스는 `providers` effect에서 관리.
+- **클라이언트 전용 영속값(localStorage)은 hydrate 패턴으로.** SSR 기본값으로 시작 → `providers`의 effect에서 `hydrate()` 1회 호출해 localStorage 반영. 렌더 중 `useState(() => localStorage...)` lazy-init **금지**(서버/클라 불일치 → 하이드레이션 mismatch). 다크모드/언어가 이 방식.
 
 ### 라우트 로컬 상태 → 그 라우트(page) 또는 도메인 훅
 - stocks: `selectedSymbol, stockDetail, chartPeriod, candles, search, stockTab ...`

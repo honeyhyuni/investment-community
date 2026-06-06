@@ -1,5 +1,7 @@
 // 도메인을 가리지 않는 공유 타입. (markets/community가 함께 쓰는 시세 타입 포함)
 
+export type Language = "en" | "ko";
+
 export type DisplayCurrency = "USD" | "KRW";
 
 export type MarketQuote = {
