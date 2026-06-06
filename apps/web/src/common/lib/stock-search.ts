@@ -52,3 +52,37 @@ export function mergePrioritySymbols(
     return a.symbol.localeCompare(b.symbol);
   });
 }
+
+export function stockSearchScore(item: StockSymbol, rawQuery: string): number {
+  const query = rawQuery.trim().toLowerCase();
+  if (!query) {
+    return 0;
+  }
+  const symbol = item.symbol.toLowerCase();
+  const name = item.description.toLowerCase();
+  if (symbol === query) return 120;
+  if (symbol.startsWith(query)) return 105;
+  if (name.startsWith(query)) return 100;
+  if (symbol.includes(query)) return 90;
+  if (name.includes(query)) return 80;
+  const distance = editDistance(symbol, query);
+  return distance <= 2 ? 70 - distance * 10 : 0;
+}
+
+function editDistance(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let previous = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const current = row[j];
+      row[j] = Math.min(
+        row[j] + 1,
+        row[j - 1] + 1,
+        previous + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      previous = current;
+    }
+  }
+  return row[b.length];
+}

@@ -1,9 +1,9 @@
 ﻿"use client";
 
 import {
-  Dispatch,
+  useCallback,
   FormEvent,
-  SetStateAction,
+  Suspense,
   useEffect,
   useMemo,
   useRef,
@@ -11,23 +11,13 @@ import {
 } from "react";
 import {
   Check,
-  Heart,
-  Image as ImageIcon,
-  Loader2,
   LogOut,
-  MessageCircle,
   Moon,
-  Pencil,
-  Plus,
-  Send,
   Sun,
-  Trash2,
   UserPen,
-  RefreshCw,
   Search,
   TrendingDown,
   TrendingUp,
-  Users,
   X,
 } from "lucide-react";
 import {
@@ -57,13 +47,15 @@ import {
   StockSymbol,
   TradeTick,
 } from "@/common/types";
+import { CommunityPost } from "@/domain/community/types";
+import { MarketPulse } from "@/domain/markets/components/MarketPulse";
+import { useStockRouteSelection } from "@/domain/markets/hooks/useStockRouteSelection";
 
-type View = "stocks" | "news" | "community" | "admin" | "profile";
+type View = "stocks" | "news" | "admin" | "profile";
+type MenuView = View | "community";
 type Language = "en" | "ko";
 type StockTab = "US" | "KR";
 type NewsCategory = "us" | "kr";
-type CommunityScope = "all" | "subscribed" | "mine";
-type FeedSort = "latest" | "popular";
 
 type MarketNews = {
   category: string;
@@ -112,71 +104,13 @@ type CandlePoint = {
   volume: number;
 };
 
-type CommunityUser = {
-  id: string;
-  nickname: string;
-  email: string;
-  isMe: boolean;
-  isSubscribed: boolean;
-  subscriberCount: number;
-  followingCount: number;
-};
-
-type CommunityComment = {
-  id: string;
-  content: string;
-  author: {
-    id: string;
-    nickname: string;
-  };
-  createdAt: string;
-  replies: CommunityComment[];
-};
-
-type CommunityContentBlock = {
-  id: string;
-  type: "text" | "image";
-  text?: string;
-  url?: string;
-};
-
-type CommunityPost = {
-  id: string;
-  title: string | null;
-  content: string;
-  contentBlocks: CommunityContentBlock[];
-  imageUrls: string[];
-  caption: string;
-  stockTags: StockTag[];
-  author: {
-    id: string;
-    nickname: string;
-  };
-  createdAt: string;
-  updatedAt: string;
-  likeCount: number;
-  commentCount: number;
-  likedByMe: boolean;
-  comments: CommunityComment[];
-};
-
-type StockTag = {
-  symbol: string;
-  name: string;
-  market: StockTab;
-};
-
 const chartPeriods: ChartPeriod[] = ["1D", "1M", "1Y", "3Y", "5Y", "ALL"];
 const newsCategories: Array<{ id: NewsCategory; label: string }> = [
   { id: "us", label: "미국뉴스" },
   { id: "kr", label: "한국뉴스" },
 ];
 
-function makeEditorBlockId() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-const menus: Array<{ id: View; label: string }> = [
+const menus: Array<{ id: MenuView; label: string }> = [
   { id: "stocks", label: "Stocks" },
   { id: "news", label: "News" },
   { id: "community", label: "Community" },
@@ -223,6 +157,14 @@ const copy = {
 };
 
 export default function Home() {
+  return (
+    <Suspense fallback={<SessionLoading />}>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+function HomeContent() {
   const [view, setView] = useState<View>("stocks");
   const [language, setLanguage] = useState<Language>("en");
   const [stockTab, setStockTab] = useState<StockTab>("US");
@@ -245,24 +187,7 @@ export default function Home() {
   const [news, setNews] = useState<MarketNews[]>([]);
   const [newsPage, setNewsPage] = useState(1);
   const [newsCategory, setNewsCategory] = useState<NewsCategory>("us");
-  const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>([]);
-  const [communityUsers, setCommunityUsers] = useState<CommunityUser[]>([]);
-  const [communityScope, setCommunityScope] = useState<CommunityScope>("all");
-  const [feedSort, setFeedSort] = useState<FeedSort>("latest");
-  const [editingPostId, setEditingPostId] = useState<string | null>(null);
-  const [selectedCommunityPostId, setSelectedCommunityPostId] = useState<string | null>(null);
-  const [postTitle, setPostTitle] = useState("");
-  const [postContent, setPostContent] = useState("");
-  const [postBlocks, setPostBlocks] = useState<CommunityContentBlock[]>([
-    { id: makeEditorBlockId(), type: "text", text: "" },
-  ]);
-  const [postImages, setPostImages] = useState<string[]>([]);
-  const [postTagQuery, setPostTagQuery] = useState("");
-  const [postTags, setPostTags] = useState<StockTag[]>([]);
   const [relatedPosts, setRelatedPosts] = useState<CommunityPost[]>([]);
-  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
-  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
-  const [communityLoading, setCommunityLoading] = useState(false);
   const [selectedSymbol, setSelectedSymbol] = useState("AAPL");
   const [stockDetail, setStockDetail] = useState<StockDetail | null>(null);
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>("1M");
@@ -284,6 +209,19 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
 
   const isAdmin = user?.role === "ADMIN";
+  const openStocksView = useCallback(() => setView("stocks"), []);
+
+  useStockRouteSelection({
+    selectedSymbol,
+    stockTab,
+    krSymbols,
+    usSymbols,
+    openStocksView,
+    setStockTab,
+    setSelectedSymbol,
+    setPriceCurrency,
+    setSearch,
+  });
 
   useEffect(() => {
     if (!authChecking && user?.status !== "APPROVED") {
@@ -302,24 +240,6 @@ export default function Home() {
   }, [user]);
 
   useEffect(() => {
-    if (stockTab === "KR") {
-      queueMicrotask(() => {
-        setPriceCurrency("KRW");
-        if (krSymbols.length > 0 && !krSymbols.some((item) => item.symbol === selectedSymbol)) {
-          setSelectedSymbol(krSymbols[0].symbol);
-        }
-      });
-    } else {
-      queueMicrotask(() => {
-        setPriceCurrency("USD");
-        if (usSymbols.length > 0 && !usSymbols.some((item) => item.symbol === selectedSymbol)) {
-          setSelectedSymbol(usSymbols[0].symbol);
-        }
-      });
-    }
-  }, [stockTab, krSymbols, usSymbols, selectedSymbol]);
-
-  useEffect(() => {
     if (!accessToken || !isAdmin) {
       queueMicrotask(() => setPendingUsers([]));
       return;
@@ -336,7 +256,7 @@ export default function Home() {
     loadStockDetail(selectedSymbol, accessToken);
     loadCandles(selectedSymbol, chartPeriod, accessToken);
     loadRelatedPosts(selectedSymbol, accessToken);
-  }, [accessToken, selectedSymbol, chartPeriod, user?.status]);
+  }, [accessToken, selectedSymbol, chartPeriod, stockTab, user?.status]);
 
   const visibleSymbols = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -385,40 +305,6 @@ export default function Home() {
     }
   }
 
-  async function loadCommunity(
-    token = accessToken,
-    scope: CommunityScope = communityScope,
-    sort: FeedSort = feedSort,
-  ) {
-    if (!token) {
-      return;
-    }
-
-    setCommunityLoading(true);
-    try {
-      const [postsResult, usersResult] = await Promise.all([
-        apiRequest<CommunityPost[]>(
-          `/community/feed?scope=${scope}&sort=${sort}`,
-          "GET",
-          { accessToken: token },
-        ),
-        apiRequest<CommunityUser[]>("/community/users", "GET", {
-          accessToken: token,
-        }),
-      ]);
-      setCommunityPosts(postsResult);
-      setCommunityUsers(usersResult);
-    } catch (communityError) {
-      setError(
-        communityError instanceof Error
-          ? communityError.message
-          : "Could not load community.",
-      );
-    } finally {
-      setCommunityLoading(false);
-    }
-  }
-
   async function loadRelatedPosts(symbol: string, token = accessToken) {
     if (!token || !symbol) {
       return;
@@ -431,242 +317,8 @@ export default function Home() {
     setRelatedPosts(posts);
   }
 
-  async function createCommunityPost() {
-    const normalizedBlocks = postBlocks.filter((block) =>
-      block.type === "image" ? !!block.url : !!block.text?.trim(),
-    );
-    const plainContent = normalizedBlocks
-      .filter((block) => block.type === "text")
-      .map((block) =>
-        block.text
-          ?.replace(/!\[[^\]]*\]\(data:image\/[^)]+\)/g, "[image]")
-          .trim(),
-      )
-      .filter(Boolean)
-      .join("\n\n")
-      .slice(0, 50000);
-
-    if (
-      !accessToken ||
-      (!postTitle.trim() && normalizedBlocks.length === 0)
-    ) {
-      return;
-    }
-
-    setCommunityLoading(true);
-    try {
-      const post = await apiRequest<CommunityPost>(
-        editingPostId ? `/community/posts/${editingPostId}` : "/community/posts",
-        editingPostId ? "PATCH" : "POST",
-        {
-        accessToken,
-        body: {
-          title: postTitle,
-          content: plainContent,
-          contentBlocks: normalizedBlocks,
-          stockTags: postTags,
-          imageUrls: normalizedBlocks
-            .filter((block) => block.type === "image" && block.url)
-            .map((block) => block.url),
-        },
-      });
-      setPostTitle("");
-      setPostContent("");
-      setPostImages([]);
-      setPostBlocks([{ id: makeEditorBlockId(), type: "text", text: "" }]);
-      setPostTagQuery("");
-      setPostTags([]);
-      setEditingPostId(null);
-      setCommunityPosts((posts) => [post, ...posts]);
-      await loadCommunity(accessToken, communityScope);
-      await loadRelatedPosts(selectedSymbol, accessToken);
-    } catch (postError) {
-      setError(postError instanceof Error ? postError.message : "Could not post.");
-    } finally {
-      setCommunityLoading(false);
-    }
-  }
-
-  function editCommunityPost(post: CommunityPost) {
-    setEditingPostId(post.id);
-    setPostTitle(post.title ?? "");
-    setPostBlocks([
-      {
-        id: makeEditorBlockId(),
-        type: "text",
-        text: communityBlocksToMarkdown(post),
-      },
-    ]);
-    setPostTags(post.stockTags);
-  }
-
-  function resetCommunityEditor() {
-    setEditingPostId(null);
-    setPostTitle("");
-    setPostContent("");
-    setPostImages([]);
-    setPostBlocks([{ id: makeEditorBlockId(), type: "text", text: "" }]);
-    setPostTagQuery("");
-    setPostTags([]);
-  }
-
   function openRelatedPost(postId: string) {
-    setSelectedCommunityPostId(null);
-    window.setTimeout(() => setSelectedCommunityPostId(postId), 0);
-    setCommunityScope("all");
-    setView("community");
-    loadCommunity(accessToken, "all", feedSort);
-  }
-
-  function openTaggedStock(tag: StockTag) {
-    setStockTab(tag.market);
-    setSelectedSymbol(tag.symbol);
-    setPriceCurrency(tag.market === "KR" ? "KRW" : "USD");
-    setSearch("");
-    setView("stocks");
-  }
-
-  async function deleteCommunityPost(postId: string) {
-    if (!accessToken || !window.confirm("이 게시글을 삭제할까요?")) return;
-    await apiRequest<{ ok: true }>(`/community/posts/${postId}`, "DELETE", { accessToken });
-    setCommunityPosts((posts) => posts.filter((post) => post.id !== postId));
-  }
-
-  async function editCommunityComment(commentId: string, content: string) {
-    if (!accessToken) return;
-    const next = window.prompt("댓글 수정", content);
-    if (!next?.trim()) return;
-    const post = await apiRequest<CommunityPost>(`/community/comments/${commentId}`, "PATCH", {
-      accessToken,
-      body: { content: next },
-    });
-    setCommunityPosts((posts) => posts.map((item) => item.id === post.id ? post : item));
-  }
-
-  async function deleteCommunityComment(commentId: string) {
-    if (!accessToken || !window.confirm("이 댓글을 삭제할까요?")) return;
-    const post = await apiRequest<CommunityPost>(`/community/comments/${commentId}`, "DELETE", {
-      accessToken,
-    });
-    setCommunityPosts((posts) => posts.map((item) => item.id === post.id ? post : item));
-  }
-
-  async function togglePostLike(postId: string) {
-    if (!accessToken) {
-      return;
-    }
-
-    try {
-      const result = await apiRequest<{ liked: boolean; likeCount: number }>(
-        `/community/posts/${postId}/like`,
-        "POST",
-        { accessToken },
-      );
-      setCommunityPosts((posts) =>
-        posts.map((post) =>
-          post.id === postId
-            ? { ...post, likedByMe: result.liked, likeCount: result.likeCount }
-            : post,
-        ),
-      );
-    } catch (likeError) {
-      setError(likeError instanceof Error ? likeError.message : "Could not like.");
-    }
-  }
-
-  async function createCommunityComment(postId: string, parentId?: string) {
-    if (!accessToken) {
-      return;
-    }
-
-    const draftKey = parentId ?? postId;
-    const content = parentId ? replyDrafts[draftKey] : commentDrafts[draftKey];
-    if (!content?.trim()) {
-      return;
-    }
-
-    try {
-      const post = await apiRequest<CommunityPost>(
-        `/community/posts/${postId}/comments`,
-        "POST",
-        {
-          accessToken,
-          body: { content, parentId },
-        },
-      );
-      setCommunityPosts((posts) =>
-        posts.map((item) => (item.id === post.id ? post : item)),
-      );
-      if (parentId) {
-        setReplyDrafts((drafts) => ({ ...drafts, [draftKey]: "" }));
-      } else {
-        setCommentDrafts((drafts) => ({ ...drafts, [draftKey]: "" }));
-      }
-    } catch (commentError) {
-      setError(
-        commentError instanceof Error
-          ? commentError.message
-          : "Could not comment.",
-      );
-    }
-  }
-
-  async function toggleSubscription(userId: string) {
-    if (!accessToken) {
-      return;
-    }
-
-    try {
-      await apiRequest<{ subscribed: boolean }>(
-        `/community/users/${userId}/subscribe`,
-        "POST",
-        { accessToken },
-      );
-      await loadCommunity(accessToken, communityScope);
-    } catch (subscribeError) {
-      setError(
-        subscribeError instanceof Error
-          ? subscribeError.message
-          : "Could not update subscription.",
-      );
-    }
-  }
-
-  async function handlePostImages(
-    files: FileList | null,
-    anchorBlockId?: string,
-    position: "before" | "after" = "after",
-  ) {
-    if (!files) {
-      return;
-    }
-
-    const selected = Array.from(files)
-      .filter((file) => file.type.startsWith("image/"))
-      .slice(0, 8);
-    if (selected.length === 0) {
-      return;
-    }
-    const encoded = await Promise.all(
-      selected.map((file) => encodeImageForPost(file)),
-    );
-    const imageBlocks = encoded.map((url) => ({
-      id: makeEditorBlockId(),
-      type: "image" as const,
-      url,
-    }));
-    setPostBlocks((blocks) => {
-      const index = anchorBlockId
-        ? blocks.findIndex((block) => block.id === anchorBlockId)
-        : blocks.length - 1;
-      const insertAt =
-        index >= 0 ? index + (position === "after" ? 1 : 0) : blocks.length;
-      return [
-        ...blocks.slice(0, insertAt),
-        ...imageBlocks,
-        ...blocks.slice(insertAt),
-      ];
-    });
+    router.push(`/community?post=${encodeURIComponent(postId)}`);
   }
 
   async function loadStockDetail(symbol: string, token = accessToken) {
@@ -909,7 +561,8 @@ export default function Home() {
                   loadMarketData(accessToken);
                 }
               }}
-              language={language}
+              title={copy[language].marketPulse}
+              refreshLabel={copy[language].refresh}
             />
             <nav className="mt-4 flex gap-2 border-b border-[#d9dee8]">
               {menus
@@ -918,12 +571,13 @@ export default function Home() {
                   <button
                     key={menu.id}
                     onClick={() => {
+                      if (menu.id === "community") {
+                        router.push("/community");
+                        return;
+                      }
                       setView(menu.id);
                       if (menu.id === "news") {
                         loadNews(accessToken, newsCategory);
-                      }
-                      if (menu.id === "community") {
-                        loadCommunity(accessToken, communityScope);
                       }
                     }}
                     className={`h-11 border-b-2 px-3 text-sm font-semibold ${
@@ -984,56 +638,6 @@ export default function Home() {
                     relatedPosts={relatedPosts}
                     onRelatedPostClick={openRelatedPost}
                   />
-                ) : view === "community" ? (
-                  <CommunityView
-                    posts={communityPosts}
-                    users={communityUsers}
-                    scope={communityScope}
-                    sort={feedSort}
-                    setSort={(sort) => {
-                      setFeedSort(sort);
-                      loadCommunity(accessToken, communityScope, sort);
-                    }}
-                    setScope={(scope) => {
-                      setCommunityScope(scope);
-                      loadCommunity(accessToken, scope);
-                    }}
-                    postTitle={postTitle}
-                    setPostTitle={setPostTitle}
-                    postContent={postContent}
-                    setPostContent={setPostContent}
-                    postBlocks={postBlocks}
-                    setPostBlocks={setPostBlocks}
-                    postImages={postImages}
-                    setPostImages={setPostImages}
-                    postTagQuery={postTagQuery}
-                    setPostTagQuery={setPostTagQuery}
-                    postTags={postTags}
-                    setPostTags={setPostTags}
-                    stockSymbols={[...krSymbols, ...usSymbols]}
-                    onImages={handlePostImages}
-                    onPost={createCommunityPost}
-                    editingPostId={editingPostId}
-                    onEditPost={editCommunityPost}
-                    onDeletePost={deleteCommunityPost}
-                    onEditComment={editCommunityComment}
-                    onDeleteComment={deleteCommunityComment}
-                    currentUserId={user.id}
-                    onStockTagClick={openTaggedStock}
-                    initialDetailPostId={selectedCommunityPostId}
-                    onResetEditor={resetCommunityEditor}
-                    onLike={togglePostLike}
-                    commentDrafts={commentDrafts}
-                    setCommentDrafts={setCommentDrafts}
-                    replyDrafts={replyDrafts}
-                    setReplyDrafts={setReplyDrafts}
-                    onComment={createCommunityComment}
-                    onSubscribe={toggleSubscription}
-                    loading={communityLoading}
-                    usStocks={usStocks}
-                    krStocks={krStocks}
-                    livePrices={livePrices}
-                  />
                 ) : view === "admin" ? (
                   <AdminPanel
                     pendingUsers={pendingUsers}
@@ -1059,51 +663,6 @@ export default function Home() {
           </>
       </section>
     </main>
-  );
-}
-
-function MarketPulse({
-  pulse,
-  livePrices,
-  loading,
-  refresh,
-  language,
-}: {
-  pulse: MarketQuote[];
-  livePrices: Record<string, TradeTick>;
-  loading: boolean;
-  refresh: () => void;
-  language: Language;
-}) {
-  return (
-    <section className="mt-5 rounded-lg border border-[#d9dee8] bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-[#344052]">
-          {copy[language].marketPulse}
-        </h2>
-        <button
-          onClick={refresh}
-          className="inline-flex h-8 items-center gap-2 rounded-md border border-[#c7ceda] px-2.5 text-xs font-medium hover:bg-[#eef1f6]"
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          {copy[language].refresh}
-        </button>
-      </div>
-      <div className="grid gap-3 md:grid-cols-4">
-        {pulse.map((item) => {
-          const live = livePrices[item.symbol];
-          const current = live?.price ?? item.current;
-          return (
-            <QuoteCard
-              key={item.symbol}
-              quote={{ ...item, current }}
-              compact
-              live={!!live}
-            />
-          );
-        })}
-      </div>
-    </section>
   );
 }
 
@@ -1769,34 +1328,6 @@ function toChartTime(timestamp: number, period: ChartPeriod): Time {
   } as BusinessDay;
 }
 
-async function encodeImageForPost(file: File): Promise<string> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const element = new Image();
-    element.onload = () => resolve(element);
-    element.onerror = reject;
-    element.src = dataUrl;
-  });
-  const maxSize = 1400;
-  const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(image.width * scale));
-  canvas.height = Math.max(1, Math.round(image.height * scale));
-  const context = canvas.getContext("2d");
-
-  if (!context) {
-    return dataUrl;
-  }
-
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", 0.82);
-}
-
 function QuoteCard({
   quote,
   compact = false,
@@ -1945,856 +1476,6 @@ function RelatedPosts({
   );
 }
 
-function CommunityView({
-  posts,
-  users,
-  scope,
-  setScope,
-  sort,
-  setSort,
-  postTitle,
-  setPostTitle,
-  postContent,
-  setPostContent,
-  postBlocks,
-  setPostBlocks,
-  postImages,
-  setPostImages,
-  postTagQuery,
-  setPostTagQuery,
-  postTags,
-  setPostTags,
-  stockSymbols,
-  onImages,
-  onPost,
-  editingPostId,
-  onEditPost,
-  onDeletePost,
-  onEditComment,
-  onDeleteComment,
-  currentUserId,
-  onStockTagClick,
-  initialDetailPostId,
-  onResetEditor,
-  onLike,
-  commentDrafts,
-  setCommentDrafts,
-  replyDrafts,
-  setReplyDrafts,
-  onComment,
-  onSubscribe,
-  loading,
-  usStocks,
-  krStocks,
-  livePrices,
-}: {
-  posts: CommunityPost[];
-  users: CommunityUser[];
-  scope: CommunityScope;
-  setScope: (scope: CommunityScope) => void;
-  sort: FeedSort;
-  setSort: (sort: FeedSort) => void;
-  postTitle: string;
-  setPostTitle: (value: string) => void;
-  postContent: string;
-  setPostContent: (value: string) => void;
-  postBlocks: CommunityContentBlock[];
-  setPostBlocks: Dispatch<SetStateAction<CommunityContentBlock[]>>;
-  postImages: string[];
-  setPostImages: (value: string[]) => void;
-  postTagQuery: string;
-  setPostTagQuery: (value: string) => void;
-  postTags: StockTag[];
-  setPostTags: Dispatch<SetStateAction<StockTag[]>>;
-  stockSymbols: StockSymbol[];
-  onImages: (
-    files: FileList | null,
-    anchorBlockId?: string,
-    position?: "before" | "after",
-  ) => void;
-  onPost: () => Promise<void>;
-  editingPostId: string | null;
-  onEditPost: (post: CommunityPost) => void;
-  onDeletePost: (postId: string) => void;
-  onEditComment: (commentId: string, content: string) => void;
-  onDeleteComment: (commentId: string) => void;
-  currentUserId: string;
-  onStockTagClick: (tag: StockTag) => void;
-  initialDetailPostId: string | null;
-  onResetEditor: () => void;
-  onLike: (postId: string) => void;
-  commentDrafts: Record<string, string>;
-  setCommentDrafts: Dispatch<SetStateAction<Record<string, string>>>;
-  replyDrafts: Record<string, string>;
-  setReplyDrafts: Dispatch<SetStateAction<Record<string, string>>>;
-  onComment: (postId: string, parentId?: string) => void;
-  onSubscribe: (userId: string) => void;
-  loading: boolean;
-  usStocks: MarketQuote[];
-  krStocks: MarketQuote[];
-  livePrices: Record<string, TradeTick>;
-}) {
-  const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({});
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [detailPostId, setDetailPostId] = useState<string | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [editorMode, setEditorMode] = useState<"write" | "preview">("write");
-  const scopeOptions: Array<{ id: CommunityScope; label: string }> = [
-    { id: "all", label: "전체 피드" },
-    { id: "subscribed", label: "구독 피드" },
-    { id: "mine", label: "내 피드" },
-  ];
-
-  useEffect(() => {
-    if (initialDetailPostId) {
-      queueMicrotask(() => {
-        setDetailPostId(initialDetailPostId);
-        setEditorOpen(false);
-      });
-    }
-  }, [initialDetailPostId]);
-
-  function insertTextBlock(blockId: string, position: "before" | "after") {
-    setPostBlocks((blocks) => {
-      const index = blocks.findIndex((block) => block.id === blockId);
-      const insertAt = index + (position === "after" ? 1 : 0);
-      return [
-        ...blocks.slice(0, insertAt),
-        { id: makeEditorBlockId(), type: "text", text: "" },
-        ...blocks.slice(insertAt),
-      ];
-    });
-  }
-
-  function moveEditorBlock(blockId: string, direction: -1 | 1) {
-    setPostBlocks((blocks) => {
-      const index = blocks.findIndex((block) => block.id === blockId);
-      const target = index + direction;
-      if (index < 0 || target < 0 || target >= blocks.length) return blocks;
-      const next = [...blocks];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-  }
-
-  function getTagQuote(tag: StockTag) {
-    const quote = (tag.market === "KR" ? krStocks : usStocks).find(
-      (item) => item.symbol === tag.symbol,
-    );
-    const live = livePrices[tag.symbol];
-    return quote
-      ? { ...quote, current: live?.price ?? quote.current }
-      : null;
-  }
-
-  const markdownText =
-    postBlocks.find((block) => block.type === "text")?.text ?? "";
-
-  function setMarkdownText(text: string) {
-    setPostBlocks([{ id: postBlocks[0]?.id ?? makeEditorBlockId(), type: "text", text }]);
-  }
-
-  async function insertMarkdownImages(files: FileList | null) {
-    if (!files) return;
-    const selected = Array.from(files)
-      .filter((file) => file.type.startsWith("image/"))
-      .slice(0, 8);
-    const urls = await Promise.all(selected.map((file) => encodeImageForPost(file)));
-    const markdown = urls.map((url) => `![image](${url})`).join("\n\n");
-    setMarkdownText(`${markdownText}${markdownText ? "\n\n" : ""}${markdown}`);
-  }
-
-  return (
-    <section className={detailPostId ? "w-full" : "grid gap-5 lg:grid-cols-[1fr_320px]"}>
-      <div className="space-y-4">
-        {!editorOpen ? (
-          <div className="flex items-center gap-3">
-            {detailPostId ? (
-              <button
-                onClick={() => setDetailPostId(null)}
-                className="inline-flex h-10 w-36 items-center justify-center rounded-md border border-[#c7ceda] bg-white px-4 text-sm font-semibold"
-              >
-                피드 목록으로
-              </button>
-            ) : null}
-            <button
-              onClick={() => {
-                onResetEditor();
-                setEditorOpen(true);
-              }}
-              className="inline-flex h-10 w-36 items-center justify-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white"
-            >
-              <Plus size={17} />
-              피드 글 쓰기
-            </button>
-          </div>
-        ) : (
-        <div className="rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
-          <div className="border-b border-[#eef1f6] pb-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-[#344052]">
-                {editingPostId ? "피드 수정" : "투자 글쓰기"}
-              </p>
-              <button
-                onClick={() => {
-                  onResetEditor();
-                  setEditorOpen(false);
-                }}
-                className="grid h-8 w-8 place-items-center rounded-md border border-[#c7ceda]"
-                title="닫기"
-              >
-                <X size={15} />
-              </button>
-            </div>
-            <input
-              value={postTitle}
-              onChange={(event) => setPostTitle(event.target.value)}
-              placeholder="제목: 예) 엔비디아 실적 이후 반도체 사이클 점검"
-              className="mt-3 h-12 w-full rounded-md border border-[#c7ceda] px-3 text-lg font-semibold outline-none focus:border-[#1f6f8b]"
-            />
-          </div>
-          <div className="mt-4 overflow-hidden rounded-md border border-[#d9dee8] bg-white">
-            <div className="flex items-center justify-between border-b border-[#d9dee8] bg-[#f9fafc] p-2">
-              <div className="grid grid-cols-2 rounded-md border border-[#c7ceda] bg-white p-1">
-                {(["write", "preview"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    onClick={() => setEditorMode(mode)}
-                    className={`h-8 rounded px-3 text-xs font-semibold ${
-                      editorMode === mode ? "bg-[#1f6f8b] text-white" : "text-[#607086]"
-                    }`}
-                  >
-                    {mode === "write" ? "Markdown 작성" : "미리보기"}
-                  </button>
-                ))}
-              </div>
-              <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold">
-                <ImageIcon size={15} />
-                사진 삽입
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(event) => {
-                    insertMarkdownImages(event.target.files);
-                    event.currentTarget.value = "";
-                  }}
-                />
-              </label>
-            </div>
-            {editorMode === "write" ? (
-              <textarea
-                value={markdownText}
-                onChange={(event) => setMarkdownText(event.target.value)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  insertMarkdownImages(event.dataTransfer.files);
-                }}
-                placeholder={"# 제목\n\n자유롭게 글을 작성하세요.\n\n## 투자 근거\n- 항목 1\n- 항목 2\n\n사진은 위의 사진 삽입 버튼이나 드래그로 추가할 수 있습니다."}
-                className="min-h-[720px] w-full resize-y bg-white p-6 font-mono text-sm leading-7 text-[#344052] outline-none"
-              />
-            ) : (
-              <div className="min-h-[720px] bg-white p-8">
-                <MarkdownContent markdown={markdownText} />
-              </div>
-            )}
-          </div>
-          <div
-            className="hidden"
-            onDragOver={(event) => {
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "copy";
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              onImages(event.dataTransfer.files);
-            }}
-          >
-            <div className="sticky top-2 z-10 flex flex-wrap gap-2 rounded-md border border-[#d9dee8] bg-white p-2 shadow-sm">
-              <button
-                onClick={() =>
-                  setPostBlocks((blocks) => [
-                    ...blocks,
-                    { id: makeEditorBlockId(), type: "text", text: "" },
-                  ])
-                }
-                className="h-9 rounded-md border border-[#c7ceda] px-3 text-sm font-semibold"
-              >
-                글 추가
-              </button>
-              <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-[#c7ceda] px-3 text-sm font-semibold">
-                <ImageIcon size={15} />
-                사진 추가
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={(event) => {
-                    onImages(event.target.files);
-                    event.currentTarget.value = "";
-                  }}
-                />
-              </label>
-            </div>
-            {postBlocks.map((block, index) =>
-              block.type === "image" ? (
-                <div key={block.id} className="rounded-md border border-[#d9dee8] bg-white p-3">
-                  <img
-                    src={block.url}
-                    alt=""
-                    className="max-h-[520px] w-full rounded-md object-contain"
-                  />
-                  <div className="mt-3 flex flex-wrap gap-2 border-t border-[#eef1f6] pt-3">
-                    <button onClick={() => insertTextBlock(block.id, "before")} className="h-8 rounded-md border border-[#c7ceda] px-2.5 text-xs font-semibold">위에 글</button>
-                    <button onClick={() => insertTextBlock(block.id, "after")} className="h-8 rounded-md border border-[#c7ceda] px-2.5 text-xs font-semibold">아래에 글</button>
-                    <label className="inline-flex h-8 cursor-pointer items-center rounded-md border border-[#c7ceda] px-2.5 text-xs font-semibold">
-                      위에 사진
-                      <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => { onImages(event.target.files, block.id, "before"); event.currentTarget.value = ""; }} />
-                    </label>
-                    <label className="inline-flex h-8 cursor-pointer items-center rounded-md border border-[#c7ceda] px-2.5 text-xs font-semibold">
-                      아래에 사진
-                      <input type="file" accept="image/*" multiple className="hidden" onChange={(event) => { onImages(event.target.files, block.id, "after"); event.currentTarget.value = ""; }} />
-                    </label>
-                    <button disabled={index === 0} onClick={() => moveEditorBlock(block.id, -1)} className="h-8 rounded-md border border-[#c7ceda] px-2.5 text-xs font-semibold disabled:opacity-40">위로</button>
-                    <button disabled={index === postBlocks.length - 1} onClick={() => moveEditorBlock(block.id, 1)} className="h-8 rounded-md border border-[#c7ceda] px-2.5 text-xs font-semibold disabled:opacity-40">아래로</button>
-                    <button onClick={() => setPostBlocks((blocks) => blocks.filter((item) => item.id !== block.id))} className="h-8 rounded-md border border-[#d3a1a1] px-2.5 text-xs font-semibold text-[#9a2f2f]">삭제</button>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  key={block.id}
-                  className="rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3"
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = "copy";
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onImages(event.dataTransfer.files, block.id);
-                  }}
-                >
-                  <textarea
-                    value={block.text ?? ""}
-                    onChange={(event) =>
-                      setPostBlocks((blocks) =>
-                        blocks.map((item) =>
-                          item.id === block.id
-                            ? { ...item, text: event.target.value }
-                            : item,
-                        ),
-                      )
-                    }
-                    placeholder={
-                      index === 0
-                        ? "투자 아이디어, 근거, 리스크, 체크할 지표를 긴 글로 정리하세요."
-                        : "문단을 이어서 작성하세요."
-                    }
-                    className="min-h-40 w-full resize-y bg-transparent text-sm leading-7 text-[#344052] outline-none"
-                  />
-                  <div className="mt-2 flex flex-wrap gap-2 border-t border-[#eef1f6] pt-2">
-                    <button
-                      onClick={() => insertTextBlock(block.id, "before")}
-                      className="h-8 rounded-md border border-[#c7ceda] bg-white px-2.5 text-xs font-semibold"
-                    >
-                      위에 글
-                    </button>
-                    <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-2.5 text-xs font-semibold">
-                      <ImageIcon size={14} />
-                      위에 사진
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={(event) => {
-                          onImages(event.target.files, block.id, "before");
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                    <label className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-2.5 text-xs font-semibold text-[#344052] hover:bg-[#eef1f6]">
-                      <ImageIcon size={14} />
-                      아래에 사진 넣기
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={(event) => {
-                          onImages(event.target.files, block.id);
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                    <button
-                      onClick={() => insertTextBlock(block.id, "after")}
-                      className="h-8 rounded-md border border-[#c7ceda] bg-white px-2.5 text-xs font-semibold text-[#344052] hover:bg-[#eef1f6]"
-                    >
-                      아래에 문단 추가
-                    </button>
-                    <button disabled={index === 0} onClick={() => moveEditorBlock(block.id, -1)} className="h-8 rounded-md border border-[#c7ceda] bg-white px-2.5 text-xs font-semibold disabled:opacity-40">위로</button>
-                    <button disabled={index === postBlocks.length - 1} onClick={() => moveEditorBlock(block.id, 1)} className="h-8 rounded-md border border-[#c7ceda] bg-white px-2.5 text-xs font-semibold disabled:opacity-40">아래로</button>
-                    {postBlocks.length > 1 ? (
-                      <button
-                        onClick={() =>
-                          setPostBlocks((blocks) =>
-                            blocks.filter((item) => item.id !== block.id),
-                          )
-                        }
-                        className="h-8 rounded-md border border-[#d3a1a1] bg-white px-2.5 text-xs font-semibold text-[#9a2f2f]"
-                      >
-                        문단 삭제
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ),
-            )}
-          </div>
-          <div className="mt-4 border-t border-[#eef1f6] pt-4">
-            <div className="relative">
-              <div className="flex items-center rounded-md border border-[#c7ceda] px-3">
-                <span className="font-semibold text-[#1f6f8b]">#</span>
-                <input
-                  value={postTagQuery}
-                  onChange={(event) => setPostTagQuery(event.target.value.replace(/^#/, ""))}
-                  placeholder="기업명 또는 종목코드 검색"
-                  className="h-10 flex-1 border-0 bg-transparent px-1 text-sm outline-none"
-                />
-              </div>
-              {postTagQuery.trim() ? (
-                <div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-md border border-[#d9dee8] bg-white shadow-lg">
-                  {stockSymbols
-                    .map((item) => ({
-                      item,
-                      score: stockSearchScore(item, postTagQuery),
-                    }))
-                    .filter(({ score }) => score > 0)
-                    .sort((a, b) => b.score - a.score)
-                    .slice(0, 8)
-                    .map(({ item }) => (
-                      <button
-                        key={`${item.currency}-${item.symbol}`}
-                        onClick={() => {
-                          setPostTags((tags) =>
-                            tags.some((tag) => tag.symbol === item.symbol)
-                              ? tags
-                              : [
-                                  ...tags,
-                                  {
-                                    symbol: item.symbol,
-                                    name: item.description,
-                                    market: item.currency === "KRW" ? "KR" : "US",
-                                  },
-                                ],
-                          );
-                          setPostTagQuery("");
-                        }}
-                        className="flex w-full items-center justify-between border-b border-[#eef1f6] px-3 py-2 text-left text-sm last:border-0 hover:bg-[#f6f8fb]"
-                      >
-                        <span>{item.description}</span>
-                        <span className="text-xs text-[#607086]">{item.symbol}</span>
-                      </button>
-                    ))}
-                </div>
-              ) : null}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {postTags.map((tag) => (
-                <button
-                  key={tag.symbol}
-                  onClick={() => setPostTags((tags) => tags.filter((item) => item.symbol !== tag.symbol))}
-                  className="rounded-md bg-[#eef6f9] px-2.5 py-1 text-xs font-semibold text-[#1f6f8b]"
-                >
-                  #{tag.name} <X size={12} className="ml-1 inline" />
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[#eef1f6] pt-4">
-            <button
-              onClick={() =>
-                setPostBlocks((blocks) => [
-                  ...blocks,
-                  { id: makeEditorBlockId(), type: "text", text: "" },
-                ])
-              }
-              className="h-9 rounded-md border border-[#c7ceda] px-3 text-sm font-semibold text-[#344052] hover:bg-[#eef1f6]"
-            >
-              문단 추가
-            </button>
-            <button
-              onClick={async () => {
-                await onPost();
-                setEditorOpen(false);
-              }}
-              disabled={
-                loading ||
-                (!postTitle.trim() &&
-                  !postBlocks.some((block) =>
-                    block.type === "image" ? !!block.url : !!block.text?.trim(),
-                  ))
-              }
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-              {editingPostId ? "수정 완료" : "게시"}
-            </button>
-          </div>
-        </div>
-        )}
-
-        {!editorOpen && !detailPostId ? <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-2">
-          {scopeOptions.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setScope(item.id)}
-              className={`h-9 rounded-md px-3 text-sm font-semibold ${
-                scope === item.id
-                  ? "bg-[#1f6f8b] text-white"
-                  : "border border-[#c7ceda] bg-white text-[#344052]"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-          </div>
-          <div className="grid grid-cols-2 rounded-md border border-[#c7ceda] bg-white p-1">
-            {(["latest", "popular"] as FeedSort[]).map((item) => (
-              <button
-                key={item}
-                onClick={() => setSort(item)}
-                className={`h-8 rounded px-3 text-xs font-semibold ${
-                  sort === item ? "bg-[#1f6f8b] text-white" : "text-[#607086]"
-                }`}
-              >
-                {item === "latest" ? "최신순" : "인기순"}
-              </button>
-            ))}
-          </div>
-        </div>
-        : null}
-
-        {!editorOpen ? <div className="space-y-4">
-          {posts.length === 0 ? (
-            <p className="rounded-lg border border-[#d9dee8] bg-white p-6 text-center text-sm text-[#607086]">
-              표시할 게시글이 없습니다.
-            </p>
-          ) : (
-            posts.filter((post) => !detailPostId || post.id === detailPostId).map((post) => {
-              const expanded = detailPostId === post.id || (expandedPosts[post.id] ?? false);
-              const blocks = post.contentBlocks?.length
-                ? post.contentBlocks
-                : [
-                    ...(post.content
-                      ? [{ id: `${post.id}-text`, type: "text" as const, text: post.content }]
-                      : []),
-                    ...post.imageUrls.map((url, index) => ({
-                      id: `${post.id}-image-${index}`,
-                      type: "image" as const,
-                      url,
-                    })),
-                  ];
-              return (
-              <article
-                key={post.id}
-                onDoubleClick={() => setDetailPostId(post.id)}
-                className={`rounded-lg border border-[#d9dee8] bg-white shadow-sm ${
-                  detailPostId ? "p-8 md:p-12" : "p-4"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold">{post.author.nickname}</p>
-                    <p className="text-xs text-[#607086]">
-                      {new Date(post.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-                  {post.author.id === currentUserId ? (
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => {
-                          onEditPost(post);
-                          setEditorOpen(true);
-                          setDetailPostId(null);
-                        }}
-                        className="grid h-8 w-8 place-items-center rounded-md border border-[#c7ceda]"
-                        title="수정"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={() => onDeletePost(post.id)}
-                        className="grid h-8 w-8 place-items-center rounded-md border border-[#d3a1a1] text-[#9a2f2f]"
-                        title="삭제"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-                {post.title ? (
-                  <h2 className="mt-3 text-xl font-semibold leading-8">
-                    {post.title}
-                  </h2>
-                ) : null}
-                <div className={`mt-3 space-y-4 ${expanded ? "" : "max-h-56 overflow-hidden"}`}>
-                  {blocks.map((block) =>
-                    block.type === "image" ? (
-                      <img
-                        key={block.id}
-                        src={block.url}
-                        alt=""
-                        onClick={() => {
-                          if (detailPostId && block.url) setImagePreview(block.url);
-                        }}
-                        className={`max-h-[720px] w-full rounded-md border border-[#eef1f6] object-contain ${
-                          detailPostId ? "cursor-zoom-in" : ""
-                        }`}
-                      />
-                    ) : (
-                      <MarkdownContent
-                        key={block.id}
-                        markdown={block.text ?? ""}
-                        onImageClick={
-                          detailPostId ? (url) => setImagePreview(url) : undefined
-                        }
-                      />
-                    ),
-                  )}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {post.stockTags.map((tag) => {
-                    const quote = getTagQuote(tag);
-                    return (
-                      <span key={tag.symbol} className="group relative">
-                        <button
-                          onClick={() => onStockTagClick(tag)}
-                          className="cursor-pointer text-xs font-semibold text-[#1f6f8b] hover:underline"
-                        >
-                          #{tag.name}
-                        </button>
-                        {quote ? (
-                          <span className="pointer-events-none absolute bottom-full left-0 z-30 mb-2 hidden w-48 rounded-md border border-[#d9dee8] bg-white p-3 text-left shadow-lg group-hover:block">
-                            <span className="block text-sm font-semibold text-[#161a22]">{tag.name}</span>
-                            <span className="mt-0.5 block text-xs text-[#607086]">{tag.symbol}</span>
-                            <span className="mt-2 block text-base font-semibold text-[#161a22]">
-                              {formatMoney(quote.current, tag.market === "KR" ? "KRW" : "USD", quote.currency)}
-                            </span>
-                            <span className={`mt-0.5 block text-xs font-semibold ${quote.change >= 0 ? "text-[#2e7d4f]" : "text-[#b64242]"}`}>
-                              {quote.change >= 0 ? "+" : ""}
-                              {formatMoney(quote.change, tag.market === "KR" ? "KRW" : "USD", quote.currency)}
-                              {" "}({quote.percentChange >= 0 ? "+" : ""}{formatNumber(quote.percentChange)}%)
-                            </span>
-                          </span>
-                        ) : null}
-                      </span>
-                    );
-                  })}
-                </div>
-                {!detailPostId ? <button
-                  onClick={() =>
-                    setExpandedPosts((items) => ({ ...items, [post.id]: !expanded }))
-                  }
-                  className="mt-3 text-sm font-semibold text-[#1f6f8b]"
-                >
-                  {expanded ? "접기" : "전체 글 보기"}
-                </button> : null}
-                <div className="mt-4 flex items-center gap-2 border-t border-[#eef1f6] pt-3">
-                  <button
-                    onClick={() => onLike(post.id)}
-                    className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-semibold ${
-                      post.likedByMe
-                        ? "border-[#b64242] bg-[#fff1f1] text-[#b64242]"
-                        : "border-[#c7ceda] text-[#344052]"
-                    }`}
-                  >
-                    <Heart size={16} fill={post.likedByMe ? "currentColor" : "none"} />
-                    {post.likeCount}
-                  </button>
-                  <span className="inline-flex h-9 items-center gap-2 rounded-md border border-[#c7ceda] px-3 text-sm font-semibold text-[#344052]">
-                    <MessageCircle size={16} />
-                    {post.commentCount}
-                  </span>
-                </div>
-                {expanded ? <div className="mt-4 space-y-3">
-                  {post.comments.map((comment) => (
-                    <CommentThread
-                      key={comment.id}
-                      postId={post.id}
-                      comment={comment}
-                      replyDrafts={replyDrafts}
-                      setReplyDrafts={setReplyDrafts}
-                      onComment={onComment}
-                      currentUserId={currentUserId}
-                      onEditComment={onEditComment}
-                      onDeleteComment={onDeleteComment}
-                    />
-                  ))}
-                  <div className="flex gap-2">
-                    <input
-                      value={commentDrafts[post.id] ?? ""}
-                      onChange={(event) =>
-                        setCommentDrafts((drafts) => ({
-                          ...drafts,
-                          [post.id]: event.target.value,
-                        }))
-                      }
-                      placeholder="댓글 작성"
-                      className="h-10 flex-1 rounded-md border border-[#c7ceda] px-3 text-sm outline-none focus:border-[#1f6f8b]"
-                    />
-                    <button
-                      onClick={() => onComment(post.id)}
-                      className="grid h-10 w-10 place-items-center rounded-md bg-[#1f6f8b] text-white"
-                    >
-                      <Send size={16} />
-                    </button>
-                  </div>
-                </div> : null}
-              </article>
-              );
-            })
-          )}
-        </div> : null}
-      </div>
-      {!detailPostId && !editorOpen ? <aside className="rounded-lg border border-[#d9dee8] bg-white p-4 shadow-sm lg:sticky lg:top-4 lg:self-start">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-[#344052]">구독</h2>
-          <Users size={16} className="text-[#607086]" />
-        </div>
-        <div className="mt-3 space-y-2">
-          {users.slice(0, 3).map((communityUser) => (
-            <div
-              key={communityUser.id}
-              className="rounded-md border border-[#eef1f6] p-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">
-                    {communityUser.nickname}
-                    {communityUser.isMe ? " · 나" : ""}
-                  </p>
-                  <p className="truncate text-xs text-[#607086]">
-                    구독자 {communityUser.subscriberCount} · 구독중{" "}
-                    {communityUser.followingCount}
-                  </p>
-                </div>
-                {!communityUser.isMe ? (
-                  <button
-                    onClick={() => onSubscribe(communityUser.id)}
-                    className={`h-8 rounded-md px-2.5 text-xs font-semibold ${
-                      communityUser.isSubscribed
-                        ? "border border-[#c7ceda] text-[#344052]"
-                        : "bg-[#1f6f8b] text-white"
-                    }`}
-                  >
-                    {communityUser.isSubscribed ? "구독중" : "구독"}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ))}
-        </div>
-      </aside> : null}
-      {imagePreview ? (
-        <div
-          onClick={() => setImagePreview(null)}
-          className="fixed inset-0 z-50 grid cursor-zoom-out place-items-center bg-black/85 p-4"
-        >
-          <img src={imagePreview} alt="" className="max-h-[94vh] max-w-[96vw] object-contain" />
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function CommentThread({
-  postId,
-  comment,
-  replyDrafts,
-  setReplyDrafts,
-  onComment,
-  currentUserId,
-  onEditComment,
-  onDeleteComment,
-}: {
-  postId: string;
-  comment: CommunityComment;
-  replyDrafts: Record<string, string>;
-  setReplyDrafts: Dispatch<SetStateAction<Record<string, string>>>;
-  onComment: (postId: string, parentId?: string) => void;
-  currentUserId: string;
-  onEditComment: (commentId: string, content: string) => void;
-  onDeleteComment: (commentId: string) => void;
-}) {
-  return (
-    <div className="rounded-md bg-[#f6f8fb] p-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold">{comment.author.nickname}</p>
-        {comment.author.id === currentUserId ? (
-          <div className="flex gap-1">
-            <button onClick={() => onEditComment(comment.id, comment.content)} title="수정">
-              <Pencil size={13} />
-            </button>
-            <button onClick={() => onDeleteComment(comment.id)} title="삭제" className="text-[#9a2f2f]">
-              <Trash2 size={13} />
-            </button>
-          </div>
-        ) : null}
-      </div>
-      <p className="mt-1 whitespace-pre-wrap text-sm text-[#344052]">
-        {comment.content}
-      </p>
-      {comment.replies.length > 0 ? (
-        <div className="mt-3 space-y-2 border-l-2 border-[#d9dee8] pl-3">
-          {comment.replies.map((reply) => (
-            <div key={reply.id} className="rounded-md bg-white p-2">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold">{reply.author.nickname}</p>
-                {reply.author.id === currentUserId ? (
-                  <div className="flex gap-1">
-                    <button onClick={() => onEditComment(reply.id, reply.content)} title="수정">
-                      <Pencil size={12} />
-                    </button>
-                    <button onClick={() => onDeleteComment(reply.id)} title="삭제" className="text-[#9a2f2f]">
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-              <p className="mt-1 text-sm text-[#344052]">{reply.content}</p>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      <div className="mt-3 flex gap-2">
-        <input
-          value={replyDrafts[comment.id] ?? ""}
-          onChange={(event) =>
-            setReplyDrafts((drafts) => ({
-              ...drafts,
-              [comment.id]: event.target.value,
-            }))
-          }
-          placeholder="답글 작성"
-          className="h-9 flex-1 rounded-md border border-[#c7ceda] bg-white px-3 text-sm outline-none focus:border-[#1f6f8b]"
-        />
-        <button
-          onClick={() => onComment(postId, comment.id)}
-          className="grid h-9 w-9 place-items-center rounded-md bg-[#344052] text-white"
-        >
-          <Send size={15} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function Placeholder({ title }: { title: string }) {
   return (
     <section className="flex min-h-[420px] items-center justify-center rounded-lg border border-[#d9dee8] bg-white p-5 text-sm text-[#607086] shadow-sm">
@@ -2919,104 +1600,6 @@ function InfoBox({ label, value }: { label: string; value: string }) {
     <div className="rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3">
       <p className="text-xs text-[#607086]">{label}</p>
       <p className="mt-1 text-sm font-semibold">{value}</p>
-    </div>
-  );
-}
-
-function communityBlocksToMarkdown(post: CommunityPost): string {
-  if (post.contentBlocks.length) {
-    return post.contentBlocks
-      .map((block) =>
-        block.type === "image" && block.url
-          ? `![image](${block.url})`
-          : block.text ?? "",
-      )
-      .filter(Boolean)
-      .join("\n\n");
-  }
-  return [
-    post.content,
-    ...post.imageUrls.map((url) => `![image](${url})`),
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-function stockSearchScore(item: StockSymbol, rawQuery: string): number {
-  const query = rawQuery.trim().toLowerCase();
-  if (!query) return 0;
-  const symbol = item.symbol.toLowerCase();
-  const name = item.description.toLowerCase();
-  if (symbol === query) return 120;
-  if (symbol.startsWith(query)) return 105;
-  if (name.startsWith(query)) return 100;
-  if (symbol.includes(query)) return 90;
-  if (name.includes(query)) return 80;
-  const distance = editDistance(symbol, query);
-  return distance <= 2 ? 70 - distance * 10 : 0;
-}
-
-function editDistance(a: string, b: string): number {
-  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let i = 1; i <= a.length; i += 1) {
-    let previous = row[0];
-    row[0] = i;
-    for (let j = 1; j <= b.length; j += 1) {
-      const current = row[j];
-      row[j] = Math.min(
-        row[j] + 1,
-        row[j - 1] + 1,
-        previous + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-      previous = current;
-    }
-  }
-  return row[b.length];
-}
-
-function MarkdownContent({
-  markdown,
-  onImageClick,
-}: {
-  markdown: string;
-  onImageClick?: (url: string) => void;
-}) {
-  const lines = markdown.split(/\r?\n/);
-  return (
-    <div className="space-y-3 text-sm leading-7 text-[#344052]">
-      {lines.map((line, index) => {
-        const image = line.match(/^!\[([^\]]*)\]\((.+)\)$/);
-        if (image) {
-          return (
-            <img
-              key={index}
-              src={image[2]}
-              alt={image[1]}
-              onClick={() => onImageClick?.(image[2])}
-              className={`max-h-[720px] w-full rounded-md object-contain ${
-                onImageClick ? "cursor-zoom-in" : ""
-              }`}
-            />
-          );
-        }
-        if (line.startsWith("### ")) {
-          return <h3 key={index} className="pt-2 text-lg font-semibold">{line.slice(4)}</h3>;
-        }
-        if (line.startsWith("## ")) {
-          return <h2 key={index} className="pt-3 text-xl font-semibold">{line.slice(3)}</h2>;
-        }
-        if (line.startsWith("# ")) {
-          return <h1 key={index} className="pt-4 text-2xl font-semibold">{line.slice(2)}</h1>;
-        }
-        if (line.startsWith("- ")) {
-          return <p key={index} className="pl-4 before:mr-2 before:content-['•']">{line.slice(2)}</p>;
-        }
-        if (line.startsWith("> ")) {
-          return <blockquote key={index} className="border-l-2 border-[#9ab8c5] pl-4 text-[#607086]">{line.slice(2)}</blockquote>;
-        }
-        if (!line.trim()) return <div key={index} className="h-2" />;
-        return <p key={index} className="whitespace-pre-wrap">{line}</p>;
-      })}
     </div>
   );
 }
