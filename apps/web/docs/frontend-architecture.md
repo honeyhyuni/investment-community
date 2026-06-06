@@ -21,11 +21,13 @@
 ```
 src/
   app/
-    layout.tsx              # root: html/body/폰트
-    providers.tsx           # 'use client' — store/query provider 묶음
-    page.tsx                # → /stocks 리다이렉트
-    login/page.tsx          # 비로그인/미승인: AuthPanel + PendingPanel
-    (app)/                  # 승인 유저 전용 route group
+    layout.tsx              # root: html/body/폰트 + <Providers>
+    providers.tsx           # 'use client' — 세션 라이프사이클(refresh + /auth/me 폴링)
+    page.tsx                # 랜딩: 승인 유저 앱 (현재는 거대 Home, 추후 /stocks 리다이렉트)
+    (guest)/                # 권한축: 비로그인/미승인 전용 route group
+      layout.tsx            # 최소 셸: 타이틀 헤더
+      login/page.tsx        # AuthPanel + PendingPanel (APPROVED면 / 로 리다이렉트)
+    (auth)/                 # 권한축: 승인 유저 전용 route group
       layout.tsx            # 셸: 헤더 + MarketPulse + nav + 세션가드
       stocks/page.tsx
       news/page.tsx
@@ -84,11 +86,21 @@ src/
 
 ## 4. 라우팅 모델
 
-- **route group `(app)`** = 승인된 유저 전용. `(app)/layout.tsx`가 셸(헤더+MarketPulse+nav)을 그리고 세션을 가드한다.
+라우트 그룹을 **유저 권한 축**으로 가른다. 두 그룹의 이름은 의미상 반대쌍:
+
+| 그룹 | 대상 | 셸(layout) |
+|---|---|---|
+| `(auth)` | 승인된(`APPROVED`) 유저 전용 | 헤더 + MarketPulse + nav + 세션가드 |
+| `(guest)` | 비로그인/미승인(`PENDING`/`REJECTED`) | 최소 셸(타이틀 헤더) |
+
+> **왜 `(guest)`?** 처음엔 `(public)`을 고려했으나, Next의 정적 에셋 폴더 `public/`과 글자가 겹쳐 검색·리뷰에서 헷갈린다. `(auth)`(로그인 필요) ↔ `(guest)`(로그인 불필요)가 정확한 반대쌍이라 이 이름을 쓴다.
+
+- **`(auth)` 그룹** — `(auth)/layout.tsx`가 셸을 그리고 세션을 가드한다.
   - `authChecking` → 로딩
   - 미승인/비로그인 → `/login`으로 `router.replace`
-- `/login` = `AuthPanel + PendingPanel`. 이미 승인된 세션이면 → `/stocks`로 리다이렉트.
-- `app/page.tsx` = `/stocks`로 리다이렉트(랜딩).
+- **`/login`** (= `(guest)/login`) = `AuthPanel + PendingPanel`. 이미 승인된 세션이면 → `/`(→`/stocks`)로 리다이렉트.
+- 세션 자체(`refresh`/`verify` 폴링)는 라우트 위 `app/providers.tsx`에서 1회 마운트해 `useSessionStore`로 공유한다. 두 그룹이 같은 세션을 본다.
+- `app/page.tsx` = 랜딩(추후 `/stocks`로 리다이렉트).
 - nav는 `next/navigation`의 `<Link>` / `usePathname`으로 활성표시.
 
 ### 라우트 간 점프 = URL 쿼리파라미터 (state 넘기기 금지)

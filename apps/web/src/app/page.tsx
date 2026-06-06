@@ -11,7 +11,6 @@ import {
 } from "react";
 import {
   Check,
-  Clock,
   Heart,
   Image as ImageIcon,
   Loader2,
@@ -26,10 +25,8 @@ import {
   UserPen,
   RefreshCw,
   Search,
-  ShieldCheck,
   TrendingDown,
   TrendingUp,
-  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -43,15 +40,19 @@ import {
   ISeriesApi,
   Time,
 } from "lightweight-charts";
+import { useRouter } from "next/navigation";
 import {
   apiRequest,
   API_ORIGIN,
-  AuthResponse,
   User,
   UserStatus,
 } from "@/lib/api";
+import { Notice } from "@/common/components/Notice";
+import { TextInput } from "@/common/components/TextInput";
+import { statusLabel } from "@/common/components/StatusBadge";
+import { SessionLoading } from "@/common/components/SessionLoading";
+import { useSessionStore } from "@/common/stores/session";
 
-type AuthMode = "login" | "register";
 type View = "stocks" | "news" | "community" | "admin" | "profile";
 type Language = "en" | "ko";
 type StockTab = "US" | "KR";
@@ -200,12 +201,6 @@ function makeEditorBlockId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-const statusLabel: Record<UserStatus, string> = {
-  APPROVED: "Approved",
-  PENDING: "Pending",
-  REJECTED: "Rejected",
-};
-
 const menus: Array<{ id: View; label: string }> = [
   { id: "stocks", label: "Stocks" },
   { id: "news", label: "News" },
@@ -275,15 +270,15 @@ const copy = {
 };
 
 export default function Home() {
-  const [mode, setMode] = useState<AuthMode>("login");
   const [view, setView] = useState<View>("stocks");
   const [language, setLanguage] = useState<Language>("en");
   const [stockTab, setStockTab] = useState<StockTab>("US");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [nickname, setNickname] = useState("");
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const accessToken = useSessionStore((s) => s.accessToken);
+  const user = useSessionStore((s) => s.user);
+  const authChecking = useSessionStore((s) => s.authChecking);
+  const setUser = useSessionStore((s) => s.setUser);
+  const logoutSession = useSessionStore((s) => s.logout);
+  const router = useRouter();
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [pulse, setPulse] = useState<MarketQuote[]>([]);
   const [usStocks, setUsStocks] = useState<MarketQuote[]>([]);
@@ -320,8 +315,6 @@ export default function Home() {
   const [livePrices, setLivePrices] = useState<Record<string, TradeTick>>({});
   const [liveSeries, setLiveSeries] = useState<Record<string, TradeTick[]>>({});
   const [search, setSearch] = useState("");
-  const [authChecking, setAuthChecking] = useState(true);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState("");
@@ -337,14 +330,10 @@ export default function Home() {
   const isAdmin = user?.role === "ADMIN";
 
   useEffect(() => {
-    apiRequest<AuthResponse>("/auth/refresh", "POST")
-      .then((response) => {
-        setAccessToken(response.accessToken);
-        setUser(response.user);
-      })
-      .catch(() => undefined)
-      .finally(() => setAuthChecking(false));
-  }, []);
+    if (!authChecking && user?.status !== "APPROVED") {
+      router.replace("/login");
+    }
+  }, [authChecking, user?.status, router]);
 
   useEffect(() => {
     setDarkMode(window.localStorage.getItem("darkMode") === "true");
@@ -353,29 +342,6 @@ export default function Home() {
   useEffect(() => {
     window.localStorage.setItem("darkMode", String(darkMode));
   }, [darkMode]);
-
-  useEffect(() => {
-    if (!accessToken) {
-      return;
-    }
-
-    const verifySession = () => {
-      apiRequest<User>("/auth/me", "GET", { accessToken }).catch(() => {
-        setAccessToken(null);
-        setUser(null);
-        setView("stocks");
-      });
-    };
-    const interval = window.setInterval(verifySession, 5000);
-    window.addEventListener("focus", verifySession);
-    document.addEventListener("visibilitychange", verifySession);
-
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener("focus", verifySession);
-      document.removeEventListener("visibilitychange", verifySession);
-    };
-  }, [accessToken]);
 
   useEffect(() => {
     if (!accessToken || user?.status !== "APPROVED") {
@@ -470,14 +436,6 @@ export default function Home() {
     loadRelatedPosts(selectedSymbol, accessToken);
   }, [accessToken, selectedSymbol, chartPeriod, user?.status]);
 
-  const heading = useMemo(() => {
-    if (user?.status === "APPROVED") {
-      return `${user.nickname}`;
-    }
-
-    return mode === "login" ? "Sign in" : "Request access";
-  }, [mode, user]);
-
   const visibleSymbols = useMemo(() => {
     const query = search.trim().toLowerCase();
     const source = usSymbols.length
@@ -501,44 +459,6 @@ export default function Home() {
       )
       .slice(0, 120);
   }, [search, usStocks, usSymbols]);
-
-  async function submitAuth(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setLoading(true);
-    setError("");
-    setMessage("");
-
-    try {
-      if (mode === "register") {
-        const response = await apiRequest<{ user: User; message: string }>(
-          "/auth/register",
-          "POST",
-          { body: { email, password, nickname } },
-        );
-        setUser(response.user);
-        setMessage(
-          response.user.status === "APPROVED"
-            ? "Admin account created. You can sign in now."
-            : "Your request is pending admin approval.",
-        );
-        setMode("login");
-        return;
-      }
-
-      const response = await apiRequest<AuthResponse>("/auth/login", "POST", {
-        body: { email, password },
-      });
-      setAccessToken(response.accessToken);
-      setUser(response.user);
-      setMessage("");
-    } catch (authError) {
-      setError(
-        authError instanceof Error ? authError.message : "Request failed.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function loadMarketData(token = accessToken) {
     if (!token) {
@@ -1054,28 +974,23 @@ export default function Home() {
   }
 
   async function logout() {
-    if (accessToken) {
-      await apiRequest<{ ok: boolean }>("/auth/logout", "POST", {
-        accessToken,
-      }).catch(() => undefined);
-    }
+    // 세션 클리어 → user=null → 리다이렉트 가드가 /login으로 보냄(이 컴포넌트 언마운트되며 로컬 state 초기화).
+    await logoutSession();
+  }
 
-    setAccessToken(null);
-    setUser(null);
-    setPendingUsers([]);
-    setPulse([]);
-    setUsStocks([]);
-    setUsSymbols([]);
-    setStockDetail(null);
-    setCandles([]);
-    setLivePrices({});
-    setPriceCurrency("USD");
-    setPassword("");
-    setNicknameDraft("");
-    setMessage("");
-    setError("");
-    setProfileMessage("");
-    setProfileError("");
+  // 승인 전(로딩/비로그인/대기/거절)에는 로딩만 보여주고, 가드 effect가 /login으로 보냄.
+  if (authChecking || user?.status !== "APPROVED") {
+    return (
+      <main
+        className={`min-h-screen bg-[#f6f7fb] text-[#161a22] ${
+          darkMode ? "dark-app" : ""
+        }`}
+      >
+        <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-6 sm:px-8">
+          <SessionLoading />
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -1132,10 +1047,7 @@ export default function Home() {
           ) : null}
         </header>
 
-        {authChecking ? (
-          <SessionLoading />
-        ) : user?.status === "APPROVED" ? (
-          <>
+        <>
             <MarketPulse
               pulse={pulse}
               livePrices={livePrices}
@@ -1289,40 +1201,8 @@ export default function Home() {
               </div>
             )}
           </>
-        ) : (
-          <div className="grid flex-1 gap-6 py-6 lg:grid-cols-[380px_1fr]">
-            <AuthPanel
-              mode={mode}
-              setMode={setMode}
-              email={email}
-              setEmail={setEmail}
-              password={password}
-              setPassword={setPassword}
-              nickname={nickname}
-              setNickname={setNickname}
-              heading={heading}
-              user={user}
-              message={message}
-              error={error}
-              loading={loading}
-              submitAuth={submitAuth}
-            />
-            <PendingPanel user={user} />
-          </div>
-        )}
       </section>
     </main>
-  );
-}
-
-function SessionLoading() {
-  return (
-    <div className="flex flex-1 items-center justify-center">
-      <div className="flex items-center gap-3 rounded-lg border border-[#d9dee8] bg-white px-4 py-3 text-sm text-[#607086] shadow-sm">
-        <Loader2 size={18} className="animate-spin" />
-        Checking session
-      </div>
-    </div>
   );
 }
 
@@ -1367,63 +1247,6 @@ function MarketPulse({
           );
         })}
       </div>
-    </section>
-  );
-}
-
-function AuthPanel(props: {
-  mode: AuthMode;
-  setMode: (mode: AuthMode) => void;
-  email: string;
-  setEmail: (value: string) => void;
-  password: string;
-  setPassword: (value: string) => void;
-  nickname: string;
-  setNickname: (value: string) => void;
-  heading: string;
-  user: User | null;
-  message: string;
-  error: string;
-  loading: boolean;
-  submitAuth: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-}) {
-  return (
-    <section className="rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">{props.heading}</h2>
-        {props.user?.status ? (
-          <StatusBadge status={props.user.status} />
-        ) : null}
-      </div>
-      <AuthForm {...props} />
-      <Notice message={props.message} error={props.error} />
-    </section>
-  );
-}
-
-function AccountPanel({
-  heading,
-  user,
-  message,
-  error,
-}: {
-  heading: string;
-  user: User;
-  message: string;
-  error: string;
-}) {
-  return (
-    <section className="rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">{heading}</h2>
-        <StatusBadge status={user.status} />
-      </div>
-      <div className="mt-5 space-y-3">
-        <InfoRow label="Email" value={user.email} />
-        <InfoRow label="Role" value={user.role} />
-        <InfoRow label="Status" value={statusLabel[user.status]} />
-      </div>
-      <Notice message={message} error={error} />
     </section>
   );
 }
@@ -1547,78 +1370,6 @@ function ProfilePanel({
 
       <Notice message={message} error={error} />
     </section>
-  );
-}
-
-function AuthForm({
-  mode,
-  setMode,
-  email,
-  setEmail,
-  password,
-  setPassword,
-  nickname,
-  setNickname,
-  loading,
-  submitAuth,
-}: {
-  mode: AuthMode;
-  setMode: (mode: AuthMode) => void;
-  email: string;
-  setEmail: (value: string) => void;
-  password: string;
-  setPassword: (value: string) => void;
-  nickname: string;
-  setNickname: (value: string) => void;
-  loading: boolean;
-  submitAuth: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-}) {
-  return (
-    <>
-      <div className="mt-5 grid grid-cols-2 rounded-md border border-[#d4dae5] bg-[#f3f5f9] p-1">
-        <button
-          onClick={() => setMode("login")}
-          className={`h-9 rounded px-3 text-sm font-medium ${
-            mode === "login"
-              ? "bg-white text-[#151923] shadow-sm"
-              : "text-[#607086]"
-          }`}
-        >
-          Sign in
-        </button>
-        <button
-          onClick={() => setMode("register")}
-          className={`h-9 rounded px-3 text-sm font-medium ${
-            mode === "register"
-              ? "bg-white text-[#151923] shadow-sm"
-              : "text-[#607086]"
-          }`}
-        >
-          Request
-        </button>
-      </div>
-
-      <form onSubmit={submitAuth} className="mt-5 space-y-4">
-        <TextInput label="Email" value={email} setValue={setEmail} type="email" />
-        {mode === "register" ? (
-          <TextInput label="Nickname" value={nickname} setValue={setNickname} />
-        ) : null}
-        <TextInput
-          label="Password"
-          value={password}
-          setValue={setPassword}
-          type="password"
-          minLength={8}
-        />
-        <button
-          disabled={loading}
-          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white hover:bg-[#195b72] disabled:opacity-60"
-        >
-          {mode === "register" ? <UserPlus size={16} /> : <ShieldCheck size={16} />}
-          {loading ? "Working" : mode === "register" ? "Request access" : "Sign in"}
-        </button>
-      </form>
-    </>
   );
 }
 
@@ -3186,24 +2937,6 @@ function CommentThread({
   );
 }
 
-function PendingPanel({ user }: { user: User | null }) {
-  return (
-    <section className="flex h-full min-h-[360px] flex-col items-center justify-center rounded-lg border border-[#d9dee8] bg-white p-5 text-center shadow-sm">
-      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#fff6df] text-[#9b6500]">
-        <Clock size={24} />
-      </div>
-      <h2 className="mt-4 text-xl font-semibold">
-        {user?.status === "PENDING" ? "Approval pending" : "Private access"}
-      </h2>
-      <p className="mt-2 max-w-md text-sm leading-6 text-[#607086]">
-        {user?.status === "PENDING"
-          ? "An admin needs to approve your account before you can enter."
-          : "Only approved accounts can enter this community."}
-      </p>
-    </section>
-  );
-}
-
 function Placeholder({ title }: { title: string }) {
   return (
     <section className="flex min-h-[420px] items-center justify-center rounded-lg border border-[#d9dee8] bg-white p-5 text-sm text-[#607086] shadow-sm">
@@ -3323,74 +3056,12 @@ function NewsOrPlaceholder({
   );
 }
 
-function TextInput({
-  label,
-  value,
-  setValue,
-  type = "text",
-  minLength,
-}: {
-  label: string;
-  value: string;
-  setValue: (value: string) => void;
-  type?: string;
-  minLength?: number;
-}) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-[#344052]">{label}</span>
-      <input
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        type={type}
-        required
-        minLength={minLength}
-        className="mt-1 h-11 w-full rounded-md border border-[#c7ceda] px-3 outline-none focus:border-[#1f6f8b]"
-      />
-    </label>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between border-b border-[#eef1f6] pb-2 text-sm">
-      <span className="text-[#607086]">{label}</span>
-      <span className="font-medium">{value}</span>
-    </div>
-  );
-}
-
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3">
       <p className="text-xs text-[#607086]">{label}</p>
       <p className="mt-1 text-sm font-semibold">{value}</p>
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: UserStatus }) {
-  return (
-    <span className="rounded-md bg-[#edf3ee] px-2.5 py-1 text-xs font-semibold text-[#27613a]">
-      {statusLabel[status]}
-    </span>
-  );
-}
-
-function Notice({ message, error }: { message: string; error: string }) {
-  return (
-    <>
-      {message ? (
-        <p className="mt-4 rounded-md border border-[#cddfce] bg-[#f1f8f1] px-3 py-2 text-sm text-[#27613a]">
-          {message}
-        </p>
-      ) : null}
-      {error ? (
-        <p className="mt-4 rounded-md border border-[#efc8c8] bg-[#fff2f2] px-3 py-2 text-sm text-[#9a2f2f]">
-          {error}
-        </p>
-      ) : null}
-    </>
   );
 }
 
