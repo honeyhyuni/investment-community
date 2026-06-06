@@ -134,10 +134,10 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                   router.push(item.href);
                 }
               }}
-              className={`h-11 border-b-2 px-3 text-sm font-semibold ${
+              className={`h-11 cursor-pointer border-b-2 px-3 text-sm font-semibold transition-colors ${
                 pathname === item.href
                   ? "border-[#1f6f8b] text-[#1f6f8b]"
-                  : "border-transparent text-[#607086]"
+                  : "border-transparent text-[#607086] hover:border-[#c7ceda] hover:text-[#1f6f8b]"
               }`}
             >
               {language === "ko" ? item.label.ko : item.label.en}
