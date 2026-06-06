@@ -1,4 +1,4 @@
-import { UserStatus } from "@/lib/api";
+import { UserStatus } from "@/common/lib/api";
 
 export const statusLabel: Record<UserStatus, string> = {
   APPROVED: "Approved",

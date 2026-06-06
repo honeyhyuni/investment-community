@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, X } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
 import { useSessionStore } from "@/common/stores/session";
-import { apiRequest, User, UserStatus } from "@/lib/api";
+import { apiRequest, User, UserStatus } from "@/common/lib/api";
 
 export function AdminPage() {
   const router = useRouter();

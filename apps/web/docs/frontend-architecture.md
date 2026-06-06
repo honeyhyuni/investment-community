@@ -52,7 +52,8 @@ src/
       types.ts              # AuthMode
   common/                   # 범용 (도메인 안 가림)
     components/             # StatusBadge(+statusLabel), Notice, TextInput, SessionLoading, MarkdownContent
-    lib/                    # stock-search.ts, community.ts (순수 유틸, 컴포넌트/훅 아님)
+    lib/                    # api.ts (HTTP 클라이언트/인프라 래퍼 — 상태/부수효과 있음)
+    utils/                  # format.ts, stock-search.ts, community.ts (순수 함수 헬퍼 — 입력→출력)
     stores/                 # session.ts, preferences.ts, market-data.ts (zustand)
     types.ts                # Language, DisplayCurrency, MarketQuote, StockSymbol, TradeTick (도메인 안 가리는 공유 타입)
 ```
@@ -70,7 +71,9 @@ src/
 
 - **1 파일 1 컴포넌트.** 파일명 = 컴포넌트명, `PascalCase.tsx` (예: `StockDetailPanel.tsx`)
 - 훅: `camelCase.ts`, `use` 접두 (예: `useSession.ts`)
-- lib/유틸: `kebab-case.ts` (예: `stock-search.ts`)
+- lib/utils 파일: `kebab-case.ts` (예: `stock-search.ts`)
+  - **`utils/`** = 순수 함수(입력→출력, 부수효과 없음): `format`, `stock-search`, `community`.
+  - **`lib/`** = 외부 I/O·인프라 래퍼(fetch 클라이언트 등): `api`. *"호출하면 네트워크/상태가 움직이나?" → 예면 lib, 아니면 utils.*
 - 타입: 도메인 전용은 `domain/<name>/types.ts`, 범용은 `common/types.ts`
 - import 별칭: `@/*` → `src/*` (예: `@/common/lib/format`, `@/domain/markets/components/QuoteCard`)
 

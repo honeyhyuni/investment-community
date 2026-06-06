@@ -1,7 +1,7 @@
 import { create } from "zustand";
-import { apiRequest } from "@/lib/api";
+import { apiRequest } from "@/common/lib/api";
 import { MarketQuote, StockSymbol, TradeTick } from "@/common/types";
-import { mergePrioritySymbols } from "@/common/lib/stock-search";
+import { mergePrioritySymbols } from "@/common/utils/stock-search";
 
 type MarketDataState = {
   pulse: MarketQuote[];

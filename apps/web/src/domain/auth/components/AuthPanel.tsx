@@ -1,5 +1,5 @@
 import { FormEvent } from "react";
-import { User } from "@/lib/api";
+import { User } from "@/common/lib/api";
 import { Notice } from "@/common/components/Notice";
 import { StatusBadge } from "@/common/components/StatusBadge";
 import { AuthForm } from "@/domain/auth/components/AuthForm";

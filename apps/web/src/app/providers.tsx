@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect } from "react";
 import { io } from "socket.io-client";
-import { API_ORIGIN } from "@/lib/api";
+import { API_ORIGIN } from "@/common/lib/api";
 import { TradeTick } from "@/common/types";
 import { useSessionStore } from "@/common/stores/session";
 import { useMarketDataStore } from "@/common/stores/market-data";

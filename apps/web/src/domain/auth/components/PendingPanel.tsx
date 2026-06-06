@@ -1,5 +1,5 @@
 import { Clock } from "lucide-react";
-import { User } from "@/lib/api";
+import { User } from "@/common/lib/api";
 
 export function PendingPanel({ user }: { user: User | null }) {
   return (

@@ -2,6 +2,7 @@
 
 import { RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import { DisplayCurrency, MarketQuote, TradeTick } from "@/common/types";
+import { formatMoney, formatNumber } from "@/common/utils/format";
 
 export function MarketPulse({
   pulse,
@@ -89,29 +90,3 @@ function PulseCard({
   );
 }
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  }).format(value || 0);
-}
-
-function formatMoney(
-  value: number,
-  displayCurrency: DisplayCurrency,
-  sourceCurrency: string = "USD",
-) {
-  const converted =
-    displayCurrency === "KRW" && sourceCurrency === "USD"
-      ? value * 1500
-      : displayCurrency === "USD" && sourceCurrency === "KRW"
-        ? value / 1500
-        : value;
-  const symbol = displayCurrency === "KRW" ? "원" : "$";
-  const fractionDigits = displayCurrency === "KRW" ? 0 : 2;
-
-  return `${symbol}${new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: fractionDigits,
-    minimumFractionDigits: fractionDigits,
-  }).format(converted || 0)}`;
-}

@@ -3,8 +3,8 @@
 import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { Image as ImageIcon, X } from "lucide-react";
 import { MarkdownContent } from "@/common/components/MarkdownContent";
-import { encodeImageForPost, makeEditorBlockId } from "@/common/lib/community";
-import { stockSearchScore } from "@/common/lib/stock-search";
+import { encodeImageForPost, makeEditorBlockId } from "@/common/utils/community";
+import { stockSearchScore } from "@/common/utils/stock-search";
 import { CommunityContentBlock, StockTag } from "@/domain/community/types";
 import { MarketQuote, StockSymbol, TradeTick } from "@/common/types";
 import { StockTagQuote } from "@/domain/community/components/StockTagQuote";

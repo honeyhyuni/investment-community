@@ -5,7 +5,7 @@ import { Heart, MessageCircle, Pencil, Send, Trash2 } from "lucide-react";
 import { MarkdownContent } from "@/common/components/MarkdownContent";
 import { MarketQuote, TradeTick } from "@/common/types";
 import { CommunityPost, StockTag } from "@/domain/community/types";
-import { communityBlocksToMarkdown } from "@/common/lib/community";
+import { communityBlocksToMarkdown } from "@/common/utils/community";
 import { CommentThread } from "@/domain/community/components/CommentThread";
 import { StockTagQuote } from "@/domain/community/components/StockTagQuote";
 

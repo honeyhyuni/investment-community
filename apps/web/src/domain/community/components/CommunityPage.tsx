@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Users } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
-import { apiRequest } from "@/lib/api";
-import { makeEditorBlockId, communityBlocksToMarkdown } from "@/common/lib/community";
+import { apiRequest } from "@/common/lib/api";
+import { makeEditorBlockId, communityBlocksToMarkdown } from "@/common/utils/community";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { useSessionStore } from "@/common/stores/session";
 import {

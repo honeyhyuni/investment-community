@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { apiRequest, AuthResponse, User } from "@/lib/api";
+import { apiRequest, AuthResponse, User } from "@/common/lib/api";
 
 type SessionState = {
   accessToken: string | null;

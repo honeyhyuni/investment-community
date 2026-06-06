@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Notice } from "@/common/components/Notice";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { useSessionStore } from "@/common/stores/session";
-import { apiRequest } from "@/lib/api";
+import { apiRequest } from "@/common/lib/api";
 import { MarketNews, NewsCategory } from "@/domain/news/types";
 
 const newsCategories: Array<{ id: NewsCategory; label: string }> = [

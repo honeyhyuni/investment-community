@@ -1,6 +1,7 @@
 "use client";
 
 import { MarketQuote, TradeTick } from "@/common/types";
+import { formatMoney, formatNumber } from "@/common/utils/format";
 import { StockTag } from "@/domain/community/types";
 
 type StockTagQuoteProps = {
@@ -77,25 +78,3 @@ export function StockTagQuote({
   );
 }
 
-function formatMoney(value: number, displayCurrency: "USD" | "KRW", sourceCurrency: string = "USD") {
-  const converted =
-    displayCurrency === "KRW" && sourceCurrency === "USD"
-      ? value * 1500
-      : displayCurrency === "USD" && sourceCurrency === "KRW"
-        ? value / 1500
-        : value;
-  const symbol = displayCurrency === "KRW" ? "원" : "$";
-  const fractionDigits = displayCurrency === "KRW" ? 0 : 2;
-
-  return `${symbol}${new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: fractionDigits,
-    minimumFractionDigits: fractionDigits,
-  }).format(converted || 0)}`;
-}
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  }).format(value || 0);
-}

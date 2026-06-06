@@ -7,7 +7,7 @@ import { Notice } from "@/common/components/Notice";
 import { statusLabel } from "@/common/components/StatusBadge";
 import { TextInput } from "@/common/components/TextInput";
 import { useSessionStore } from "@/common/stores/session";
-import { apiRequest, User } from "@/lib/api";
+import { apiRequest, User } from "@/common/lib/api";
 
 export function ProfilePage() {
   const router = useRouter();

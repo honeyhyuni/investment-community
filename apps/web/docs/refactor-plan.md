@@ -30,20 +30,21 @@
 - `session.ts` / `market-data.ts`(시세+`liveSeries`+`applyTrade`, 소켓은 providers) / `preferences.ts`(language·darkMode, **hydrate 패턴**으로 SSR-safe).
 - `providers.tsx` — 세션 refresh/verify 폴링 + 마켓 로드/웹소켓 + prefs hydrate를 전역 1회 마운트.
 
-**유틸/타입 추출**
-- `common/types.ts`(Language/DisplayCurrency/MarketQuote/StockSymbol/TradeTick), `common/lib/stock-search.ts`, `common/lib/community.ts`.
+**유틸/타입 추출** (lib = I/O 래퍼, utils = 순수 함수)
+- `common/types.ts`(Language/DisplayCurrency/MarketQuote/StockSymbol/TradeTick)
+- `common/utils/`: `format.ts`(공유 formatMoney/formatNumber/convertMoneyValue — MarketPulse·StockTagQuote 중복 제거), `stock-search.ts`, `community.ts`
+- `common/lib/api.ts` (기존 `src/lib/api.ts` 이동)
 
 **남은 것**
-- 종목(stocks) 뷰 본체가 아직 `(auth)/page.tsx`에 인라인(~1.2k줄) → `domain/markets`로 추출하면 5개 라우트 모두 얇아짐.
-- `common/lib/format.ts` 추출, `lib/api.ts` → `common/lib/api.ts` 이동(Phase 1 잔여).
+- 종목(stocks) 뷰 본체가 아직 `(auth)/page.tsx`에 인라인(~1.2k줄) → `domain/markets`로 추출하면 5개 라우트 모두 얇아짐. (종목 전용 formatter: convertQuote/formatMarketCap/buildMetricItems/pickMetric도 함께)
 - 승인 계정으로 로그인→앱→로그아웃 + 라우트 이동/언어영속 브라우저 QA.
 
 ## Phase 진행표
 
 - [x] **Phase 0 — 문서화**: `docs/` + AGENTS.md 연결
 - [~] **Phase 1 — 순수 유틸/타입 추출**
-  - [x] `common/types.ts`, `common/lib/stock-search.ts`, `common/lib/community.ts`
-  - [ ] `common/lib/format.ts`(formatMoney/convertQuote 등 — 아직 `(auth)/page.tsx`에 인라인), `common/lib/api.ts` 이동
+  - [x] `common/types.ts`, `common/utils/{stock-search,community,format}.ts`, `common/lib/api.ts`
+  - [ ] 종목 전용 formatter(convertQuote/formatMarketCap/buildMetricItems/pickMetric/translateDetailLabel)는 Step 2에서 `domain/markets`로 함께 이동
 - [x] **Phase 2 — leaf/도메인 컴포넌트 추출** — auth/markets/community/news/admin/profile + 공용(StatusBadge/Notice/TextInput/SessionLoading/MarkdownContent)
 - [x] **Phase 3 — zustand 스토어 + 상태 리프팅** — session/market-data/preferences 전부, providers로 라이프사이클 일원화
 - [~] **Phase 4 — 라우트 분리**

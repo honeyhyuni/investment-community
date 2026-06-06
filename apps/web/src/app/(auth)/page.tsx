@@ -23,12 +23,13 @@ import {
   Time,
 } from "lightweight-charts";
 import { useRouter } from "next/navigation";
-import { apiRequest } from "@/lib/api";
+import { apiRequest } from "@/common/lib/api";
 import { Notice } from "@/common/components/Notice";
 import { SessionLoading } from "@/common/components/SessionLoading";
 import { useSessionStore } from "@/common/stores/session";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { usePreferencesStore } from "@/common/stores/preferences";
+import { convertMoneyValue, formatMoney, formatNumber } from "@/common/utils/format";
 import {
   DisplayCurrency,
   MarketQuote,
@@ -932,48 +933,6 @@ function InfoBox({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-sm font-semibold">{value}</p>
     </div>
   );
-}
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  }).format(value || 0);
-}
-
-function convertMoneyValue(
-  value: number,
-  displayCurrency: DisplayCurrency,
-  sourceCurrency: DisplayCurrency = "USD",
-) {
-  if (displayCurrency === sourceCurrency) {
-    return value;
-  }
-
-  if (displayCurrency === "KRW" && sourceCurrency === "USD") {
-    return value * 1500;
-  }
-
-  if (displayCurrency === "USD" && sourceCurrency === "KRW") {
-    return value / 1500;
-  }
-
-  return value;
-}
-
-function formatMoney(
-  value: number,
-  displayCurrency: DisplayCurrency,
-  sourceCurrency: DisplayCurrency = "USD",
-) {
-  const converted = convertMoneyValue(value, displayCurrency, sourceCurrency);
-  const symbol = displayCurrency === "KRW" ? "원" : "$";
-  const fractionDigits = displayCurrency === "KRW" ? 0 : 2;
-
-  return `${symbol}${new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: fractionDigits,
-    minimumFractionDigits: fractionDigits,
-  }).format(converted || 0)}`;
 }
 
 function convertQuote(
