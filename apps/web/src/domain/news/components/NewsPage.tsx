@@ -128,7 +128,7 @@ export function NewsPage() {
               {darkMode ? <Sun size={17} /> : <Moon size={17} />}
             </button>
             <button
-              onClick={() => router.push("/")}
+              onClick={() => router.push("/profile")}
               className="inline-flex h-10 items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#344052] shadow-sm hover:bg-[#eef1f6]"
             >
               <UserPen size={16} />
@@ -165,6 +165,10 @@ export function NewsPage() {
                 key={item.id}
                 onClick={() => {
                   if (item.id === "news") {
+                    return;
+                  }
+                  if (item.id === "admin") {
+                    router.push("/admin");
                     return;
                   }
                   if (item.id === "community") {

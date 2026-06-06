@@ -2,7 +2,6 @@
 
 import {
   useCallback,
-  FormEvent,
   Suspense,
   useEffect,
   useMemo,
@@ -10,7 +9,6 @@ import {
   useState,
 } from "react";
 import {
-  Check,
   LogOut,
   Moon,
   Sun,
@@ -18,7 +16,6 @@ import {
   Search,
   TrendingDown,
   TrendingUp,
-  X,
 } from "lucide-react";
 import {
   BusinessDay,
@@ -30,14 +27,8 @@ import {
   Time,
 } from "lightweight-charts";
 import { useRouter } from "next/navigation";
-import {
-  apiRequest,
-  User,
-  UserStatus,
-} from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 import { Notice } from "@/common/components/Notice";
-import { TextInput } from "@/common/components/TextInput";
-import { statusLabel } from "@/common/components/StatusBadge";
 import { SessionLoading } from "@/common/components/SessionLoading";
 import { useSessionStore } from "@/common/stores/session";
 import { useMarketDataStore } from "@/common/stores/market-data";
@@ -51,8 +42,8 @@ import { CommunityPost } from "@/domain/community/types";
 import { MarketPulse } from "@/domain/markets/components/MarketPulse";
 import { useStockRouteSelection } from "@/domain/markets/hooks/useStockRouteSelection";
 
-type View = "stocks" | "admin" | "profile";
-type MenuView = View | "news" | "community";
+type View = "stocks";
+type MenuView = View | "news" | "community" | "admin";
 type Language = "en" | "ko";
 type StockTab = "US" | "KR";
 
@@ -154,7 +145,6 @@ function HomeContent() {
   const accessToken = useSessionStore((s) => s.accessToken);
   const user = useSessionStore((s) => s.user);
   const authChecking = useSessionStore((s) => s.authChecking);
-  const setUser = useSessionStore((s) => s.setUser);
   const logoutSession = useSessionStore((s) => s.logout);
   const pulse = useMarketDataStore((s) => s.pulse);
   const usStocks = useMarketDataStore((s) => s.usStocks);
@@ -166,7 +156,6 @@ function HomeContent() {
   const marketLoading = useMarketDataStore((s) => s.marketLoading);
   const loadMarketData = useMarketDataStore((s) => s.loadMarketData);
   const router = useRouter();
-  const [pendingUsers, setPendingUsers] = useState<User[]>([]);
   const [relatedPosts, setRelatedPosts] = useState<CommunityPost[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState("AAPL");
   const [stockDetail, setStockDetail] = useState<StockDetail | null>(null);
@@ -176,17 +165,9 @@ function HomeContent() {
   const [chartLoading, setChartLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
-  const [profileMessage, setProfileMessage] = useState("");
-  const [profileError, setProfileError] = useState("");
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [nicknameDraft, setNicknameDraft] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [darkMode, setDarkMode] = useState(
     () => typeof window !== "undefined" && window.localStorage.getItem("darkMode") === "true",
   );
-  const [loading, setLoading] = useState(false);
 
   const isAdmin = user?.role === "ADMIN";
   const openStocksView = useCallback(() => setView("stocks"), []);
@@ -212,31 +193,6 @@ function HomeContent() {
   useEffect(() => {
     window.localStorage.setItem("darkMode", String(darkMode));
   }, [darkMode]);
-
-  useEffect(() => {
-    if (user) {
-      queueMicrotask(() => setNicknameDraft(user.nickname));
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (!accessToken || !isAdmin) {
-      queueMicrotask(() => setPendingUsers([]));
-      return;
-    }
-
-    loadPendingUsers(accessToken);
-  }, [accessToken, isAdmin]);
-
-  useEffect(() => {
-    if (!accessToken || user?.status !== "APPROVED" || !selectedSymbol) {
-      return;
-    }
-
-    loadStockDetail(selectedSymbol, accessToken);
-    loadCandles(selectedSymbol, chartPeriod, accessToken);
-    loadRelatedPosts(selectedSymbol, accessToken);
-  }, [accessToken, selectedSymbol, chartPeriod, stockTab, user?.status]);
 
   const visibleSymbols = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -327,111 +283,17 @@ function HomeContent() {
     }
   }
 
-  async function loadPendingUsers(token = accessToken) {
-    if (!token) {
+  useEffect(() => {
+    if (!accessToken || user?.status !== "APPROVED" || !selectedSymbol) {
       return;
     }
 
-    try {
-      const users = await apiRequest<User[]>("/users/pending", "GET", {
-        accessToken: token,
-      });
-      setPendingUsers(users);
-    } catch (pendingError) {
-      setError(
-        pendingError instanceof Error
-          ? pendingError.message
-          : "Could not load pending users.",
-      );
-    }
-  }
-
-  async function updateUserStatus(id: string, status: UserStatus) {
-    if (!accessToken) {
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
-    try {
-      await apiRequest<User>(`/users/${id}/status`, "PATCH", {
-        accessToken,
-        body: { status },
-      });
-      await loadPendingUsers(accessToken);
-    } catch (statusError) {
-      setError(
-        statusError instanceof Error
-          ? statusError.message
-          : "Could not update user status.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function updateProfile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!accessToken) {
-      return;
-    }
-
-    setProfileLoading(true);
-    setProfileError("");
-    setProfileMessage("");
-
-    try {
-      const updatedUser = await apiRequest<User>("/auth/me", "PATCH", {
-        accessToken,
-        body: { nickname: nicknameDraft },
-      });
-      setUser(updatedUser);
-      setProfileMessage("Profile updated.");
-    } catch (profileUpdateError) {
-      setProfileError(
-        profileUpdateError instanceof Error
-          ? profileUpdateError.message
-          : "Could not update profile.",
-      );
-    } finally {
-      setProfileLoading(false);
-    }
-  }
-
-  async function changePassword(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!accessToken) {
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setProfileError("New passwords do not match.");
-      return;
-    }
-
-    setProfileLoading(true);
-    setProfileError("");
-    setProfileMessage("");
-    try {
-      await apiRequest<{ ok: true }>("/auth/password", "PATCH", {
-        accessToken,
-        body: { currentPassword, newPassword },
-      });
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setProfileMessage("Password changed. Sign in again when this session expires.");
-    } catch (passwordError) {
-      setProfileError(
-        passwordError instanceof Error
-          ? passwordError.message
-          : "Could not change password.",
-      );
-    } finally {
-      setProfileLoading(false);
-    }
-  }
+    queueMicrotask(() => {
+      loadStockDetail(selectedSymbol, accessToken);
+      loadCandles(selectedSymbol, chartPeriod, accessToken);
+      loadRelatedPosts(selectedSymbol, accessToken);
+    });
+  }, [accessToken, selectedSymbol, chartPeriod, stockTab, user?.status]);
 
   async function logout() {
     // 세션 클리어 → user=null → 리다이렉트 가드가 /login으로 보냄(이 컴포넌트 언마운트되며 로컬 state 초기화).
@@ -486,12 +348,8 @@ function HomeContent() {
                 {darkMode ? <Sun size={17} /> : <Moon size={17} />}
               </button>
               <button
-                onClick={() => setView("profile")}
-                className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-semibold shadow-sm hover:bg-[#eef1f6] ${
-                  view === "profile"
-                    ? "border-[#1f6f8b] bg-[#eef6f9] text-[#1f6f8b]"
-                    : "border-[#c7ceda] bg-white text-[#344052]"
-                }`}
+                onClick={() => router.push("/profile")}
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#344052] shadow-sm hover:bg-[#eef1f6]"
               >
                 <UserPen size={16} />
                 {language === "ko" ? "프로필 수정" : "Profile"}
@@ -536,6 +394,10 @@ function HomeContent() {
                         router.push("/news");
                         return;
                       }
+                      if (menu.id === "admin") {
+                        router.push("/admin");
+                        return;
+                      }
                       setView(menu.id);
                     }}
                     className={`h-11 border-b-2 px-3 text-sm font-semibold ${
@@ -549,189 +411,35 @@ function HomeContent() {
                   </button>
                 ))}
             </nav>
-            {view === "profile" ? (
-              <div className="flex-1 py-6">
-                <ProfilePanel
-                  user={user}
-                  nicknameDraft={nicknameDraft}
-                  setNicknameDraft={setNicknameDraft}
-                  loading={profileLoading}
-                  message={profileMessage}
-                  error={profileError}
-                  onSubmit={updateProfile}
-                  currentPassword={currentPassword}
-                  setCurrentPassword={setCurrentPassword}
-                  newPassword={newPassword}
-                  setNewPassword={setNewPassword}
-                  confirmPassword={confirmPassword}
-                  setConfirmPassword={setConfirmPassword}
-                  onPasswordSubmit={changePassword}
-                  onBack={() => setView("stocks")}
-                />
-              </div>
-            ) : (
-              <div className="grid flex-1 gap-6 py-6 lg:grid-cols-[1fr]">
-                {view === "stocks" ? (
-                  <StocksView
-                    stockTab={stockTab}
-                    setStockTab={setStockTab}
-                    visibleSymbols={visibleSymbols}
-                    usStocks={usStocks}
-                    krStocks={krStocks}
-                    krSymbols={krSymbols}
-                    selectedSymbol={selectedSymbol}
-                    setSelectedSymbol={setSelectedSymbol}
-                    stockDetail={stockDetail}
-                    livePrices={livePrices}
-                    liveSeries={liveSeries}
-                    candles={candles}
-                    chartPeriod={chartPeriod}
-                    setChartPeriod={setChartPeriod}
-                    chartLoading={chartLoading}
-                    language={language}
-                    search={search}
-                    setSearch={setSearch}
-                    priceCurrency={priceCurrency}
-                    setPriceCurrency={setPriceCurrency}
-                    relatedPosts={relatedPosts}
-                    onRelatedPostClick={openRelatedPost}
-                  />
-                ) : view === "admin" ? (
-                  <AdminPanel
-                    pendingUsers={pendingUsers}
-                    loading={loading}
-                    updateUserStatus={updateUserStatus}
-                  />
-                ) : (
-                  <Placeholder title="Community" />
-                )}
-              </div>
-            )}
+            <div className="grid flex-1 gap-6 py-6 lg:grid-cols-[1fr]">
+              <StocksView
+                stockTab={stockTab}
+                setStockTab={setStockTab}
+                visibleSymbols={visibleSymbols}
+                usStocks={usStocks}
+                krStocks={krStocks}
+                krSymbols={krSymbols}
+                selectedSymbol={selectedSymbol}
+                setSelectedSymbol={setSelectedSymbol}
+                stockDetail={stockDetail}
+                livePrices={livePrices}
+                liveSeries={liveSeries}
+                candles={candles}
+                chartPeriod={chartPeriod}
+                setChartPeriod={setChartPeriod}
+                chartLoading={chartLoading}
+                language={language}
+                search={search}
+                setSearch={setSearch}
+                priceCurrency={priceCurrency}
+                setPriceCurrency={setPriceCurrency}
+                relatedPosts={relatedPosts}
+                onRelatedPostClick={openRelatedPost}
+              />
+            </div>
           </>
       </section>
     </main>
-  );
-}
-
-function ProfilePanel({
-  user,
-  nicknameDraft,
-  setNicknameDraft,
-  loading,
-  message,
-  error,
-  onSubmit,
-  currentPassword,
-  setCurrentPassword,
-  newPassword,
-  setNewPassword,
-  confirmPassword,
-  setConfirmPassword,
-  onPasswordSubmit,
-  onBack,
-}: {
-  user: User;
-  nicknameDraft: string;
-  setNicknameDraft: (value: string) => void;
-  loading: boolean;
-  message: string;
-  error: string;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  currentPassword: string;
-  setCurrentPassword: (value: string) => void;
-  newPassword: string;
-  setNewPassword: (value: string) => void;
-  confirmPassword: string;
-  setConfirmPassword: (value: string) => void;
-  onPasswordSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  onBack: () => void;
-}) {
-  return (
-    <section className="rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607086]">
-            Profile
-          </p>
-          <h2 className="mt-1 text-xl font-semibold">Edit profile</h2>
-        </div>
-        <button
-          onClick={onBack}
-          className="rounded-md border border-[#c7ceda] bg-white px-3 py-2 text-sm font-semibold text-[#344052] hover:bg-[#eef1f6]"
-        >
-          Back
-        </button>
-      </div>
-
-      <form onSubmit={onSubmit} className="mt-5 space-y-4">
-        <label className="block">
-          <span className="text-sm font-medium text-[#344052]">Nickname</span>
-          <input
-            value={nicknameDraft}
-            onChange={(event) => setNicknameDraft(event.target.value)}
-            type="text"
-            minLength={2}
-            maxLength={24}
-            required
-            className="mt-1 h-11 w-full rounded-md border border-[#c7ceda] px-3 outline-none focus:border-[#1f6f8b]"
-          />
-        </label>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <InfoBox label="Email" value={user.email} />
-          <InfoBox label="Role" value={user.role} />
-          <InfoBox label="Status" value={statusLabel[user.status]} />
-          <InfoBox
-            label="Joined"
-            value={new Date(user.createdAt).toLocaleDateString()}
-          />
-        </div>
-
-        <button
-          disabled={loading}
-          className="inline-flex h-11 items-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white hover:bg-[#195b72] disabled:opacity-60"
-        >
-          <UserPen size={16} />
-          {loading ? "Saving" : "Save profile"}
-        </button>
-      </form>
-
-      <form
-        onSubmit={onPasswordSubmit}
-        className="mt-6 space-y-4 border-t border-[#eef1f6] pt-5"
-      >
-        <h3 className="text-base font-semibold">Change password</h3>
-        <TextInput
-          label="Current password"
-          value={currentPassword}
-          setValue={setCurrentPassword}
-          type="password"
-          minLength={8}
-        />
-        <TextInput
-          label="New password"
-          value={newPassword}
-          setValue={setNewPassword}
-          type="password"
-          minLength={8}
-        />
-        <TextInput
-          label="Confirm new password"
-          value={confirmPassword}
-          setValue={setConfirmPassword}
-          type="password"
-          minLength={8}
-        />
-        <button
-          disabled={loading}
-          className="inline-flex h-11 items-center rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white hover:bg-[#195b72] disabled:opacity-60"
-        >
-          {loading ? "Saving" : "Change password"}
-        </button>
-      </form>
-
-      <Notice message={message} error={error} />
-    </section>
   );
 }
 
@@ -1326,64 +1034,6 @@ function QuoteCard({
   );
 }
 
-function AdminPanel({
-  pendingUsers,
-  loading,
-  updateUserStatus,
-}: {
-  pendingUsers: User[];
-  loading: boolean;
-  updateUserStatus: (id: string, status: UserStatus) => Promise<void>;
-}) {
-  return (
-    <section className="rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Access approvals</h2>
-        <span className="rounded-md bg-[#eef3f8] px-2.5 py-1 text-xs font-semibold text-[#344052]">
-          {pendingUsers.length}
-        </span>
-      </div>
-      <div className="mt-4 overflow-hidden rounded-md border border-[#d9dee8]">
-        {pendingUsers.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-[#607086]">
-            No pending accounts.
-          </div>
-        ) : (
-          pendingUsers.map((pendingUser) => (
-            <div
-              key={pendingUser.id}
-              className="flex flex-col gap-3 border-b border-[#eef1f6] px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div>
-                <p className="font-medium">{pendingUser.nickname}</p>
-                <p className="text-sm text-[#607086]">{pendingUser.email}</p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  disabled={loading}
-                  onClick={() => updateUserStatus(pendingUser.id, "APPROVED")}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#2e7d4f] px-3 text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  <Check size={15} />
-                  Approve
-                </button>
-                <button
-                  disabled={loading}
-                  onClick={() => updateUserStatus(pendingUser.id, "REJECTED")}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#d3a1a1] bg-white px-3 text-sm font-semibold text-[#9a2f2f] disabled:opacity-60"
-                >
-                  <X size={15} />
-                  Reject
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </section>
-  );
-}
-
 function RelatedPosts({
   posts,
   onPostClick,
@@ -1420,14 +1070,6 @@ function RelatedPosts({
         )}
       </div>
     </div>
-  );
-}
-
-function Placeholder({ title }: { title: string }) {
-  return (
-    <section className="flex min-h-[420px] items-center justify-center rounded-lg border border-[#d9dee8] bg-white p-5 text-sm text-[#607086] shadow-sm">
-      {title} will be connected next.
-    </section>
   );
 }
 
