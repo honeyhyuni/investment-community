@@ -30,7 +30,6 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { io, Socket } from "socket.io-client";
 import {
   BusinessDay,
   CandlestickData,
@@ -43,7 +42,6 @@ import {
 import { useRouter } from "next/navigation";
 import {
   apiRequest,
-  API_ORIGIN,
   User,
   UserStatus,
 } from "@/lib/api";
@@ -52,28 +50,20 @@ import { TextInput } from "@/common/components/TextInput";
 import { statusLabel } from "@/common/components/StatusBadge";
 import { SessionLoading } from "@/common/components/SessionLoading";
 import { useSessionStore } from "@/common/stores/session";
+import { useMarketDataStore } from "@/common/stores/market-data";
+import {
+  DisplayCurrency,
+  MarketQuote,
+  StockSymbol,
+  TradeTick,
+} from "@/common/types";
 
 type View = "stocks" | "news" | "community" | "admin" | "profile";
 type Language = "en" | "ko";
 type StockTab = "US" | "KR";
-type DisplayCurrency = "USD" | "KRW";
 type NewsCategory = "us" | "kr";
 type CommunityScope = "all" | "subscribed" | "mine";
 type FeedSort = "latest" | "popular";
-
-type MarketQuote = {
-  symbol: string;
-  name?: string;
-  currency?: DisplayCurrency;
-  current: number;
-  change: number;
-  percentChange: number;
-  high: number;
-  low: number;
-  open: number;
-  previousClose: number;
-  timestamp: number;
-};
 
 type MarketNews = {
   category: string;
@@ -85,14 +75,6 @@ type MarketNews = {
   source: string;
   summary: string;
   url: string;
-};
-
-type StockSymbol = {
-  symbol: string;
-  displaySymbol: string;
-  description: string;
-  type: string;
-  currency?: string;
 };
 
 type StockDetail = {
@@ -117,13 +99,6 @@ type StockDetail = {
     fetchedAt: string | null;
   };
   quote: MarketQuote;
-};
-
-type TradeTick = {
-  symbol: string;
-  price: number;
-  timestamp: number;
-  volume: number;
 };
 
 type ChartPeriod = "1D" | "1M" | "1Y" | "3Y" | "5Y" | "ALL";
@@ -208,28 +183,6 @@ const menus: Array<{ id: View; label: string }> = [
   { id: "admin", label: "Admin" },
 ];
 
-const popularPriority = new Map(
-  [
-    "AAPL",
-    "MSFT",
-    "NVDA",
-    "AMZN",
-    "GOOGL",
-    "META",
-    "TSLA",
-    "AVGO",
-    "AMD",
-    "NFLX",
-    "COST",
-    "JPM",
-    "QQQ",
-    "SPY",
-    "DIA",
-    "GLD",
-    "USO",
-  ].map((symbol, index) => [symbol, index]),
-);
-
 const copy = {
   en: {
     translate: "한국어",
@@ -278,13 +231,17 @@ export default function Home() {
   const authChecking = useSessionStore((s) => s.authChecking);
   const setUser = useSessionStore((s) => s.setUser);
   const logoutSession = useSessionStore((s) => s.logout);
+  const pulse = useMarketDataStore((s) => s.pulse);
+  const usStocks = useMarketDataStore((s) => s.usStocks);
+  const usSymbols = useMarketDataStore((s) => s.usSymbols);
+  const krStocks = useMarketDataStore((s) => s.krStocks);
+  const krSymbols = useMarketDataStore((s) => s.krSymbols);
+  const livePrices = useMarketDataStore((s) => s.livePrices);
+  const liveSeries = useMarketDataStore((s) => s.liveSeries);
+  const marketLoading = useMarketDataStore((s) => s.marketLoading);
+  const loadMarketData = useMarketDataStore((s) => s.loadMarketData);
   const router = useRouter();
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
-  const [pulse, setPulse] = useState<MarketQuote[]>([]);
-  const [usStocks, setUsStocks] = useState<MarketQuote[]>([]);
-  const [usSymbols, setUsSymbols] = useState<StockSymbol[]>([]);
-  const [krStocks, setKrStocks] = useState<MarketQuote[]>([]);
-  const [krSymbols, setKrSymbols] = useState<StockSymbol[]>([]);
   const [news, setNews] = useState<MarketNews[]>([]);
   const [newsPage, setNewsPage] = useState(1);
   const [newsCategory, setNewsCategory] = useState<NewsCategory>("us");
@@ -312,8 +269,6 @@ export default function Home() {
   const [priceCurrency, setPriceCurrency] = useState<DisplayCurrency>("USD");
   const [candles, setCandles] = useState<CandlePoint[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
-  const [livePrices, setLivePrices] = useState<Record<string, TradeTick>>({});
-  const [liveSeries, setLiveSeries] = useState<Record<string, TradeTick[]>>({});
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [profileMessage, setProfileMessage] = useState("");
@@ -323,9 +278,10 @@ export default function Home() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(
+    () => typeof window !== "undefined" && window.localStorage.getItem("darkMode") === "true",
+  );
   const [loading, setLoading] = useState(false);
-  const [marketLoading, setMarketLoading] = useState(false);
 
   const isAdmin = user?.role === "ADMIN";
 
@@ -336,95 +292,41 @@ export default function Home() {
   }, [authChecking, user?.status, router]);
 
   useEffect(() => {
-    setDarkMode(window.localStorage.getItem("darkMode") === "true");
-  }, []);
-
-  useEffect(() => {
     window.localStorage.setItem("darkMode", String(darkMode));
   }, [darkMode]);
 
   useEffect(() => {
-    if (!accessToken || user?.status !== "APPROVED") {
-      return;
-    }
-
-    loadMarketData(accessToken);
-  }, [accessToken, user?.status]);
-
-  useEffect(() => {
     if (user) {
-      setNicknameDraft(user.nickname);
+      queueMicrotask(() => setNicknameDraft(user.nickname));
     }
   }, [user]);
 
   useEffect(() => {
     if (stockTab === "KR") {
-      setPriceCurrency("KRW");
-      if (krSymbols.length > 0 && !krSymbols.some((item) => item.symbol === selectedSymbol)) {
-        setSelectedSymbol(krSymbols[0].symbol);
-      }
+      queueMicrotask(() => {
+        setPriceCurrency("KRW");
+        if (krSymbols.length > 0 && !krSymbols.some((item) => item.symbol === selectedSymbol)) {
+          setSelectedSymbol(krSymbols[0].symbol);
+        }
+      });
     } else {
-      setPriceCurrency("USD");
-      if (usSymbols.length > 0 && !usSymbols.some((item) => item.symbol === selectedSymbol)) {
-        setSelectedSymbol(usSymbols[0].symbol);
-      }
+      queueMicrotask(() => {
+        setPriceCurrency("USD");
+        if (usSymbols.length > 0 && !usSymbols.some((item) => item.symbol === selectedSymbol)) {
+          setSelectedSymbol(usSymbols[0].symbol);
+        }
+      });
     }
   }, [stockTab, krSymbols, usSymbols, selectedSymbol]);
 
   useEffect(() => {
     if (!accessToken || !isAdmin) {
-      setPendingUsers([]);
+      queueMicrotask(() => setPendingUsers([]));
       return;
     }
 
     loadPendingUsers(accessToken);
   }, [accessToken, isAdmin]);
-
-  useEffect(() => {
-    if (!accessToken || user?.status !== "APPROVED") {
-      return;
-    }
-
-    let socket: Socket | null = io(API_ORIGIN, {
-      transports: ["websocket"],
-      withCredentials: true,
-    });
-
-    socket.on("market:trade", (tick: TradeTick) => {
-      setLivePrices((current) => ({
-        ...current,
-        [tick.symbol]: tick,
-      }));
-      setLiveSeries((current) => {
-        const nextSeries = [...(current[tick.symbol] ?? []), tick].slice(-40);
-        return {
-          ...current,
-          [tick.symbol]: nextSeries,
-        };
-      });
-    });
-
-    return () => {
-      socket?.disconnect();
-      socket = null;
-    };
-  }, [accessToken, user?.status]);
-
-  useEffect(() => {
-    if (!accessToken || user?.status !== "APPROVED" || !selectedSymbol) {
-      return;
-    }
-
-    const socket = io(API_ORIGIN, {
-      transports: ["websocket"],
-      withCredentials: true,
-    });
-
-    socket.on("connect", () => {
-      socket.emit("market:subscribe", { symbols: [selectedSymbol] });
-      setTimeout(() => socket.disconnect(), 500);
-    });
-  }, [accessToken, selectedSymbol, user?.status]);
 
   useEffect(() => {
     if (!accessToken || user?.status !== "APPROVED" || !selectedSymbol) {
@@ -459,57 +361,6 @@ export default function Home() {
       )
       .slice(0, 120);
   }, [search, usStocks, usSymbols]);
-
-  async function loadMarketData(token = accessToken) {
-    if (!token) {
-      return;
-    }
-
-    setMarketLoading(true);
-    try {
-      const [pulseResult, usStocksResult, usSymbolsResult, krStocksResult, krSymbolsResult] =
-        await Promise.allSettled([
-        apiRequest<MarketQuote[]>("/markets/pulse", "GET", {
-          accessToken: token,
-        }),
-        apiRequest<MarketQuote[]>("/markets/stocks/us", "GET", {
-          accessToken: token,
-        }),
-        apiRequest<StockSymbol[]>("/markets/symbols/us", "GET", {
-          accessToken: token,
-        }),
-        apiRequest<MarketQuote[]>("/markets/stocks/kr", "GET", {
-          accessToken: token,
-        }),
-        apiRequest<StockSymbol[]>("/markets/symbols/kr", "GET", {
-          accessToken: token,
-        }),
-      ]);
-      if (pulseResult.status === "fulfilled") {
-        setPulse(pulseResult.value);
-      }
-      if (usStocksResult.status === "fulfilled") {
-        setUsStocks(usStocksResult.value);
-      }
-      if (usSymbolsResult.status === "fulfilled" && usStocksResult.status === "fulfilled") {
-        setUsSymbols(mergePrioritySymbols(usSymbolsResult.value, usStocksResult.value));
-      }
-      if (krStocksResult.status === "fulfilled") {
-        setKrStocks(krStocksResult.value);
-      }
-      if (krSymbolsResult.status === "fulfilled" && krStocksResult.status === "fulfilled") {
-        setKrSymbols(mergePrioritySymbols(krSymbolsResult.value, krStocksResult.value));
-      }
-    } catch (marketError) {
-      setError(
-        marketError instanceof Error
-          ? marketError.message
-          : "Could not load market data.",
-      );
-    } finally {
-      setMarketLoading(false);
-    }
-  }
 
   async function loadNews(
     token = accessToken,
@@ -1048,11 +899,16 @@ export default function Home() {
         </header>
 
         <>
+            {error ? <Notice message="" error={error} /> : null}
             <MarketPulse
               pulse={pulse}
               livePrices={livePrices}
               loading={marketLoading}
-              refresh={() => loadMarketData(accessToken)}
+              refresh={() => {
+                if (accessToken) {
+                  loadMarketData(accessToken);
+                }
+              }}
               language={language}
             />
             <nav className="mt-4 flex gap-2 border-b border-[#d9dee8]">
@@ -2191,8 +2047,10 @@ function CommunityView({
 
   useEffect(() => {
     if (initialDetailPostId) {
-      setDetailPostId(initialDetailPostId);
-      setEditorOpen(false);
+      queueMicrotask(() => {
+        setDetailPostId(initialDetailPostId);
+        setEditorOpen(false);
+      });
     }
   }, [initialDetailPostId]);
 
@@ -3438,35 +3296,3 @@ function formatMoneyValue(
 ): string {
   return value === null ? "-" : formatMoney(value, currency, sourceCurrency);
 }
-
-function mergePrioritySymbols(
-  symbols: StockSymbol[],
-  quotes: MarketQuote[],
-): StockSymbol[] {
-  const quoteSymbols = quotes.map((quote) => ({
-    symbol: quote.symbol,
-    displaySymbol: quote.symbol,
-    description: quote.name ?? quote.symbol,
-    type: "Common Stock",
-    currency: "USD",
-  }));
-  const bySymbol = new Map<string, StockSymbol>();
-
-  [...quoteSymbols, ...symbols].forEach((symbol) => {
-    if (!bySymbol.has(symbol.symbol)) {
-      bySymbol.set(symbol.symbol, symbol);
-    }
-  });
-
-  return [...bySymbol.values()].sort((a, b) => {
-    const priorityA = popularPriority.get(a.symbol) ?? 9999;
-    const priorityB = popularPriority.get(b.symbol) ?? 9999;
-    if (priorityA !== priorityB) {
-      return priorityA - priorityB;
-    }
-    return a.symbol.localeCompare(b.symbol);
-  });
-}
-
-
-
