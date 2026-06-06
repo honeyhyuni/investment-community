@@ -382,6 +382,10 @@ export function CommunityPage() {
                     router.push("/community");
                     return;
                   }
+                  if (item.id === "news") {
+                    router.push("/news");
+                    return;
+                  }
                   router.push("/");
                 }}
                 className={`h-11 border-b-2 px-3 text-sm font-semibold ${

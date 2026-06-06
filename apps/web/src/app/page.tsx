@@ -51,23 +51,10 @@ import { CommunityPost } from "@/domain/community/types";
 import { MarketPulse } from "@/domain/markets/components/MarketPulse";
 import { useStockRouteSelection } from "@/domain/markets/hooks/useStockRouteSelection";
 
-type View = "stocks" | "news" | "admin" | "profile";
-type MenuView = View | "community";
+type View = "stocks" | "admin" | "profile";
+type MenuView = View | "news" | "community";
 type Language = "en" | "ko";
 type StockTab = "US" | "KR";
-type NewsCategory = "us" | "kr";
-
-type MarketNews = {
-  category: string;
-  datetime: number;
-  headline: string;
-  id: number;
-  image: string;
-  related: string;
-  source: string;
-  summary: string;
-  url: string;
-};
 
 type StockDetail = {
   symbol: string;
@@ -105,10 +92,6 @@ type CandlePoint = {
 };
 
 const chartPeriods: ChartPeriod[] = ["1D", "1M", "1Y", "3Y", "5Y", "ALL"];
-const newsCategories: Array<{ id: NewsCategory; label: string }> = [
-  { id: "us", label: "미국뉴스" },
-  { id: "kr", label: "한국뉴스" },
-];
 
 const menus: Array<{ id: MenuView; label: string }> = [
   { id: "stocks", label: "Stocks" },
@@ -184,9 +167,6 @@ function HomeContent() {
   const loadMarketData = useMarketDataStore((s) => s.loadMarketData);
   const router = useRouter();
   const [pendingUsers, setPendingUsers] = useState<User[]>([]);
-  const [news, setNews] = useState<MarketNews[]>([]);
-  const [newsPage, setNewsPage] = useState(1);
-  const [newsCategory, setNewsCategory] = useState<NewsCategory>("us");
   const [relatedPosts, setRelatedPosts] = useState<CommunityPost[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState("AAPL");
   const [stockDetail, setStockDetail] = useState<StockDetail | null>(null);
@@ -281,29 +261,6 @@ function HomeContent() {
       )
       .slice(0, 120);
   }, [search, usStocks, usSymbols]);
-
-  async function loadNews(
-    token = accessToken,
-    category: NewsCategory = newsCategory,
-  ) {
-    if (!token) {
-      return;
-    }
-
-    try {
-      const nextNews = await apiRequest<MarketNews[]>(
-        `/markets/news?market=${category === "kr" ? "KR" : "US"}`,
-        "GET",
-        { accessToken: token },
-      );
-      setNews(nextNews.slice(0, 100));
-      setNewsPage(1);
-    } catch (newsError) {
-      setError(
-        newsError instanceof Error ? newsError.message : "Could not load news.",
-      );
-    }
-  }
 
   async function loadRelatedPosts(symbol: string, token = accessToken) {
     if (!token || !symbol) {
@@ -575,10 +532,11 @@ function HomeContent() {
                         router.push("/community");
                         return;
                       }
-                      setView(menu.id);
                       if (menu.id === "news") {
-                        loadNews(accessToken, newsCategory);
+                        router.push("/news");
+                        return;
                       }
+                      setView(menu.id);
                     }}
                     className={`h-11 border-b-2 px-3 text-sm font-semibold ${
                       view === menu.id
@@ -645,18 +603,7 @@ function HomeContent() {
                     updateUserStatus={updateUserStatus}
                   />
                 ) : (
-                  <NewsOrPlaceholder
-                    view={view}
-                    news={news}
-                    language={language}
-                    page={newsPage}
-                    setPage={setNewsPage}
-                    category={newsCategory}
-                    setCategory={(category) => {
-                      setNewsCategory(category);
-                      loadNews(accessToken, category);
-                    }}
-                  />
+                  <Placeholder title="Community" />
                 )}
               </div>
             )}
@@ -1480,117 +1427,6 @@ function Placeholder({ title }: { title: string }) {
   return (
     <section className="flex min-h-[420px] items-center justify-center rounded-lg border border-[#d9dee8] bg-white p-5 text-sm text-[#607086] shadow-sm">
       {title} will be connected next.
-    </section>
-  );
-}
-
-function NewsOrPlaceholder({
-  view,
-  news,
-  language,
-  page,
-  setPage,
-  category,
-  setCategory,
-}: {
-  view: View;
-  news: MarketNews[];
-  language: Language;
-  page: number;
-  setPage: (page: number) => void;
-  category: NewsCategory;
-  setCategory: (category: NewsCategory) => void;
-}) {
-  if (view !== "news") {
-    return <Placeholder title="Community" />;
-  }
-
-  const pageSize = 10;
-  const totalPages = Math.max(1, Math.ceil(news.length / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const visibleNews = news.slice((safePage - 1) * pageSize, safePage * pageSize);
-
-  return (
-    <section className="rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">{copy[language].news}</h2>
-        <span className="rounded-md bg-[#eef3f8] px-2.5 py-1 text-xs font-semibold text-[#344052]">
-          {news.length}
-        </span>
-      </div>
-      <div className="mt-4 flex gap-2">
-        {newsCategories.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setCategory(item.id)}
-            className={`h-9 rounded-md px-3 text-sm font-semibold ${
-              category === item.id
-                ? "bg-[#1f6f8b] text-white"
-                : "border border-[#c7ceda] bg-white text-[#344052]"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <div className="mt-4 grid gap-3">
-        {news.length === 0 ? (
-          <p className="rounded-md border border-[#d9dee8] p-6 text-center text-sm text-[#607086]">
-            No news loaded.
-          </p>
-        ) : (
-          visibleNews.map((item) => (
-            <a
-              key={item.id}
-              href={item.url}
-              target="_blank"
-              rel="noreferrer"
-              className="block rounded-md border border-[#d9dee8] p-4 hover:bg-[#f6f8fb]"
-            >
-              <div className="flex gap-4">
-                {item.image ? (
-                  <img
-                    src={item.image}
-                    alt=""
-                    className="hidden h-20 w-28 rounded-md object-cover sm:block"
-                  />
-                ) : null}
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-[#607086]">
-                    {item.source} ·{" "}
-                    {new Date(item.datetime * 1000).toLocaleString()}
-                  </p>
-                  <h3 className="mt-1 font-semibold">{item.headline}</h3>
-                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#607086]">
-                    {item.summary}
-                  </p>
-                </div>
-              </div>
-            </a>
-          ))
-        )}
-      </div>
-      {news.length > pageSize ? (
-        <div className="mt-4 flex items-center justify-between border-t border-[#eef1f6] pt-4">
-          <button
-            disabled={safePage === 1}
-            onClick={() => setPage(Math.max(1, safePage - 1))}
-            className="h-9 rounded-md border border-[#c7ceda] px-3 text-sm font-semibold disabled:opacity-50"
-          >
-            Previous
-          </button>
-          <span className="text-sm font-medium text-[#607086]">
-            {safePage} / {totalPages}
-          </span>
-          <button
-            disabled={safePage === totalPages}
-            onClick={() => setPage(Math.min(totalPages, safePage + 1))}
-            className="h-9 rounded-md border border-[#c7ceda] px-3 text-sm font-semibold disabled:opacity-50"
-          >
-            Next
-          </button>
-        </div>
-      ) : null}
     </section>
   );
 }
