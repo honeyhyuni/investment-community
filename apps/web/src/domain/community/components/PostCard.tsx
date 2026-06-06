@@ -2,10 +2,10 @@
 
 import { Dispatch, SetStateAction, useState } from "react";
 import { Heart, MessageCircle, Pencil, Send, Trash2 } from "lucide-react";
-import { MarkdownContent } from "@/common/components/MarkdownContent";
+import { RichContent } from "@/common/components/RichContent";
 import { MarketQuote, TradeTick } from "@/common/types";
 import { CommunityPost, StockTag } from "@/domain/community/types";
-import { communityBlocksToMarkdown } from "@/common/utils/community";
+import { getPostHtml } from "@/common/utils/community";
 import { CommentThread } from "@/domain/community/components/CommentThread";
 import { StockTagQuote } from "@/domain/community/components/StockTagQuote";
 
@@ -48,8 +48,8 @@ export function PostCard({
 }) {
   const [expanded, setExpanded] = useState(forceExpanded);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const markdown = communityBlocksToMarkdown(post);
-  const showFull = forceExpanded || expanded || markdown.length < 700;
+  const html = getPostHtml(post);
+  const showFull = forceExpanded || expanded || html.length < 1200;
 
   function getTagQuote(tag: StockTag) {
     return (
@@ -83,7 +83,7 @@ export function PostCard({
       </div>
 
       <div className={`mt-4 ${showFull ? "" : "max-h-72 overflow-hidden"}`}>
-        <MarkdownContent markdown={markdown} onImageClick={(url) => setImagePreview(url)} />
+        <RichContent html={html} onImageClick={(url) => setImagePreview(url)} />
       </div>
       {!showFull ? (
         <button

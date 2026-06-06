@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Users } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
 import { apiRequest } from "@/common/lib/api";
-import { makeEditorBlockId, communityBlocksToMarkdown } from "@/common/utils/community";
+import { makeEditorBlockId, getPostHtml, htmlToPlainText } from "@/common/utils/community";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { useSessionStore } from "@/common/stores/session";
 import {
@@ -100,21 +100,13 @@ export function CommunityPage() {
   }
 
   async function savePost() {
-    const normalizedBlocks = postBlocks.filter((block) =>
-      block.type === "image" ? !!block.url : !!block.text?.trim(),
-    );
-    const plainContent = normalizedBlocks
-      .filter((block) => block.type === "text")
-      .map((block) =>
-        block.text
-          ?.replace(/!\[[^\]]*\]\(data:image\/[^)]+\)/g, "[image]")
-          .trim(),
-      )
-      .filter(Boolean)
-      .join("\n\n")
-      .slice(0, 50000);
+    const html = postBlocks.find((block) => block.type === "text")?.text?.trim() ?? "";
+    const contentBlocks: CommunityContentBlock[] = html
+      ? [{ id: postBlocks[0]?.id ?? makeEditorBlockId(), type: "text", text: html }]
+      : [];
+    const plainContent = htmlToPlainText(html).slice(0, 50000);
 
-    if (!accessToken || (!postTitle.trim() && normalizedBlocks.length === 0)) {
+    if (!accessToken || (!postTitle.trim() && contentBlocks.length === 0)) {
       return;
     }
 
@@ -129,11 +121,9 @@ export function CommunityPage() {
           body: {
             title: postTitle,
             content: plainContent,
-            contentBlocks: normalizedBlocks,
+            contentBlocks,
             stockTags: postTags,
-            imageUrls: normalizedBlocks
-              .filter((block) => block.type === "image" && block.url)
-              .map((block) => block.url),
+            imageUrls: [],
           },
         },
       );
@@ -154,7 +144,7 @@ export function CommunityPage() {
       {
         id: makeEditorBlockId(),
         type: "text",
-        text: communityBlocksToMarkdown(post),
+        text: getPostHtml(post),
       },
     ]);
     setPostTags(post.stockTags);

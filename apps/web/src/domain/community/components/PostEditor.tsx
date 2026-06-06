@@ -1,8 +1,10 @@
 "use client";
 
-import { Dispatch, SetStateAction, useMemo, useState } from "react";
+import { Dispatch, SetStateAction, useMemo, useRef } from "react";
 import { Image as ImageIcon, X } from "lucide-react";
-import { MarkdownContent } from "@/common/components/MarkdownContent";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Image from "@tiptap/extension-image";
 import { encodeImageForPost, makeEditorBlockId } from "@/common/utils/community";
 import { stockSearchScore } from "@/common/utils/stock-search";
 import { CommunityContentBlock, StockTag } from "@/domain/community/types";
@@ -44,8 +46,23 @@ export function PostEditor({
   onSubmit: () => Promise<void>;
   onCancel: () => void;
 }) {
-  const [mode, setMode] = useState<"write" | "preview">("write");
-  const markdownText = blocks.find((block) => block.type === "text")?.text ?? "";
+  const blockIdRef = useRef(blocks[0]?.id ?? makeEditorBlockId());
+
+  const editor = useEditor({
+    extensions: [StarterKit.configure({ link: { openOnClick: false } }), Image],
+    content: blocks[0]?.text ?? "",
+    immediatelyRender: false,
+    editorProps: {
+      attributes: {
+        class: "tiptap-content min-h-[480px] px-6 py-5 outline-none",
+      },
+    },
+    onUpdate: ({ editor }) => {
+      const html = editor.isEmpty ? "" : editor.getHTML();
+      setBlocks([{ id: blockIdRef.current, type: "text", text: html }]);
+    },
+  });
+
   const suggestions = useMemo(() => {
     const query = tagQuery.trim();
     if (!query) {
@@ -59,10 +76,6 @@ export function PostEditor({
       .map((result) => result.item);
   }, [stockSymbols, tagQuery]);
 
-  function setMarkdownText(text: string) {
-    setBlocks([{ id: blocks[0]?.id ?? makeEditorBlockId(), type: "text", text }]);
-  }
-
   function getTagQuote(tag: StockTag) {
     return (
       (tag.market === "KR" ? krStocks : usStocks).find(
@@ -72,15 +85,32 @@ export function PostEditor({
   }
 
   async function insertImages(files: FileList | null) {
-    if (!files) {
+    if (!editor || !files) {
       return;
     }
     const selected = Array.from(files)
       .filter((file) => file.type.startsWith("image/"))
       .slice(0, 8);
     const urls = await Promise.all(selected.map((file) => encodeImageForPost(file)));
-    const markdown = urls.map((url) => `![image](${url})`).join("\n\n");
-    setMarkdownText(`${markdownText}${markdownText ? "\n\n" : ""}${markdown}`);
+    const chain = editor.chain().focus();
+    urls.forEach((url) => chain.setImage({ src: url }));
+    chain.run();
+  }
+
+  function promptLink() {
+    if (!editor) {
+      return;
+    }
+    const previous = editor.getAttributes("link").href as string | undefined;
+    const url = window.prompt("링크 URL", previous ?? "");
+    if (url === null) {
+      return;
+    }
+    if (url === "") {
+      editor.chain().focus().unsetLink().run();
+      return;
+    }
+    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
   }
 
   return (
@@ -91,7 +121,7 @@ export function PostEditor({
         </p>
         <button
           onClick={onCancel}
-          className="grid h-8 w-8 place-items-center rounded-md border border-[#c7ceda]"
+          className="grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-[#c7ceda]"
           title="닫기"
         >
           <X size={15} />
@@ -104,21 +134,74 @@ export function PostEditor({
         className="mt-4 h-12 w-full rounded-md border border-[#c7ceda] px-3 text-lg font-semibold outline-none focus:border-[#1f6f8b]"
       />
       <div className="mt-4 overflow-hidden rounded-md border border-[#d9dee8] bg-white">
-        <div className="flex items-center justify-between border-b border-[#d9dee8] bg-[#f9fafc] p-2">
-          <div className="grid grid-cols-2 rounded-md border border-[#c7ceda] bg-white p-1">
-            {(["write", "preview"] as const).map((item) => (
-              <button
-                key={item}
-                onClick={() => setMode(item)}
-                className={`h-8 rounded px-3 text-xs font-semibold ${
-                  mode === item ? "bg-[#1f6f8b] text-white" : "text-[#607086]"
-                }`}
-              >
-                {item === "write" ? "Markdown 작성" : "미리보기"}
-              </button>
-            ))}
-          </div>
-          <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold">
+        <div className="flex flex-wrap items-center gap-1 border-b border-[#d9dee8] bg-[#f9fafc] p-2">
+          {editor ? (
+            <>
+              <ToolbarButton
+                label="B"
+                title="굵게"
+                active={editor.isActive("bold")}
+                onClick={() => editor.chain().focus().toggleBold().run()}
+                className="font-bold"
+              />
+              <ToolbarButton
+                label="I"
+                title="기울임"
+                active={editor.isActive("italic")}
+                onClick={() => editor.chain().focus().toggleItalic().run()}
+                className="italic"
+              />
+              <ToolbarButton
+                label="H1"
+                title="제목 1"
+                active={editor.isActive("heading", { level: 1 })}
+                onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+              />
+              <ToolbarButton
+                label="H2"
+                title="제목 2"
+                active={editor.isActive("heading", { level: 2 })}
+                onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+              />
+              <ToolbarButton
+                label="• 목록"
+                title="글머리 목록"
+                active={editor.isActive("bulletList")}
+                onClick={() => editor.chain().focus().toggleBulletList().run()}
+              />
+              <ToolbarButton
+                label="1. 목록"
+                title="번호 목록"
+                active={editor.isActive("orderedList")}
+                onClick={() => editor.chain().focus().toggleOrderedList().run()}
+              />
+              <ToolbarButton
+                label="인용"
+                title="인용구"
+                active={editor.isActive("blockquote")}
+                onClick={() => editor.chain().focus().toggleBlockquote().run()}
+              />
+              <ToolbarButton
+                label="< >"
+                title="인라인 코드"
+                active={editor.isActive("code")}
+                onClick={() => editor.chain().focus().toggleCode().run()}
+              />
+              <ToolbarButton
+                label="—"
+                title="구분선"
+                active={false}
+                onClick={() => editor.chain().focus().setHorizontalRule().run()}
+              />
+              <ToolbarButton
+                label="링크"
+                title="링크"
+                active={editor.isActive("link")}
+                onClick={promptLink}
+              />
+            </>
+          ) : null}
+          <label className="ml-auto inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold">
             <ImageIcon size={15} />
             사진 삽입
             <input
@@ -133,23 +216,15 @@ export function PostEditor({
             />
           </label>
         </div>
-        {mode === "write" ? (
-          <textarea
-            value={markdownText}
-            onChange={(event) => setMarkdownText(event.target.value)}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={(event) => {
-              event.preventDefault();
-              insertImages(event.dataTransfer.files);
-            }}
-            placeholder={"# 제목\n\n자유롭게 글을 작성하세요.\n\n## 투자 근거\n- 항목 1\n- 항목 2"}
-            className="min-h-[520px] w-full resize-y bg-white p-6 font-mono text-sm leading-7 text-[#344052] outline-none"
-          />
-        ) : (
-          <div className="min-h-[520px] bg-white p-8">
-            <MarkdownContent markdown={markdownText} />
-          </div>
-        )}
+        <div
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            insertImages(event.dataTransfer.files);
+          }}
+        >
+          <EditorContent editor={editor} />
+        </div>
       </div>
       <div className="mt-4">
         <input
@@ -177,7 +252,7 @@ export function PostEditor({
                     );
                     setTagQuery("");
                   }}
-                  className="flex items-center justify-between rounded-md bg-white px-3 py-2 text-left text-sm"
+                  className="flex cursor-pointer items-center justify-between rounded-md bg-white px-3 py-2 text-left text-sm"
                 >
                   <span className="font-semibold">{item.symbol}</span>
                   <span className="truncate text-[#607086]">{item.description}</span>
@@ -205,18 +280,47 @@ export function PostEditor({
       <div className="mt-4 flex justify-end gap-2">
         <button
           onClick={onCancel}
-          className="h-10 rounded-md border border-[#c7ceda] px-4 text-sm font-semibold"
+          className="h-10 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-sm font-semibold"
         >
           취소
         </button>
         <button
           disabled={loading}
           onClick={onSubmit}
-          className="h-10 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white disabled:opacity-60"
+          className="h-10 cursor-pointer rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white disabled:opacity-60"
         >
           {editingPostId ? "수정 완료" : "게시"}
         </button>
       </div>
     </div>
+  );
+}
+
+function ToolbarButton({
+  label,
+  title,
+  active,
+  onClick,
+  className = "",
+}: {
+  label: string;
+  title: string;
+  active: boolean;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`h-9 min-w-9 cursor-pointer rounded-md border px-2.5 text-sm font-semibold transition-colors ${
+        active
+          ? "border-[#1f6f8b] bg-[#eef6f9] text-[#1f6f8b]"
+          : "border-[#c7ceda] bg-white text-[#344052] hover:bg-[#eef1f6]"
+      } ${className}`}
+    >
+      {label}
+    </button>
   );
 }

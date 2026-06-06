@@ -59,3 +59,87 @@ body {
   background: #111820;
   color: #edf1f7;
 }
+
+/* TipTap 리치 콘텐츠 (에디터 + 렌더러 공유) */
+.tiptap-content :where(h1) {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0.6em 0 0.3em;
+}
+.tiptap-content :where(h2) {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0.6em 0 0.3em;
+}
+.tiptap-content :where(h3) {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.5em 0 0.3em;
+}
+.tiptap-content :where(p) {
+  margin: 0.4em 0;
+}
+.tiptap-content :where(ul) {
+  list-style: disc;
+  padding-left: 1.4em;
+  margin: 0.4em 0;
+}
+.tiptap-content :where(ol) {
+  list-style: decimal;
+  padding-left: 1.4em;
+  margin: 0.4em 0;
+}
+.tiptap-content :where(li) {
+  margin: 0.15em 0;
+}
+.tiptap-content :where(blockquote) {
+  border-left: 3px solid #9ab8c5;
+  padding-left: 0.9em;
+  color: #607086;
+  margin: 0.5em 0;
+}
+.tiptap-content :where(a) {
+  color: #1f6f8b;
+  text-decoration: underline;
+}
+.tiptap-content :where(code) {
+  background: #eef1f6;
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.9em;
+}
+.tiptap-content :where(pre) {
+  background: #f3f5f9;
+  padding: 0.8em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.tiptap-content :where(pre code) {
+  background: none;
+  padding: 0;
+}
+.tiptap-content :where(hr) {
+  border: 0;
+  border-top: 1px solid #d9dee8;
+  margin: 1em 0;
+}
+.tiptap-content :where(img) {
+  max-width: 100%;
+  max-height: 720px;
+  border-radius: 8px;
+  margin: 0.5em 0;
+}
+.tiptap-content :where(strong) {
+  font-weight: 700;
+}
+
+.ProseMirror {
+  outline: none;
+  min-height: 480px;
+}
+.dark-app .tiptap-content :where(code),
+.dark-app .tiptap-content :where(pre) {
+  background: #1b222c;
+}
