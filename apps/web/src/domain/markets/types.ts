@@ -46,5 +46,6 @@ export type MarketNews = {
   related: string;
   source: string;
   summary: string;
+  translatedHeadline?: string;
   url: string;
 };

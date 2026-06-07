@@ -180,7 +180,7 @@ export function StocksPage() {
       return;
     }
     const news = await apiRequest<MarketNews[]>(
-      `/markets/stocks/news?symbol=${encodeURIComponent(symbol)}&market=${stockTab}`,
+      `/markets/stocks/news?symbol=${encodeURIComponent(symbol)}&market=${stockTab}&language=${language}`,
       "GET",
       { accessToken: token },
     ).catch(() => []);
@@ -257,7 +257,7 @@ export function StocksPage() {
       loadRelatedPosts(selectedSymbol, accessToken);
       loadStockNews(selectedSymbol, accessToken);
     });
-  }, [accessToken, selectedSymbol, chartPeriod, stockTab]);
+  }, [accessToken, selectedSymbol, chartPeriod, stockTab, language]);
 
   useEffect(() => {
     if (stockTab === "US" && selectedSymbol) {
@@ -445,7 +445,7 @@ function StocksView({
                 })}
             </div>
             <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
-            <RelatedNews news={stockNews} />
+            <RelatedNews news={stockNews} language={language} />
           </div>
           <StockDetailPanel
             detail={stockDetail}
@@ -518,7 +518,7 @@ function StocksView({
               })}
             </div>
             <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
-            <RelatedNews news={stockNews} />
+            <RelatedNews news={stockNews} language={language} />
           </div>
           <StockDetailPanel
             detail={stockDetail}
@@ -967,7 +967,7 @@ function RelatedPosts({
   );
 }
 
-function RelatedNews({ news }: { news: MarketNews[] }) {
+function RelatedNews({ news, language }: { news: MarketNews[]; language: Language }) {
   return (
     <div className="mt-3 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3">
       <p className="text-xs font-semibold text-[#344052]">이 종목의 최신 뉴스</p>
@@ -981,7 +981,9 @@ function RelatedNews({ news }: { news: MarketNews[] }) {
               rel="noreferrer"
               className="block border-t border-[#eef1f6] pt-2 first:border-0 first:pt-0 hover:text-[#1f6f8b]"
             >
-              <p className="line-clamp-2 text-sm font-semibold">{item.headline}</p>
+              <p className="line-clamp-2 text-sm font-semibold">
+                {language === "ko" ? item.translatedHeadline || item.headline : item.headline}
+              </p>
               <p className="mt-0.5 text-xs text-[#607086]">
                 {item.source} · {new Date(item.datetime * 1000).toLocaleDateString()}
               </p>

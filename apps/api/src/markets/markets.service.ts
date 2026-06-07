@@ -708,7 +708,11 @@ export class MarketsService {
     return this.getYahooSearchNews('stock market');
   }
 
-  async getStockNews(symbol: string, market = 'US'): Promise<MarketNews[]> {
+  async getStockNews(
+    symbol: string,
+    market = 'US',
+    language = 'en',
+  ): Promise<MarketNews[]> {
     const normalizedSymbol = symbol.toUpperCase().trim();
     const normalizedMarket = market.toUpperCase() === 'KR' ? 'KR' : 'US';
     const cacheKey = `market:stock-news:${normalizedMarket}:${normalizedSymbol}`;
@@ -716,7 +720,10 @@ export class MarketsService {
 
     if (cached) {
       try {
-        return JSON.parse(cached) as MarketNews[];
+        return this.localizeNewsHeadlines(
+          JSON.parse(cached) as MarketNews[],
+          language,
+        );
       } catch {
         await this.redis.del(cacheKey).catch(() => undefined);
       }
@@ -746,6 +753,16 @@ export class MarketsService {
     if (!news.length && normalizedMarket === 'US') {
       news = await this.getFinnhubCompanyNews(normalizedSymbol).catch(() => []);
     }
+    if (!news.length && normalizedMarket === 'KR') {
+      news = await this.getNaverStockNews(normalizedSymbol).catch((error) => {
+        this.logger.warn(
+          `Naver Finance stock news request failed for ${normalizedSymbol}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+        return [] as MarketNews[];
+      });
+    }
 
     const latest = news
       .filter((item) => item.headline && item.url)
@@ -754,7 +771,7 @@ export class MarketsService {
     await this.redis
       .set(cacheKey, JSON.stringify(latest), 'EX', 10 * 60)
       .catch(() => undefined);
-    return latest;
+    return this.localizeNewsHeadlines(latest, language);
   }
 
   async getCandles(symbol: string, period: ChartPeriod): Promise<CandlePoint[]> {
@@ -904,6 +921,64 @@ export class MarketsService {
     return [...byUrl.values()].slice(0, 60);
   }
 
+  private async getNaverStockNews(symbol: string): Promise<MarketNews[]> {
+    const url = new URL('https://finance.naver.com/item/news_news.naver');
+    url.searchParams.set('code', symbol);
+    url.searchParams.set('page', '1');
+    url.searchParams.set('sm', 'title_entity_id.basic');
+    url.searchParams.set('clusterId', '');
+    const response = await fetch(url, {
+      headers: {
+        referer: `https://finance.naver.com/item/main.naver?code=${symbol}`,
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+    });
+
+    if (!response.ok) {
+      throw new ServiceUnavailableException(
+        'Naver Finance stock news request failed.',
+      );
+    }
+
+    const html = new TextDecoder('euc-kr').decode(await response.arrayBuffer());
+    const articles: MarketNews[] = [];
+    const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    let match: RegExpExecArray | null;
+
+    while ((match = rowPattern.exec(html)) !== null && articles.length < 5) {
+      const row = match[1];
+      const link = row.match(
+        /<a[^>]+href="([^"]*news_read\.naver[^"]*)"[^>]*class="tit"[^>]*>([\s\S]*?)<\/a>/i,
+      );
+      if (!link) {
+        continue;
+      }
+
+      const itemUrl = this.resolveNaverUrl(link[1]);
+      const headline = this.decodeHtml(this.stripHtml(link[2]));
+      const source = this.decodeHtml(
+        this.stripHtml(row.match(/<td[^>]*class="info"[^>]*>([\s\S]*?)<\/td>/i)?.[1] ?? ''),
+      );
+      const date = this.stripHtml(
+        row.match(/<td[^>]*class="date"[^>]*>([\s\S]*?)<\/td>/i)?.[1] ?? '',
+      );
+      articles.push({
+        category: 'kr',
+        datetime: this.parseNaverNewsDate(date),
+        headline,
+        id: this.numericId(itemUrl),
+        image: '',
+        related: symbol,
+        source: source || 'Naver Finance',
+        summary: headline,
+        url: itemUrl,
+      });
+    }
+
+    return articles;
+  }
+
   private async getNaverSearchNews(query: string): Promise<MarketNews[]> {
     const clientId = this.configService.get<string>('NAVER_CLIENT_ID');
     const clientSecret = this.configService.get<string>('NAVER_CLIENT_SECRET');
@@ -964,6 +1039,67 @@ export class MarketsService {
       from: from.toISOString().slice(0, 10),
       to: to.toISOString().slice(0, 10),
     });
+  }
+
+  private async localizeNewsHeadlines(
+    news: MarketNews[],
+    language: string,
+  ): Promise<MarketNews[]> {
+    if (language.toLowerCase() !== 'ko') {
+      return news;
+    }
+
+    return Promise.all(
+      news.map(async (item) => ({
+        ...item,
+        translatedHeadline: await this.translateToKorean(item.headline),
+      })),
+    );
+  }
+
+  private async translateToKorean(text: string): Promise<string> {
+    if (!text || /[가-힣]/.test(text)) {
+      return text;
+    }
+
+    const key = `translation:news:ko:${this.numericId(text)}`;
+    const cached = await this.redis.get(key).catch(() => null);
+    if (cached) {
+      return cached;
+    }
+
+    const clientId = this.configService.get<string>('NAVER_CLIENT_ID');
+    const clientSecret = this.configService.get<string>('NAVER_CLIENT_SECRET');
+    if (!clientId || !clientSecret) {
+      return text;
+    }
+
+    const body = new URLSearchParams({
+      source: 'en',
+      target: 'ko',
+      text,
+    });
+    const response = await fetch('https://openapi.naver.com/v1/papago/n2mt', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Naver-Client-Id': clientId,
+        'X-Naver-Client-Secret': clientSecret,
+      },
+      body,
+    });
+    if (!response.ok) {
+      return text;
+    }
+
+    const result = (await response.json()) as {
+      message?: { result?: { translatedText?: string } };
+    };
+    const translated = result.message?.result?.translatedText?.trim() || text;
+    await this.redis
+      .set(key, translated, 'EX', 30 * 24 * 60 * 60)
+      .catch(() => undefined);
+    return translated;
   }
 
   private parseNaverFinanceNews(html: string): MarketNews[] {
@@ -1785,18 +1921,23 @@ export class MarketsService {
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&hellip;/g, '...')
       .replace(/&ldquo;/g, '"')
       .replace(/&rdquo;/g, '"')
       .replace(/&lsquo;/g, "'")
       .replace(/&rsquo;/g, "'")
       .replace(/&middot;/g, '·')
       .replace(/&#39;/g, "'")
+      .replace(/&#x27;/g, "'")
       .trim();
   }
 
   private parseNaverNewsDate(value: string): number {
     const normalized = value.trim();
-    const match = normalized.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
+    const match = normalized.match(
+      /(\d{4})[-.](\d{2})[-.](\d{2})\s+(\d{2}):(\d{2})/,
+    );
     if (!match) {
       return Math.floor(Date.now() / 1000);
     }
