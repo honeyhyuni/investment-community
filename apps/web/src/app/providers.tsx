@@ -47,9 +47,17 @@ export function Providers({ children }: { children: ReactNode }) {
       }
     });
     socket.on("market:trade", (tick: TradeTick) => applyTrade(tick));
+    const subscribe = (event: Event) => {
+      const symbols = (event as CustomEvent<string[]>).detail;
+      if (symbols?.length) {
+        socket.emit("market:subscribe", { symbols });
+      }
+    };
+    window.addEventListener("market:subscribe", subscribe);
 
     return () => {
       active = false;
+      window.removeEventListener("market:subscribe", subscribe);
       socket.disconnect();
     };
   }, [accessToken, status, loadMarketData, applyTrade]);

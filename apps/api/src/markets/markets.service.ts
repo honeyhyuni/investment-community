@@ -708,6 +708,55 @@ export class MarketsService {
     return this.getYahooSearchNews('stock market');
   }
 
+  async getStockNews(symbol: string, market = 'US'): Promise<MarketNews[]> {
+    const normalizedSymbol = symbol.toUpperCase().trim();
+    const normalizedMarket = market.toUpperCase() === 'KR' ? 'KR' : 'US';
+    const cacheKey = `market:stock-news:${normalizedMarket}:${normalizedSymbol}`;
+    const cached = await this.redis.get(cacheKey).catch(() => null);
+
+    if (cached) {
+      try {
+        return JSON.parse(cached) as MarketNews[];
+      } catch {
+        await this.redis.del(cacheKey).catch(() => undefined);
+      }
+    }
+
+    const [master, profile] = await Promise.all([
+      this.stockMasterRepository.findOne({
+        where: { symbol: normalizedSymbol, market: normalizedMarket, active: true },
+      }),
+      this.stockProfilesRepository.findOne({ where: { symbol: normalizedSymbol } }),
+    ]);
+    const companyName = master?.name || profile?.name || normalizedSymbol;
+    const query =
+      normalizedMarket === 'KR'
+        ? `${companyName} ${normalizedSymbol}`
+        : `${companyName} ${normalizedSymbol} 주식`;
+
+    let news: MarketNews[] = await this.getNaverSearchNews(query).catch((error) => {
+      this.logger.warn(
+        `Naver stock news request failed for ${normalizedSymbol}: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+      return [] as MarketNews[];
+    });
+
+    if (!news.length && normalizedMarket === 'US') {
+      news = await this.getFinnhubCompanyNews(normalizedSymbol).catch(() => []);
+    }
+
+    const latest = news
+      .filter((item) => item.headline && item.url)
+      .sort((a, b) => b.datetime - a.datetime)
+      .slice(0, 5);
+    await this.redis
+      .set(cacheKey, JSON.stringify(latest), 'EX', 10 * 60)
+      .catch(() => undefined);
+    return latest;
+  }
+
   async getCandles(symbol: string, period: ChartPeriod): Promise<CandlePoint[]> {
     if (/^\d{6}$/.test(symbol)) {
       return this.getKoreanCandles(symbol, period);
@@ -853,6 +902,68 @@ export class MarketsService {
     });
 
     return [...byUrl.values()].slice(0, 60);
+  }
+
+  private async getNaverSearchNews(query: string): Promise<MarketNews[]> {
+    const clientId = this.configService.get<string>('NAVER_CLIENT_ID');
+    const clientSecret = this.configService.get<string>('NAVER_CLIENT_SECRET');
+
+    if (!clientId || !clientSecret) {
+      return [];
+    }
+
+    const url = new URL('https://openapi.naver.com/v1/search/news.json');
+    url.searchParams.set('query', query);
+    url.searchParams.set('display', '5');
+    url.searchParams.set('start', '1');
+    url.searchParams.set('sort', 'date');
+    const response = await fetch(url, {
+      headers: {
+        'X-Naver-Client-Id': clientId,
+        'X-Naver-Client-Secret': clientSecret,
+      },
+    });
+
+    if (!response.ok) {
+      throw new ServiceUnavailableException('Naver Search news request failed.');
+    }
+
+    const body = (await response.json()) as {
+      items?: Array<{
+        title?: string;
+        originallink?: string;
+        link?: string;
+        description?: string;
+        pubDate?: string;
+      }>;
+    };
+
+    return (body.items ?? []).map((item, index) => {
+      const itemUrl = item.originallink || item.link || '';
+      const headline = this.decodeHtml(this.stripHtml(item.title ?? ''));
+      return {
+        category: 'stock',
+        datetime: item.pubDate ? Math.floor(new Date(item.pubDate).getTime() / 1000) : 0,
+        headline,
+        id: this.numericId(itemUrl || `${query}:${index}`),
+        image: '',
+        related: query,
+        source: 'Naver News',
+        summary: this.decodeHtml(this.stripHtml(item.description ?? '')) || headline,
+        url: itemUrl,
+      };
+    });
+  }
+
+  private getFinnhubCompanyNews(symbol: string): Promise<MarketNews[]> {
+    const to = new Date();
+    const from = new Date(to);
+    from.setUTCDate(from.getUTCDate() - 30);
+    return this.finnhubGet<MarketNews[]>('/company-news', {
+      symbol,
+      from: from.toISOString().slice(0, 10),
+      to: to.toISOString().slice(0, 10),
+    });
   }
 
   private parseNaverFinanceNews(html: string): MarketNews[] {

@@ -79,7 +79,7 @@ export const useMarketDataStore = create<MarketDataState>((set) => ({
         ...(usStocksResult.status === "fulfilled" ? usStocksResult.value : []),
       ]
         .map((quote) => quote.symbol)
-        .filter(Boolean)
+        .filter((symbol) => symbol && !symbol.startsWith("KIS_"))
         .slice(0, 24);
       return [...new Set(subscribeSymbols)];
     } catch (marketError) {

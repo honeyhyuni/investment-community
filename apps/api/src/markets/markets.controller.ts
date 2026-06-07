@@ -77,6 +77,14 @@ export class MarketsController {
     return this.marketsService.getStockQuote(symbol, market);
   }
 
+  @Get('stocks/news')
+  getStockNews(
+    @Query('symbol') symbol: string,
+    @Query('market') market = 'US',
+  ): Promise<MarketNews[]> {
+    return this.marketsService.getStockNews(symbol, market);
+  }
+
   @Get('news')
   getMarketNews(
     @Query('category') category = 'general',

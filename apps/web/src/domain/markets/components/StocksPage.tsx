@@ -28,6 +28,7 @@ import { useSessionStore } from "@/common/stores/session";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { formatMoney, formatNumber } from "@/common/utils/format";
+import { applyLiveTrade } from "@/common/utils/market";
 import {
   DisplayCurrency,
   Language,
@@ -45,6 +46,7 @@ import {
 import {
   CandlePoint,
   ChartPeriod,
+  MarketNews,
   StockDetail,
   StockTab,
 } from "@/domain/markets/types";
@@ -109,6 +111,7 @@ export function StocksPage() {
   const exchangeRate = useMarketDataStore((s) => s.exchangeRate);
   const router = useRouter();
   const [relatedPosts, setRelatedPosts] = useState<CommunityPost[]>([]);
+  const [stockNews, setStockNews] = useState<MarketNews[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState(initialSymbol);
   const [stockDetail, setStockDetail] = useState<StockDetail | null>(null);
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>("1M");
@@ -170,6 +173,18 @@ export function StocksPage() {
       { accessToken: token },
     ).catch(() => []);
     setRelatedPosts(posts);
+  }
+
+  async function loadStockNews(symbol: string, token = accessToken) {
+    if (!token || !symbol) {
+      return;
+    }
+    const news = await apiRequest<MarketNews[]>(
+      `/markets/stocks/news?symbol=${encodeURIComponent(symbol)}&market=${stockTab}`,
+      "GET",
+      { accessToken: token },
+    ).catch(() => []);
+    setStockNews(news);
   }
 
   function openRelatedPost(postId: string) {
@@ -240,8 +255,17 @@ export function StocksPage() {
       loadStockDetail(selectedSymbol, accessToken);
       loadCandles(selectedSymbol, chartPeriod, accessToken);
       loadRelatedPosts(selectedSymbol, accessToken);
+      loadStockNews(selectedSymbol, accessToken);
     });
   }, [accessToken, selectedSymbol, chartPeriod, stockTab]);
+
+  useEffect(() => {
+    if (stockTab === "US" && selectedSymbol) {
+      window.dispatchEvent(
+        new CustomEvent("market:subscribe", { detail: [selectedSymbol] }),
+      );
+    }
+  }, [selectedSymbol, stockTab]);
 
   return (
     <>
@@ -269,6 +293,7 @@ export function StocksPage() {
                 priceCurrency={priceCurrency}
                 setPriceCurrency={setPriceCurrency}
                 relatedPosts={relatedPosts}
+                stockNews={stockNews}
                 onRelatedPostClick={openRelatedPost}
                 exchangeRate={exchangeRate}
               />
@@ -299,6 +324,7 @@ function StocksView({
   priceCurrency,
   setPriceCurrency,
   relatedPosts,
+  stockNews,
   onRelatedPostClick,
   exchangeRate,
 }: {
@@ -323,6 +349,7 @@ function StocksView({
   priceCurrency: DisplayCurrency;
   setPriceCurrency: (currency: DisplayCurrency) => void;
   relatedPosts: CommunityPost[];
+  stockNews: MarketNews[];
   onRelatedPostClick: (postId: string) => void;
   exchangeRate: number | null;
 }) {
@@ -418,6 +445,7 @@ function StocksView({
                 })}
             </div>
             <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
+            <RelatedNews news={stockNews} />
           </div>
           <StockDetailPanel
             detail={stockDetail}
@@ -490,6 +518,7 @@ function StocksView({
               })}
             </div>
             <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
+            <RelatedNews news={stockNews} />
           </div>
           <StockDetailPanel
             detail={stockDetail}
@@ -543,9 +572,7 @@ function StockDetailPanel({
     );
   }
 
-  const quote = live
-    ? { ...detail.quote, current: live.price, timestamp: Math.floor(live.timestamp / 1000) }
-    : detail.quote;
+  const quote = applyLiveTrade(detail.quote, live);
     const detailSourceCurrency = detail.profile.currency === "KRW" ? "KRW" : (detail.quote.currency ?? "USD");
     const displayMarketCap = detail.profile.marketCapitalization
     ? formatMarketCap(
@@ -934,6 +961,34 @@ function RelatedPosts({
           ))
         ) : (
           <p className="text-xs text-[#607086]">아직 관련 게시글이 없습니다.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RelatedNews({ news }: { news: MarketNews[] }) {
+  return (
+    <div className="mt-3 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3">
+      <p className="text-xs font-semibold text-[#344052]">이 종목의 최신 뉴스</p>
+      <div className="mt-2 space-y-2">
+        {news.length ? (
+          news.slice(0, 5).map((item) => (
+            <a
+              key={item.id}
+              href={item.url}
+              target="_blank"
+              rel="noreferrer"
+              className="block border-t border-[#eef1f6] pt-2 first:border-0 first:pt-0 hover:text-[#1f6f8b]"
+            >
+              <p className="line-clamp-2 text-sm font-semibold">{item.headline}</p>
+              <p className="mt-0.5 text-xs text-[#607086]">
+                {item.source} · {new Date(item.datetime * 1000).toLocaleDateString()}
+              </p>
+            </a>
+          ))
+        ) : (
+          <p className="text-xs text-[#607086]">관련 최신 뉴스가 없습니다.</p>
         )}
       </div>
     </div>

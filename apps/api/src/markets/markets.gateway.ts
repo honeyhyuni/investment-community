@@ -49,6 +49,7 @@ export class MarketsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     'TSLA',
   ]);
   private finnhubSocket: WebSocket | null = null;
+  private reconnectDelayMs = 5000;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -64,8 +65,8 @@ export class MarketsGateway implements OnGatewayConnection, OnGatewayDisconnect 
   subscribeToSymbols(@MessageBody() body: { symbols?: string[] }): void {
     body.symbols
       ?.map((symbol) => symbol.toUpperCase().trim())
-      .filter(Boolean)
-      .slice(0, 12)
+      .filter((symbol) => symbol && !symbol.startsWith('KIS_'))
+      .slice(0, 24)
       .forEach((symbol) => this.subscribeSymbol(symbol));
   }
 
@@ -88,6 +89,7 @@ export class MarketsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     this.finnhubSocket = new WebSocket(`wss://ws.finnhub.io?token=${apiKey}`);
 
     this.finnhubSocket.on('open', () => {
+      this.reconnectDelayMs = 5000;
       this.symbols.forEach((symbol) => this.subscribeSymbol(symbol));
     });
 
@@ -110,7 +112,9 @@ export class MarketsGateway implements OnGatewayConnection, OnGatewayDisconnect 
 
     this.finnhubSocket.on('close', () => {
       this.finnhubSocket = null;
-      setTimeout(() => this.connectFinnhub(), 5000);
+      const delay = this.reconnectDelayMs;
+      this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, 60000);
+      setTimeout(() => this.connectFinnhub(), delay);
     });
 
     this.finnhubSocket.on('error', (error) => {

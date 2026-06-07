@@ -3,6 +3,7 @@
 import { RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import { DisplayCurrency, MarketQuote, TradeTick } from "@/common/types";
 import { formatMoney, formatNumber } from "@/common/utils/format";
+import { applyLiveTrade } from "@/common/utils/market";
 
 export function MarketPulse({
   pulse,
@@ -36,11 +37,10 @@ export function MarketPulse({
       <div className="grid gap-3 md:grid-cols-4">
         {pulse.map((item) => {
           const live = livePrices[item.symbol];
-          const current = live?.price ?? item.current;
           return (
             <PulseCard
               key={item.symbol}
-              quote={{ ...item, current }}
+              quote={applyLiveTrade(item, live)}
               live={!!live}
               exchangeRate={exchangeRate}
             />
