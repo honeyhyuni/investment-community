@@ -72,7 +72,9 @@ function PulseCard({
       : formatMoney(quote.current, displayCurrency, quote.currency, exchangeRate);
   const changeText = isIndex
     ? formatNumber(quote.change)
-    : formatMoney(quote.change, displayCurrency, quote.currency, exchangeRate);
+    : isExchangeRate
+      ? `${formatNumber(quote.change)}원`
+      : formatMoney(quote.change, displayCurrency, quote.currency, exchangeRate);
 
   return (
     <div className="rounded-md border border-[#d9dee8] bg-[#f9fafc] p-4">
@@ -88,15 +90,15 @@ function PulseCard({
         )}
       </div>
       <p className="mt-2 text-xl font-semibold">{currentText}</p>
-      {!isExchangeRate ? (
+      {isExchangeRate && quote.current <= 0 ? (
+        <p className="mt-1 text-sm font-medium text-[#607086]">
+          KIS 환율 조회 실패
+        </p>
+      ) : (
         <p className={`mt-1 text-sm font-medium ${positive ? "text-[#2e7d4f]" : "text-[#b64242]"}`}>
           {positive ? "+" : ""}
           {changeText} ({positive ? "+" : ""}
           {formatNumber(quote.percentChange)}%)
-        </p>
-      ) : (
-        <p className="mt-1 text-sm font-medium text-[#607086]">
-          {quote.current > 0 ? "KIS 원/달러 시세" : "KIS 환율 조회 실패"}
         </p>
       )}
       {live ? <p className="mt-2 text-xs font-medium text-[#1f6f8b]">Live tick</p> : null}
