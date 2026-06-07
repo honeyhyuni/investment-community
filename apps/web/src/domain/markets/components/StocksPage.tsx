@@ -21,7 +21,7 @@ import {
   ISeriesApi,
   Time,
 } from "lightweight-charts";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { apiRequest } from "@/common/lib/api";
 import { Notice } from "@/common/components/Notice";
 import { useSessionStore } from "@/common/stores/session";
@@ -91,7 +91,13 @@ const copy = {
 };
 
 export function StocksPage() {
-  const [stockTab, setStockTab] = useState<StockTab>("US");
+  const searchParams = useSearchParams();
+  const initialMarket: StockTab =
+    searchParams.get("market")?.toUpperCase() === "KR" ? "KR" : "US";
+  const initialSymbol =
+    searchParams.get("symbol")?.trim().toUpperCase() ||
+    (initialMarket === "KR" ? "005930" : "AAPL");
+  const [stockTab, setStockTab] = useState<StockTab>(initialMarket);
   const accessToken = useSessionStore((s) => s.accessToken);
   const language = usePreferencesStore((s) => s.language);
   const usStocks = useMarketDataStore((s) => s.usStocks);
@@ -100,16 +106,20 @@ export function StocksPage() {
   const krSymbols = useMarketDataStore((s) => s.krSymbols);
   const livePrices = useMarketDataStore((s) => s.livePrices);
   const liveSeries = useMarketDataStore((s) => s.liveSeries);
+  const exchangeRate = useMarketDataStore((s) => s.exchangeRate);
   const router = useRouter();
   const [relatedPosts, setRelatedPosts] = useState<CommunityPost[]>([]);
-  const [selectedSymbol, setSelectedSymbol] = useState("AAPL");
+  const [selectedSymbol, setSelectedSymbol] = useState(initialSymbol);
   const [stockDetail, setStockDetail] = useState<StockDetail | null>(null);
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>("1M");
-  const [priceCurrency, setPriceCurrency] = useState<DisplayCurrency>("USD");
+  const [priceCurrency, setPriceCurrency] = useState<DisplayCurrency>(
+    initialMarket === "KR" ? "KRW" : "USD",
+  );
   const [candles, setCandles] = useState<CandlePoint[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
+  const detailRequestIdRef = useRef(0);
 
   // 셸(레이아웃)에서 stocks가 곧 기본 라우트라 별도 전환 불필요.
   const openStocksView = useCallback(() => {}, []);
@@ -171,19 +181,25 @@ export function StocksPage() {
       return;
     }
 
+    const requestId = ++detailRequestIdRef.current;
+    setStockDetail(null);
     try {
       const detail = await apiRequest<StockDetail>(
         `/markets/stocks/detail?symbol=${encodeURIComponent(symbol)}&market=${stockTab === "KR" ? "KR" : "US"}`,
         "GET",
         { accessToken: token },
       );
-      setStockDetail(detail);
+      if (requestId === detailRequestIdRef.current) {
+        setStockDetail(detail);
+      }
     } catch (detailError) {
-      setError(
-        detailError instanceof Error
-          ? detailError.message
-          : "Could not load stock detail.",
-      );
+      if (requestId === detailRequestIdRef.current) {
+        setError(
+          detailError instanceof Error
+            ? detailError.message
+            : "Could not load stock detail.",
+        );
+      }
     }
   }
 
@@ -254,6 +270,7 @@ export function StocksPage() {
                 setPriceCurrency={setPriceCurrency}
                 relatedPosts={relatedPosts}
                 onRelatedPostClick={openRelatedPost}
+                exchangeRate={exchangeRate}
               />
             </div>
     </>
@@ -283,6 +300,7 @@ function StocksView({
   setPriceCurrency,
   relatedPosts,
   onRelatedPostClick,
+  exchangeRate,
 }: {
   stockTab: StockTab;
   setStockTab: (tab: StockTab) => void;
@@ -306,6 +324,7 @@ function StocksView({
   setPriceCurrency: (currency: DisplayCurrency) => void;
   relatedPosts: CommunityPost[];
   onRelatedPostClick: (postId: string) => void;
+  exchangeRate: number | null;
 }) {
   return (
     <section className="rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
@@ -389,7 +408,9 @@ function StocksView({
                           <p className="truncate text-xs text-[#607086]">{item.symbol}</p>
                         </div>
                         <p className="shrink-0 text-sm font-semibold">
-                          {quote ? formatMoney(quote.current, "KRW", quote.currency) : ""}
+                          {quote
+                            ? formatMoney(quote.current, "KRW", quote.currency, exchangeRate)
+                            : ""}
                         </p>
                       </div>
                     </button>
@@ -409,6 +430,7 @@ function StocksView({
             language={language}
             priceCurrency="KRW"
             setPriceCurrency={setPriceCurrency}
+            exchangeRate={exchangeRate}
           />
         </div>
       ) : (
@@ -451,12 +473,14 @@ function StocksView({
                                 live.price,
                                 priceCurrency,
                                 item.currency === "KRW" ? "KRW" : "USD",
+                                exchangeRate,
                               )
                             : quote
                               ? formatMoney(
                                   quote.current,
                                   priceCurrency,
                                   quote.currency ?? "USD",
+                                  exchangeRate,
                                 )
                               : ""}
                         </p>
@@ -478,6 +502,7 @@ function StocksView({
             language={language}
             priceCurrency={priceCurrency}
             setPriceCurrency={setPriceCurrency}
+            exchangeRate={exchangeRate}
           />
         </div>
       )}
@@ -496,6 +521,7 @@ function StockDetailPanel({
   language,
   priceCurrency,
   setPriceCurrency,
+  exchangeRate,
 }: {
   detail: StockDetail | null;
   live?: TradeTick;
@@ -507,6 +533,7 @@ function StockDetailPanel({
   language: Language;
   priceCurrency: DisplayCurrency;
   setPriceCurrency: (currency: DisplayCurrency) => void;
+  exchangeRate: number | null;
 }) {
   if (!detail) {
     return (
@@ -521,9 +548,20 @@ function StockDetailPanel({
     : detail.quote;
     const detailSourceCurrency = detail.profile.currency === "KRW" ? "KRW" : (detail.quote.currency ?? "USD");
     const displayMarketCap = detail.profile.marketCapitalization
-    ? formatMarketCap(detail.profile.marketCapitalization, priceCurrency, detailSourceCurrency)
+    ? formatMarketCap(
+        detail.profile.marketCapitalization,
+        priceCurrency,
+        detailSourceCurrency,
+        exchangeRate,
+      )
       : "-";
-    const metricItems = buildMetricItems(detail.metrics, language, priceCurrency, detailSourceCurrency);
+    const metricItems = buildMetricItems(
+      detail.metrics,
+      language,
+      priceCurrency,
+      detailSourceCurrency,
+      exchangeRate,
+    );
     const isKoreanMarket =
       detail.profile.currency === "KRW" && detail.profile.country === "대한민국";
     const valuationItems = [
@@ -567,7 +605,12 @@ function StockDetailPanel({
         </div>
       </div>
       <div className="mt-6">
-        <QuoteCard quote={quote} live={!!live} displayCurrency={priceCurrency} />
+        <QuoteCard
+          quote={quote}
+          live={!!live}
+          displayCurrency={priceCurrency}
+          exchangeRate={exchangeRate}
+        />
       </div>
       <div className="mt-5 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -646,11 +689,16 @@ function StockDetailPanel({
         <div className="mt-3 grid gap-3 md:grid-cols-2">
             <InfoBox
               label={translateDetailLabel(language, "open")}
-              value={formatMoney(quote.open, priceCurrency, quote.currency)}
+              value={formatMoney(quote.open, priceCurrency, quote.currency, exchangeRate)}
             />
             <InfoBox
               label={translateDetailLabel(language, "previousClose")}
-              value={formatMoney(quote.previousClose, priceCurrency, quote.currency)}
+              value={formatMoney(
+                quote.previousClose,
+                priceCurrency,
+                quote.currency,
+                exchangeRate,
+              )}
             />
         </div>
       </div>
@@ -805,20 +853,22 @@ function QuoteCard({
   compact = false,
   live = false,
   displayCurrency = "USD",
+  exchangeRate,
 }: {
   quote: MarketQuote;
   compact?: boolean;
   live?: boolean;
   displayCurrency?: DisplayCurrency;
+  exchangeRate?: number | null;
 }) {
   const positive = quote.change >= 0;
   const isIndex = quote.symbol.startsWith("KIS_INDEX:");
   const currentText = isIndex
     ? formatNumber(quote.current)
-    : formatMoney(quote.current, displayCurrency, quote.currency);
+    : formatMoney(quote.current, displayCurrency, quote.currency, exchangeRate);
   const changeText = isIndex
     ? formatNumber(quote.change)
-    : formatMoney(quote.change, displayCurrency, quote.currency);
+    : formatMoney(quote.change, displayCurrency, quote.currency, exchangeRate);
   return (
     <div className="rounded-md border border-[#d9dee8] bg-[#f9fafc] p-4">
       <div className="flex items-center justify-between">

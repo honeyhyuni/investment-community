@@ -11,6 +11,7 @@ export function MarketPulse({
   refresh,
   title = "Market pulse",
   refreshLabel = "Refresh",
+  exchangeRate,
 }: {
   pulse: MarketQuote[];
   livePrices: Record<string, TradeTick>;
@@ -18,6 +19,7 @@ export function MarketPulse({
   refresh: () => void;
   title?: string;
   refreshLabel?: string;
+  exchangeRate?: number | null;
 }) {
   return (
     <section className="mt-5 rounded-lg border border-[#d9dee8] bg-white p-4 shadow-sm">
@@ -40,6 +42,7 @@ export function MarketPulse({
               key={item.symbol}
               quote={{ ...item, current }}
               live={!!live}
+              exchangeRate={exchangeRate}
             />
           );
         })}
@@ -52,19 +55,24 @@ function PulseCard({
   quote,
   live = false,
   displayCurrency = "USD",
+  exchangeRate,
 }: {
   quote: MarketQuote;
   live?: boolean;
   displayCurrency?: DisplayCurrency;
+  exchangeRate?: number | null;
 }) {
   const positive = quote.change >= 0;
   const isIndex = quote.symbol.startsWith("KIS_INDEX:");
+  const isExchangeRate = quote.symbol === "KIS_FX:USDKRW";
   const currentText = isIndex
     ? formatNumber(quote.current)
-    : formatMoney(quote.current, displayCurrency, quote.currency);
+    : isExchangeRate
+      ? `${formatNumber(quote.current)}원`
+      : formatMoney(quote.current, displayCurrency, quote.currency, exchangeRate);
   const changeText = isIndex
     ? formatNumber(quote.change)
-    : formatMoney(quote.change, displayCurrency, quote.currency);
+    : formatMoney(quote.change, displayCurrency, quote.currency, exchangeRate);
 
   return (
     <div className="rounded-md border border-[#d9dee8] bg-[#f9fafc] p-4">
@@ -80,11 +88,17 @@ function PulseCard({
         )}
       </div>
       <p className="mt-2 text-xl font-semibold">{currentText}</p>
-      <p className={`mt-1 text-sm font-medium ${positive ? "text-[#2e7d4f]" : "text-[#b64242]"}`}>
-        {positive ? "+" : ""}
-        {changeText} ({positive ? "+" : ""}
-        {formatNumber(quote.percentChange)}%)
-      </p>
+      {!isExchangeRate ? (
+        <p className={`mt-1 text-sm font-medium ${positive ? "text-[#2e7d4f]" : "text-[#b64242]"}`}>
+          {positive ? "+" : ""}
+          {changeText} ({positive ? "+" : ""}
+          {formatNumber(quote.percentChange)}%)
+        </p>
+      ) : (
+        <p className="mt-1 text-sm font-medium text-[#607086]">
+          {quote.current > 0 ? "KIS 원/달러 시세" : "KIS 환율 조회 실패"}
+        </p>
+      )}
       {live ? <p className="mt-2 text-xs font-medium text-[#1f6f8b]">Live tick</p> : null}
     </div>
   );

@@ -39,6 +39,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   const pulse = useMarketDataStore((s) => s.pulse);
   const livePrices = useMarketDataStore((s) => s.livePrices);
   const marketLoading = useMarketDataStore((s) => s.marketLoading);
+  const exchangeRate = useMarketDataStore((s) => s.exchangeRate);
   const loadMarketData = useMarketDataStore((s) => s.loadMarketData);
 
   const isAdmin = user?.role === "ADMIN";
@@ -123,6 +124,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           }}
           title={language === "ko" ? "시장 지표" : "Market pulse"}
           refreshLabel={language === "ko" ? "새로고침" : "Refresh"}
+          exchangeRate={exchangeRate}
         />
 
         <nav className="mt-4 flex gap-2 border-b border-[#d9dee8]">

@@ -25,6 +25,8 @@ export function PostEditor({
   usStocks,
   krStocks,
   livePrices,
+  extraQuotes,
+  exchangeRate,
   editingPostId,
   loading,
   onSubmit,
@@ -42,6 +44,8 @@ export function PostEditor({
   usStocks: MarketQuote[];
   krStocks: MarketQuote[];
   livePrices: Record<string, TradeTick>;
+  extraQuotes: Record<string, MarketQuote>;
+  exchangeRate: number | null;
   editingPostId: string | null;
   loading: boolean;
   onSubmit: () => Promise<void>;
@@ -99,7 +103,7 @@ export function PostEditor({
     return (
       (tag.market === "KR" ? krStocks : usStocks).find(
         (item) => item.symbol === tag.symbol,
-      ) ?? null
+      ) ?? extraQuotes[tag.symbol] ?? null
     );
   }
 
@@ -288,6 +292,7 @@ export function PostEditor({
                 tag={tag}
                 quote={getTagQuote(tag)}
                 live={livePrices[tag.symbol]}
+                exchangeRate={exchangeRate}
                 onRemove={() =>
                   setTags((current) => current.filter((item) => item.symbol !== tag.symbol))
                 }

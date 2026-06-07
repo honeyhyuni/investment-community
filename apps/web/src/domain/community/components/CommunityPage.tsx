@@ -23,6 +23,8 @@ import {
 } from "@/domain/community/types";
 import { PostCard } from "@/domain/community/components/PostCard";
 import { PostEditor } from "@/domain/community/components/PostEditor";
+import { stockSearchScore } from "@/common/utils/stock-search";
+import { StockSymbol } from "@/common/types";
 
 export function CommunityPage() {
   const router = useRouter();
@@ -34,6 +36,9 @@ export function CommunityPage() {
   const krStocks = useMarketDataStore((s) => s.krStocks);
   const krSymbols = useMarketDataStore((s) => s.krSymbols);
   const livePrices = useMarketDataStore((s) => s.livePrices);
+  const extraQuotes = useMarketDataStore((s) => s.extraQuotes);
+  const exchangeRate = useMarketDataStore((s) => s.exchangeRate);
+  const loadStockQuotes = useMarketDataStore((s) => s.loadStockQuotes);
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [users, setUsers] = useState<CommunityUser[]>([]);
@@ -60,6 +65,18 @@ export function CommunityPage() {
     }
     loadCommunity(accessToken, scope, sort);
   }, [accessToken, scope, sort]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+    const tags = [...posts.flatMap((post) => post.stockTags), ...postTags].map(
+      (tag) => resolveCommunityStockTag(tag, stockSymbols),
+    );
+    if (tags.length > 0) {
+      loadStockQuotes(tags, accessToken);
+    }
+  }, [accessToken, loadStockQuotes, postTags, posts, stockSymbols]);
 
   async function loadCommunity(
     token = accessToken,
@@ -259,7 +276,10 @@ export function CommunityPage() {
   }
 
   function openStock(tag: StockTag) {
-    router.push(`/?symbol=${encodeURIComponent(tag.symbol)}&market=${tag.market}`);
+    const resolvedTag = resolveCommunityStockTag(tag, stockSymbols);
+    router.push(
+      `/?symbol=${encodeURIComponent(resolvedTag.symbol)}&market=${resolvedTag.market}`,
+    );
   }
 
   const visiblePosts = selectedPostId
@@ -331,6 +351,8 @@ export function CommunityPage() {
                 usStocks={usStocks}
                 krStocks={krStocks}
                 livePrices={livePrices}
+                extraQuotes={extraQuotes}
+                exchangeRate={exchangeRate}
                 editingPostId={editingPostId}
                 loading={loading}
                 onSubmit={savePost}
@@ -355,7 +377,12 @@ export function CommunityPage() {
               {visiblePosts.map((post) => (
                 <PostCard
                   key={post.id}
-                  post={post}
+                  post={{
+                    ...post,
+                    stockTags: post.stockTags.map((tag) =>
+                      resolveCommunityStockTag(tag, stockSymbols),
+                    ),
+                  }}
                   currentUserId={user.id}
                   commentDrafts={commentDrafts}
                   setCommentDrafts={setCommentDrafts}
@@ -371,6 +398,8 @@ export function CommunityPage() {
                   usStocks={usStocks}
                   krStocks={krStocks}
                   livePrices={livePrices}
+                  extraQuotes={extraQuotes}
+                  exchangeRate={exchangeRate}
                   forceExpanded={post.id === selectedPostId}
                 />
               ))}
@@ -415,4 +444,22 @@ export function CommunityPage() {
         </div>
     </>
   );
+}
+
+function resolveCommunityStockTag(tag: StockTag, stockSymbols: StockSymbol[]): StockTag {
+  const exact = stockSymbols.find(
+    (item) => item.symbol.toUpperCase() === tag.symbol.toUpperCase(),
+  );
+  const resolved =
+    exact ??
+    stockSymbols
+      .map((item) => ({ item, score: stockSearchScore(item, tag.symbol) }))
+      .filter((result) => result.score >= 50)
+      .sort((a, b) => b.score - a.score)[0]?.item;
+
+  return {
+    symbol: resolved?.symbol ?? tag.symbol.toUpperCase(),
+    name: resolved?.description ?? tag.name,
+    market: resolved ? (resolved.currency === "KRW" ? "KR" : "US") : tag.market,
+  };
 }
