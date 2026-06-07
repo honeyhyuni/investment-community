@@ -1064,21 +1064,27 @@ export class MarketsService {
 
     const key = `translation:news:ko:${this.numericId(text)}`;
     const cached = await this.redis.get(key).catch(() => null);
-    if (cached) {
+    if (cached && /[가-힣]/.test(cached)) {
       return cached;
     }
 
+    const translated =
+      (await this.translateWithPapago(text).catch(() => null)) ??
+      (await this.translateWithGoogle(text).catch(() => null)) ??
+      text;
+    await this.redis
+      .set(key, translated, 'EX', 30 * 24 * 60 * 60)
+      .catch(() => undefined);
+    return translated;
+  }
+
+  private async translateWithPapago(text: string): Promise<string | null> {
     const clientId = this.configService.get<string>('NAVER_CLIENT_ID');
     const clientSecret = this.configService.get<string>('NAVER_CLIENT_SECRET');
     if (!clientId || !clientSecret) {
-      return text;
+      return null;
     }
 
-    const body = new URLSearchParams({
-      source: 'en',
-      target: 'ko',
-      text,
-    });
     const response = await fetch('https://openapi.naver.com/v1/papago/n2mt', {
       method: 'POST',
       headers: {
@@ -1086,20 +1092,40 @@ export class MarketsService {
         'X-Naver-Client-Id': clientId,
         'X-Naver-Client-Secret': clientSecret,
       },
-      body,
+      body: new URLSearchParams({ source: 'en', target: 'ko', text }),
+      signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) {
-      return text;
+      return null;
     }
 
     const result = (await response.json()) as {
       message?: { result?: { translatedText?: string } };
     };
-    const translated = result.message?.result?.translatedText?.trim() || text;
-    await this.redis
-      .set(key, translated, 'EX', 30 * 24 * 60 * 60)
-      .catch(() => undefined);
-    return translated;
+    return result.message?.result?.translatedText?.trim() || null;
+  }
+
+  private async translateWithGoogle(text: string): Promise<string | null> {
+    const url = new URL('https://translate.googleapis.com/translate_a/single');
+    url.searchParams.set('client', 'gtx');
+    url.searchParams.set('sl', 'en');
+    url.searchParams.set('tl', 'ko');
+    url.searchParams.set('dt', 't');
+    url.searchParams.set('q', text);
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!response.ok) {
+      return null;
+    }
+
+    const result = (await response.json()) as Array<
+      Array<Array<string | null>> | string | null
+    >;
+    const chunks = Array.isArray(result[0]) ? result[0] : [];
+    const translated = chunks
+      .map((chunk) => (Array.isArray(chunk) ? chunk[0] : ''))
+      .filter((chunk): chunk is string => typeof chunk === 'string')
+      .join('');
+    return translated.trim() || null;
   }
 
   private parseNaverFinanceNews(html: string): MarketNews[] {

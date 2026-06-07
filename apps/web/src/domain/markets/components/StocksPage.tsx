@@ -163,6 +163,21 @@ export function StocksPage() {
       .slice(0, 120);
   }, [search, usStocks, usSymbols]);
 
+  const visibleKrSymbols = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) {
+      return krSymbols.slice(0, 80);
+    }
+
+    return krSymbols
+      .filter(
+        (item) =>
+          item.symbol.toLowerCase().includes(query) ||
+          item.description.toLowerCase().includes(query),
+      )
+      .slice(0, 120);
+  }, [krSymbols, search]);
+
   async function loadRelatedPosts(symbol: string, token = accessToken) {
     if (!token || !symbol) {
       return;
@@ -180,7 +195,7 @@ export function StocksPage() {
       return;
     }
     const news = await apiRequest<MarketNews[]>(
-      `/markets/stocks/news?symbol=${encodeURIComponent(symbol)}&market=${stockTab}&language=${language}`,
+      `/markets/stocks/news?symbol=${encodeURIComponent(symbol)}&market=${stockTab}&language=ko`,
       "GET",
       { accessToken: token },
     ).catch(() => []);
@@ -253,11 +268,20 @@ export function StocksPage() {
 
     queueMicrotask(() => {
       loadStockDetail(selectedSymbol, accessToken);
-      loadCandles(selectedSymbol, chartPeriod, accessToken);
       loadRelatedPosts(selectedSymbol, accessToken);
       loadStockNews(selectedSymbol, accessToken);
     });
-  }, [accessToken, selectedSymbol, chartPeriod, stockTab, language]);
+  }, [accessToken, selectedSymbol, stockTab]);
+
+  useEffect(() => {
+    if (!accessToken || !selectedSymbol) {
+      return;
+    }
+
+    queueMicrotask(() => {
+      loadCandles(selectedSymbol, chartPeriod, accessToken);
+    });
+  }, [accessToken, selectedSymbol, chartPeriod, stockTab]);
 
   useEffect(() => {
     if (stockTab === "US" && selectedSymbol) {
@@ -277,7 +301,7 @@ export function StocksPage() {
                 visibleSymbols={visibleSymbols}
                 usStocks={usStocks}
                 krStocks={krStocks}
-                krSymbols={krSymbols}
+                visibleKrSymbols={visibleKrSymbols}
                 selectedSymbol={selectedSymbol}
                 setSelectedSymbol={setSelectedSymbol}
                 stockDetail={stockDetail}
@@ -308,7 +332,7 @@ function StocksView({
   visibleSymbols,
   usStocks,
   krStocks,
-  krSymbols,
+  visibleKrSymbols,
   selectedSymbol,
   setSelectedSymbol,
   stockDetail,
@@ -333,7 +357,7 @@ function StocksView({
   visibleSymbols: StockSymbol[];
   usStocks: MarketQuote[];
   krStocks: MarketQuote[];
-  krSymbols: StockSymbol[];
+  visibleKrSymbols: StockSymbol[];
   selectedSymbol: string;
   setSelectedSymbol: (symbol: string) => void;
   stockDetail: StockDetail | null;
@@ -408,18 +432,7 @@ function StocksView({
               />
             </div>
             <div className="mt-3 max-h-[560px] overflow-auto rounded-md border border-[#d9dee8]">
-              {krSymbols
-                .filter((item) => {
-                  const query = search.trim().toLowerCase();
-                  if (!query) {
-                    return true;
-                  }
-                  return (
-                    item.symbol.toLowerCase().includes(query) ||
-                    item.description.toLowerCase().includes(query)
-                  );
-                })
-                .map((item) => {
+              {visibleKrSymbols.map((item) => {
                   const quote = krStocks.find((stock) => stock.symbol === item.symbol);
                   return (
                     <button
@@ -445,7 +458,7 @@ function StocksView({
                 })}
             </div>
             <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
-            <RelatedNews news={stockNews} language={language} />
+            <RelatedNews news={stockNews} />
           </div>
           <StockDetailPanel
             detail={stockDetail}
@@ -518,7 +531,7 @@ function StocksView({
               })}
             </div>
             <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
-            <RelatedNews news={stockNews} language={language} />
+            <RelatedNews news={stockNews} />
           </div>
           <StockDetailPanel
             detail={stockDetail}
@@ -967,7 +980,7 @@ function RelatedPosts({
   );
 }
 
-function RelatedNews({ news, language }: { news: MarketNews[]; language: Language }) {
+function RelatedNews({ news }: { news: MarketNews[] }) {
   return (
     <div className="mt-3 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3">
       <p className="text-xs font-semibold text-[#344052]">이 종목의 최신 뉴스</p>
@@ -982,7 +995,7 @@ function RelatedNews({ news, language }: { news: MarketNews[]; language: Languag
               className="block border-t border-[#eef1f6] pt-2 first:border-0 first:pt-0 hover:text-[#1f6f8b]"
             >
               <p className="line-clamp-2 text-sm font-semibold">
-                {language === "ko" ? item.translatedHeadline || item.headline : item.headline}
+                {item.translatedHeadline || item.headline}
               </p>
               <p className="mt-0.5 text-xs text-[#607086]">
                 {item.source} · {new Date(item.datetime * 1000).toLocaleDateString()}
