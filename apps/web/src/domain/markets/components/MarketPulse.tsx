@@ -89,31 +89,18 @@ function PulseCard({
           <TrendingDown size={18} className="text-[#b64242]" />
         )}
       </div>
-      <div className="mt-2 flex flex-wrap items-baseline gap-2">
-        <p className="text-xl font-semibold">{currentText}</p>
-        {isExchangeRate && quote.current > 0 ? (
-          <span
-            className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
-              positive ? "bg-[#e8f5ed] text-[#2e7d4f]" : "bg-[#fff0f0] text-[#b64242]"
-            }`}
-          >
-            {positive ? "+" : ""}
-            {changeText} ({positive ? "+" : ""}
-            {formatNumber(quote.percentChange)}%)
-          </span>
-        ) : null}
-      </div>
+      <p className="mt-2 text-xl font-semibold">{currentText}</p>
       {isExchangeRate && quote.current <= 0 ? (
         <p className="mt-1 text-sm font-medium text-[#607086]">
           KIS 환율 조회 실패
         </p>
-      ) : !isExchangeRate ? (
+      ) : (
         <p className={`mt-1 text-sm font-medium ${positive ? "text-[#2e7d4f]" : "text-[#b64242]"}`}>
           {positive ? "+" : ""}
           {changeText} ({positive ? "+" : ""}
           {formatNumber(quote.percentChange)}%)
         </p>
-      ) : null}
+      )}
       {live ? <p className="mt-2 text-xs font-medium text-[#1f6f8b]">Live tick</p> : null}
     </div>
   );
