@@ -6,11 +6,16 @@ export function formatMarketCap(
   value: number,
   displayCurrency: DisplayCurrency,
   sourceCurrency: DisplayCurrency = "USD",
+  exchangeRate?: number | null,
 ) {
   const converted =
     sourceCurrency === "USD"
-      ? convertMoneyValue(value * 1_000_000, displayCurrency, sourceCurrency)
-      : convertMoneyValue(value, displayCurrency, sourceCurrency);
+      ? convertMoneyValue(value * 1_000_000, displayCurrency, sourceCurrency, exchangeRate)
+      : convertMoneyValue(value, displayCurrency, sourceCurrency, exchangeRate);
+
+  if (!Number.isFinite(converted)) {
+    return "-";
+  }
 
   if (displayCurrency === "KRW") {
     return formatKoreanLargeAmount(converted);
@@ -20,7 +25,7 @@ export function formatMarketCap(
     return `${formatNumber(value)}M`;
   }
 
-  return formatMoney(converted, displayCurrency, sourceCurrency);
+  return `$${formatNumber(converted)}`;
 }
 
 function formatKoreanLargeAmount(value: number) {
@@ -126,6 +131,7 @@ export function buildMetricItems(
   language: Language,
   currency: DisplayCurrency,
   sourceCurrency: DisplayCurrency = "USD",
+  exchangeRate?: number | null,
 ) {
   return [
     {
@@ -146,15 +152,26 @@ export function buildMetricItems(
         pickMetric(metrics, ["epsTTM", "epsAnnual", "epsBasicExclExtraTTM"]),
         currency,
         sourceCurrency,
+        exchangeRate,
       ),
     },
     {
       label: translateDetailLabel(language, "high52"),
-      value: formatMoneyValue(pickMetric(metrics, ["52WeekHigh"]), currency, sourceCurrency),
+      value: formatMoneyValue(
+        pickMetric(metrics, ["52WeekHigh"]),
+        currency,
+        sourceCurrency,
+        exchangeRate,
+      ),
     },
     {
       label: translateDetailLabel(language, "low52"),
-      value: formatMoneyValue(pickMetric(metrics, ["52WeekLow"]), currency, sourceCurrency),
+      value: formatMoneyValue(
+        pickMetric(metrics, ["52WeekLow"]),
+        currency,
+        sourceCurrency,
+        exchangeRate,
+      ),
     },
     {
       label: translateDetailLabel(language, "psr"),
@@ -213,6 +230,9 @@ function formatMoneyValue(
   value: number | null,
   currency: DisplayCurrency,
   sourceCurrency: DisplayCurrency = "USD",
+  exchangeRate?: number | null,
 ): string {
-  return value === null ? "-" : formatMoney(value, currency, sourceCurrency);
+  return value === null
+    ? "-"
+    : formatMoney(value, currency, sourceCurrency, exchangeRate);
 }

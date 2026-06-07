@@ -145,6 +145,14 @@ type KisListResponse = {
   msg_cd?: string;
 };
 
+type KisIndexChartPriceResponse = {
+  output1?: Record<string, string | undefined>;
+  output2?: Array<Record<string, string | undefined>>;
+  rt_cd?: string;
+  msg1?: string;
+  msg_cd?: string;
+};
+
 @Injectable()
 export class MarketsService {
   private readonly logger = new Logger(MarketsService.name);
@@ -188,20 +196,95 @@ export class MarketsService {
 
   async getMarketPulse(): Promise<MarketQuote[]> {
     return this.getCachedQuotes(
-      'market:pulse',
+      'market:pulse:v3',
       Promise.resolve([
+        this.emptyQuote('KIS_FX:USDKRW', 'USD/KRW', 'KRW'),
         ...KR_INDEX_PULSE.map((item) => this.emptyQuote(item.symbol, item.name, 'KRW')),
         ...MARKET_PULSE.map((item) => this.emptyQuote(item.symbol, item.name, 'USD')),
       ]),
       async () => {
-        const [globalPulse, krPulse] = await Promise.all([
+        const [globalPulse, krPulse, exchangeRate] = await Promise.all([
           this.getQuotes(MARKET_PULSE.map((item) => item.symbol)),
           this.getKoreanIndexPulse(),
+          this.getUsdKrwExchangeRate().catch((error) => {
+            this.logger.warn(
+              `KIS USD/KRW exchange rate unavailable: ${
+                error instanceof Error ? error.message : 'unknown error'
+              }`,
+            );
+            return this.emptyQuote('KIS_FX:USDKRW', 'USD/KRW', 'KRW');
+          }),
         ]);
-        return [...krPulse, ...globalPulse];
+        return [exchangeRate, ...krPulse, ...globalPulse];
       },
       20_000,
     );
+  }
+
+  async getStockQuote(symbol: string, market = 'US'): Promise<MarketQuote> {
+    const normalizedSymbol = symbol.toUpperCase().trim();
+    if (market === 'KR') {
+      const masterStock = await this.stockMasterRepository.findOne({
+        where: { symbol: normalizedSymbol, active: true },
+      });
+      return this.getKoreanQuote({
+        symbol: normalizedSymbol,
+        name: masterStock?.name ?? normalizedSymbol,
+        marketDiv: masterStock?.market === 'KR:KOSDAQ' ? 'Q' : 'J',
+      });
+    }
+
+    const masterStock = await this.stockMasterRepository.findOne({
+      where: { symbol: normalizedSymbol, market: 'US', active: true },
+    });
+    return {
+      name: masterStock?.name ?? normalizedSymbol,
+      ...(await this.getQuote(normalizedSymbol)),
+    };
+  }
+
+  private async getUsdKrwExchangeRate(): Promise<MarketQuote> {
+    const key = 'market:exchange-rate:usd-krw';
+    const cached = await this.redis
+      .get(key)
+      .then((value) => (value ? (JSON.parse(value) as MarketQuote) : null))
+      .catch(() => null);
+
+    if (cached?.current && cached.current > 0) {
+      return cached;
+    }
+
+    const response = await this.kisGet<KisIndexChartPriceResponse>(
+      '/uapi/overseas-price/v1/quotations/inquire-time-indexchartprice',
+      {
+        FID_COND_MRKT_DIV_CODE: 'X',
+        FID_INPUT_ISCD: 'FX@KRW',
+        FID_HOUR_CLS_CODE: '0',
+        FID_PW_DATA_INCU_YN: 'N',
+      },
+      'FHKST03030200',
+    );
+    const output = response.output1 ?? {};
+    const rate = this.toNumber(output.ovrs_nmix_prpr);
+    if (rate <= 0) {
+      throw new ServiceUnavailableException('KIS USD/KRW exchange rate is unavailable.');
+    }
+
+    const quote: MarketQuote = {
+      symbol: 'KIS_FX:USDKRW',
+      name: 'USD/KRW',
+      currency: 'KRW',
+      current: rate,
+      change: this.toNumber(output.ovrs_nmix_prdy_vrss),
+      percentChange: this.toNumber(output.prdy_ctrt),
+      high: this.toNumber(output.ovrs_prod_hgpr),
+      low: this.toNumber(output.ovrs_prod_lwpr),
+      open: this.toNumber(output.ovrs_prod_oprc),
+      previousClose: this.toNumber(output.ovrs_nmix_prdy_clpr),
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+    await this.redis.set(key, JSON.stringify(quote), 'EX', 5 * 60).catch(() => undefined);
+    return quote;
   }
 
   async getDefaultUsStocks(): Promise<MarketQuote[]> {

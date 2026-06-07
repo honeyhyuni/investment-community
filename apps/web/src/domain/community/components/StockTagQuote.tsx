@@ -10,6 +10,7 @@ type StockTagQuoteProps = {
   live?: TradeTick;
   onClick?: (tag: StockTag) => void;
   onRemove?: (tag: StockTag) => void;
+  exchangeRate?: number | null;
 };
 
 export function StockTagQuote({
@@ -18,6 +19,7 @@ export function StockTagQuote({
   live,
   onClick,
   onRemove,
+  exchangeRate,
 }: StockTagQuoteProps) {
   const displayCurrency = tag.market === "KR" ? "KRW" : "USD";
   const currentQuote = quote
@@ -37,7 +39,12 @@ export function StockTagQuote({
         <span className="font-semibold text-[#1f6f8b]">#{tag.symbol}</span>
         {currentQuote ? (
           <span className="ml-2 text-[#607086]">
-            {formatMoney(currentQuote.current, displayCurrency, currentQuote.currency)}
+            {formatMoney(
+              currentQuote.current,
+              displayCurrency,
+              currentQuote.currency,
+              exchangeRate,
+            )}
           </span>
         ) : null}
       </button>
@@ -60,7 +67,12 @@ export function StockTagQuote({
             {tag.symbol} · {tag.market}
           </span>
           <span className="mt-2 block text-base font-semibold text-[#161a22]">
-            {formatMoney(currentQuote.current, displayCurrency, currentQuote.currency)}
+            {formatMoney(
+              currentQuote.current,
+              displayCurrency,
+              currentQuote.currency,
+              exchangeRate,
+            )}
           </span>
           <span
             className={`mt-0.5 block text-xs font-semibold ${
@@ -68,7 +80,12 @@ export function StockTagQuote({
             }`}
           >
             {positive ? "+" : ""}
-            {formatMoney(currentQuote.change, displayCurrency, currentQuote.currency)} (
+            {formatMoney(
+              currentQuote.change,
+              displayCurrency,
+              currentQuote.currency,
+              exchangeRate,
+            )} (
             {positive ? "+" : ""}
             {formatNumber(currentQuote.percentChange)}%)
           </span>

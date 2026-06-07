@@ -26,6 +26,8 @@ export function PostCard({
   usStocks,
   krStocks,
   livePrices,
+  extraQuotes,
+  exchangeRate,
   forceExpanded = false,
 }: {
   post: CommunityPost;
@@ -44,6 +46,8 @@ export function PostCard({
   usStocks: MarketQuote[];
   krStocks: MarketQuote[];
   livePrices: Record<string, TradeTick>;
+  extraQuotes: Record<string, MarketQuote>;
+  exchangeRate: number | null;
   forceExpanded?: boolean;
 }) {
   const [expanded, setExpanded] = useState(forceExpanded);
@@ -55,7 +59,7 @@ export function PostCard({
     return (
       (tag.market === "KR" ? krStocks : usStocks).find(
         (item) => item.symbol === tag.symbol,
-      ) ?? null
+      ) ?? extraQuotes[tag.symbol] ?? null
     );
   }
 
@@ -105,6 +109,7 @@ export function PostCard({
                 quote={quote}
                 live={livePrices[tag.symbol]}
                 onClick={onStockTagClick}
+                exchangeRate={exchangeRate}
               />
             );
           })}

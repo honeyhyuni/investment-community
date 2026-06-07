@@ -1,19 +1,20 @@
 import { DisplayCurrency } from "@/common/types";
 
-/** 표시 통화 환산 (USD↔KRW 고정 환율 1500). sourceCurrency는 자유 문자열 허용. */
+/** 표시 통화 환산. exchangeRate는 KIS에서 조회한 USD/KRW 환율이다. */
 export function convertMoneyValue(
   value: number,
   displayCurrency: DisplayCurrency,
   sourceCurrency: string = "USD",
+  exchangeRate?: number | null,
 ): number {
   if (displayCurrency === sourceCurrency) {
     return value;
   }
   if (displayCurrency === "KRW" && sourceCurrency === "USD") {
-    return value * 1500;
+    return exchangeRate && exchangeRate > 0 ? value * exchangeRate : Number.NaN;
   }
   if (displayCurrency === "USD" && sourceCurrency === "KRW") {
-    return value / 1500;
+    return exchangeRate && exchangeRate > 0 ? value / exchangeRate : Number.NaN;
   }
   return value;
 }
@@ -23,8 +24,12 @@ export function formatMoney(
   value: number,
   displayCurrency: DisplayCurrency,
   sourceCurrency: string = "USD",
+  exchangeRate?: number | null,
 ): string {
-  const converted = convertMoneyValue(value, displayCurrency, sourceCurrency);
+  const converted = convertMoneyValue(value, displayCurrency, sourceCurrency, exchangeRate);
+  if (!Number.isFinite(converted)) {
+    return "-";
+  }
   const symbol = displayCurrency === "KRW" ? "원" : "$";
   const fractionDigits = displayCurrency === "KRW" ? 0 : 2;
 
