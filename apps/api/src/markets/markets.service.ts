@@ -715,7 +715,7 @@ export class MarketsService {
   ): Promise<MarketNews[]> {
     const normalizedSymbol = symbol.toUpperCase().trim();
     const normalizedMarket = market.toUpperCase() === 'KR' ? 'KR' : 'US';
-    const cacheKey = `market:stock-news:${normalizedMarket}:${normalizedSymbol}`;
+    const cacheKey = `market:stock-news:v2:${normalizedMarket}:${normalizedSymbol}`;
     const cached = await this.redis.get(cacheKey).catch(() => null);
 
     if (cached) {
@@ -751,7 +751,15 @@ export class MarketsService {
     });
 
     if (!news.length && normalizedMarket === 'US') {
-      news = await this.getFinnhubCompanyNews(normalizedSymbol).catch(() => []);
+      const [finnhubNews, yahooNews] = await Promise.all([
+        this.getFinnhubCompanyNews(normalizedSymbol).catch(() => []),
+        this.getYahooSearchNews(`${companyName} ${normalizedSymbol}`).catch(
+          () => [],
+        ),
+      ]);
+      news = [...finnhubNews, ...yahooNews].filter((item) =>
+        this.isStockRelatedNews(item, normalizedSymbol, companyName),
+      );
     }
     if (!news.length && normalizedMarket === 'KR') {
       news = await this.getNaverStockNews(normalizedSymbol).catch((error) => {
@@ -772,6 +780,46 @@ export class MarketsService {
       .set(cacheKey, JSON.stringify(latest), 'EX', 10 * 60)
       .catch(() => undefined);
     return this.localizeNewsHeadlines(latest, language);
+  }
+
+  private isStockRelatedNews(
+    news: MarketNews,
+    symbol: string,
+    companyName: string,
+  ): boolean {
+    const text = `${news.headline} ${news.summary}`.toLowerCase();
+    const ignoredNameParts = new Set([
+      'co',
+      'company',
+      'corp',
+      'corporation',
+      'group',
+      'holdings',
+      'inc',
+      'incorporated',
+      'limited',
+      'ltd',
+      'plc',
+      'the',
+    ]);
+    const companyKeywords = companyName
+      .toLowerCase()
+      .replace(/[^a-z0-9가-힣]+/g, ' ')
+      .split(/\s+/)
+      .filter(
+        (part) =>
+          part.length >= 3 &&
+          !ignoredNameParts.has(part) &&
+          !/^\d+$/.test(part),
+      );
+    const keywords = new Set([symbol.toLowerCase(), ...companyKeywords]);
+
+    return [...keywords].some((keyword) => {
+      const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(
+        text,
+      );
+    });
   }
 
   async getCandles(symbol: string, period: ChartPeriod): Promise<CandlePoint[]> {
