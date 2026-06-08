@@ -23,11 +23,6 @@ const MARKET_PULSE = [
   { symbol: '^DJI', name: 'Dow Jones' },
   { symbol: 'GC=F', name: 'Gold Futures' },
   { symbol: 'CL=F', name: 'WTI Crude Futures' },
-  { symbol: 'QQQ', name: 'Nasdaq 100 ETF' },
-  { symbol: 'SPY', name: 'S&P 500 ETF' },
-  { symbol: 'DIA', name: 'Dow Jones proxy' },
-  { symbol: 'GLD', name: 'Gold ETF' },
-  { symbol: 'USO', name: 'WTI Oil ETF' },
   { symbol: 'BINANCE:BTCUSDT', name: 'Bitcoin' },
   { symbol: 'BINANCE:ETHUSDT', name: 'Ethereum' },
 ];
@@ -210,7 +205,7 @@ export class MarketsService {
 
   async getMarketPulse(): Promise<MarketQuote[]> {
     return this.getCachedQuotes(
-      'market:pulse:v3',
+      'market:pulse:v4',
       Promise.resolve([
         this.emptyQuote('KIS_FX:USDKRW', 'USD/KRW', 'KRW'),
         ...KR_INDEX_PULSE.map((item) => this.emptyQuote(item.symbol, item.name, 'KRW')),
@@ -1499,6 +1494,18 @@ export class MarketsService {
       if (yahooQuote) {
         return yahooQuote;
       }
+      return {
+        symbol,
+        currency: 'USD',
+        current: 0,
+        change: 0,
+        percentChange: 0,
+        high: 0,
+        low: 0,
+        open: 0,
+        previousClose: 0,
+        timestamp: Math.floor(Date.now() / 1000),
+      };
     }
 
     try {
@@ -2359,7 +2366,7 @@ export class MarketsService {
 
     const response = await fetch(url);
     if (!response.ok) {
-      return null;
+      return this.getYahooChartQuote(symbol);
     }
 
     const body = (await response.json()) as {
@@ -2378,8 +2385,8 @@ export class MarketsService {
     };
     const result = body.quoteResponse?.result?.[0];
 
-    if (!result) {
-      return null;
+    if (!result?.regularMarketPrice) {
+      return this.getYahooChartQuote(symbol);
     }
 
     return {
@@ -2393,6 +2400,78 @@ export class MarketsService {
       open: result.regularMarketOpen ?? 0,
       previousClose: result.regularMarketPreviousClose ?? 0,
       timestamp: result.regularMarketTime ?? Math.floor(Date.now() / 1000),
+    };
+  }
+
+  private async getYahooChartQuote(symbol: string): Promise<MarketQuote | null> {
+    const yahooSymbol = this.toYahooSymbol(symbol);
+    const url = new URL(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+        yahooSymbol,
+      )}`,
+    );
+    url.searchParams.set('range', '1d');
+    url.searchParams.set('interval', '1m');
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      return null;
+    }
+
+    const body = (await response.json()) as {
+      chart?: {
+        result?: Array<{
+          meta?: {
+            regularMarketPrice?: number;
+            chartPreviousClose?: number;
+            previousClose?: number;
+            regularMarketDayHigh?: number;
+            regularMarketDayLow?: number;
+            regularMarketOpen?: number;
+            regularMarketTime?: number;
+          };
+          timestamp?: number[];
+          indicators?: {
+            quote?: Array<{
+              open?: Array<number | null>;
+              high?: Array<number | null>;
+              low?: Array<number | null>;
+              close?: Array<number | null>;
+            }>;
+          };
+        }>;
+      };
+    };
+    const result = body.chart?.result?.[0];
+    const meta = result?.meta;
+    const quote = result?.indicators?.quote?.[0];
+    const closes = quote?.close?.filter((value): value is number => typeof value === 'number') ?? [];
+    const current = meta?.regularMarketPrice ?? closes.at(-1) ?? 0;
+    const previousClose = meta?.chartPreviousClose ?? meta?.previousClose ?? 0;
+    const change = previousClose > 0 ? current - previousClose : 0;
+    const percentChange = previousClose > 0 ? (change / previousClose) * 100 : 0;
+    const highs = quote?.high?.filter((value): value is number => typeof value === 'number') ?? [];
+    const lows = quote?.low?.filter((value): value is number => typeof value === 'number') ?? [];
+    const opens = quote?.open?.filter((value): value is number => typeof value === 'number') ?? [];
+
+    if (current <= 0) {
+      return null;
+    }
+
+    return {
+      symbol,
+      currency: 'USD',
+      current,
+      change,
+      percentChange,
+      high: meta?.regularMarketDayHigh ?? (highs.length ? Math.max(...highs) : 0),
+      low: meta?.regularMarketDayLow ?? (lows.length ? Math.min(...lows) : 0),
+      open: meta?.regularMarketOpen ?? opens[0] ?? 0,
+      previousClose,
+      timestamp:
+        meta?.regularMarketTime ??
+        result?.timestamp?.at(-1) ??
+        Math.floor(Date.now() / 1000),
     };
   }
 
