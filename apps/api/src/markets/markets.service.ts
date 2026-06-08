@@ -50,7 +50,16 @@ const DEFAULT_US_STOCKS = [
   'NFLX',
   'COST',
   'JPM',
+  'TSM',
+  'NVO',
+  'ASML',
 ];
+
+const DEFAULT_US_STOCK_NAMES: Record<string, string> = {
+  ASML: 'ASML Holding ADR',
+  NVO: 'Novo Nordisk ADR',
+  TSM: 'Taiwan Semiconductor Manufacturing Company ADR',
+};
 
 const DEFAULT_KR_STOCKS = [
   { symbol: '005930', name: '삼성전자', marketDiv: 'J' },
@@ -498,13 +507,26 @@ export class MarketsService {
       order: { name: 'ASC' },
     });
     if (master.length > 0) {
-      return master.map((stock) => ({
+      const symbols = master.map((stock) => ({
         symbol: stock.symbol,
         displaySymbol: stock.standardCode ?? stock.symbol,
         description: stock.name,
         type: stock.type ?? 'Common Stock',
         currency: stock.currency,
       }));
+      const existingSymbols = new Set(symbols.map((stock) => stock.symbol));
+      DEFAULT_US_STOCKS.forEach((symbol) => {
+        if (!existingSymbols.has(symbol)) {
+          symbols.push({
+            symbol,
+            displaySymbol: symbol,
+            description: DEFAULT_US_STOCK_NAMES[symbol] ?? symbol,
+            type: this.isEtpSymbol(symbol) ? 'ETP' : 'Common Stock',
+            currency: 'USD',
+          });
+        }
+      });
+      return symbols;
     }
 
     await this.ensureDefaultStockProfiles();
@@ -692,20 +714,25 @@ export class MarketsService {
     return { updated };
   }
 
-  getMarketNews(category = 'general', market = 'US'): Promise<MarketNews[]> {
+  async getMarketNews(
+    category = 'general',
+    market = 'US',
+    language = 'en',
+  ): Promise<MarketNews[]> {
     if (market.toUpperCase() === 'KR' || category === 'kr') {
       return this.getNaverFinanceNews();
     }
 
+    let news: MarketNews[];
     if (category === 'trending') {
-      return this.getYahooTrendingNews();
+      news = await this.getYahooTrendingNews();
+    } else if (category === 'crypto') {
+      news = await this.getYahooSearchNews('bitcoin ethereum crypto market');
+    } else {
+      news = await this.getYahooSearchNews('stock market');
     }
 
-    if (category === 'crypto') {
-      return this.getYahooSearchNews('bitcoin ethereum crypto market');
-    }
-
-    return this.getYahooSearchNews('stock market');
+    return this.localizeNewsHeadlines(news, language);
   }
 
   async getStockNews(
@@ -715,7 +742,7 @@ export class MarketsService {
   ): Promise<MarketNews[]> {
     const normalizedSymbol = symbol.toUpperCase().trim();
     const normalizedMarket = market.toUpperCase() === 'KR' ? 'KR' : 'US';
-    const cacheKey = `market:stock-news:v2:${normalizedMarket}:${normalizedSymbol}`;
+    const cacheKey = `market:stock-news:v3:${normalizedMarket}:${normalizedSymbol}`;
     const cached = await this.redis.get(cacheKey).catch(() => null);
 
     if (cached) {
@@ -762,7 +789,7 @@ export class MarketsService {
       );
     }
     if (!news.length && normalizedMarket === 'KR') {
-      news = await this.getNaverStockNews(normalizedSymbol).catch((error) => {
+      news = await this.getNaverStockNews(normalizedSymbol, companyName).catch((error) => {
         this.logger.warn(
           `Naver Finance stock news request failed for ${normalizedSymbol}: ${
             error instanceof Error ? error.message : 'unknown error'
@@ -770,6 +797,11 @@ export class MarketsService {
         );
         return [] as MarketNews[];
       });
+    }
+    if (normalizedMarket === 'KR') {
+      news = news.filter((item) =>
+        this.isKoreanStockRelatedNews(item, companyName),
+      );
     }
 
     const latest = news
@@ -822,7 +854,40 @@ export class MarketsService {
     });
   }
 
+  private isKoreanStockRelatedNews(news: MarketNews, companyName: string): boolean {
+    const normalizedName = companyName.replace(/\s+/g, '');
+    if (!normalizedName) {
+      return false;
+    }
+    return `${news.headline} ${news.summary}`
+      .replace(/\s+/g, '')
+      .includes(normalizedName);
+  }
+
   async getCandles(symbol: string, period: ChartPeriod): Promise<CandlePoint[]> {
+    const normalizedSymbol = symbol.toUpperCase().trim();
+    const cacheKey = `market:candles:v1:${normalizedSymbol}:${period}`;
+    const cached = await this.redis
+      .get(cacheKey)
+      .then((value) => (value ? (JSON.parse(value) as CandlePoint[]) : null))
+      .catch(() => null);
+
+    if (cached) {
+      return cached;
+    }
+
+    const candles = await this.loadCandles(normalizedSymbol, period);
+    const ttl = period === '1D' ? 60 : 6 * 60 * 60;
+    await this.redis
+      .set(cacheKey, JSON.stringify(candles), 'EX', ttl)
+      .catch(() => undefined);
+    return candles;
+  }
+
+  private async loadCandles(
+    symbol: string,
+    period: ChartPeriod,
+  ): Promise<CandlePoint[]> {
     if (/^\d{6}$/.test(symbol)) {
       return this.getKoreanCandles(symbol, period);
     }
@@ -969,62 +1034,76 @@ export class MarketsService {
     return [...byUrl.values()].slice(0, 60);
   }
 
-  private async getNaverStockNews(symbol: string): Promise<MarketNews[]> {
-    const url = new URL('https://finance.naver.com/item/news_news.naver');
-    url.searchParams.set('code', symbol);
-    url.searchParams.set('page', '1');
-    url.searchParams.set('sm', 'title_entity_id.basic');
-    url.searchParams.set('clusterId', '');
-    const response = await fetch(url, {
-      headers: {
-        referer: `https://finance.naver.com/item/main.naver?code=${symbol}`,
-        'user-agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    });
-
-    if (!response.ok) {
-      throw new ServiceUnavailableException(
-        'Naver Finance stock news request failed.',
-      );
-    }
-
-    const html = new TextDecoder('euc-kr').decode(await response.arrayBuffer());
+  private async getNaverStockNews(
+    symbol: string,
+    companyName: string,
+  ): Promise<MarketNews[]> {
     const articles: MarketNews[] = [];
-    const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-    let match: RegExpExecArray | null;
+    for (const page of [1, 2, 3, 4, 5]) {
+      const url = new URL('https://finance.naver.com/item/news_news.naver');
+      url.searchParams.set('code', symbol);
+      url.searchParams.set('page', String(page));
+      url.searchParams.set('sm', 'title_entity_id.basic');
+      url.searchParams.set('clusterId', '');
+      const response = await fetch(url, {
+        headers: {
+          referer: `https://finance.naver.com/item/main.naver?code=${symbol}`,
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      });
 
-    while ((match = rowPattern.exec(html)) !== null && articles.length < 5) {
-      const row = match[1];
-      const link = row.match(
-        /<a[^>]+href="([^"]*news_read\.naver[^"]*)"[^>]*class="tit"[^>]*>([\s\S]*?)<\/a>/i,
-      );
-      if (!link) {
-        continue;
+      if (!response.ok) {
+        throw new ServiceUnavailableException(
+          'Naver Finance stock news request failed.',
+        );
       }
 
-      const itemUrl = this.resolveNaverUrl(link[1]);
-      const headline = this.decodeHtml(this.stripHtml(link[2]));
-      const source = this.decodeHtml(
-        this.stripHtml(row.match(/<td[^>]*class="info"[^>]*>([\s\S]*?)<\/td>/i)?.[1] ?? ''),
-      );
-      const date = this.stripHtml(
-        row.match(/<td[^>]*class="date"[^>]*>([\s\S]*?)<\/td>/i)?.[1] ?? '',
-      );
-      articles.push({
-        category: 'kr',
-        datetime: this.parseNaverNewsDate(date),
-        headline,
-        id: this.numericId(itemUrl),
-        image: '',
-        related: symbol,
-        source: source || 'Naver Finance',
-        summary: headline,
-        url: itemUrl,
-      });
+      const html = new TextDecoder('euc-kr').decode(await response.arrayBuffer());
+      const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+      let match: RegExpExecArray | null;
+
+      while ((match = rowPattern.exec(html)) !== null && articles.length < 5) {
+        const row = match[1];
+        const link = row.match(
+          /<a[^>]+href="([^"]*news_read\.naver[^"]*)"[^>]*class="tit"[^>]*>([\s\S]*?)<\/a>/i,
+        );
+        if (!link) {
+          continue;
+        }
+
+        const itemUrl = this.resolveNaverUrl(link[1]);
+        const headline = this.decodeHtml(this.stripHtml(link[2]));
+        const source = this.decodeHtml(
+          this.stripHtml(row.match(/<td[^>]*class="info"[^>]*>([\s\S]*?)<\/td>/i)?.[1] ?? ''),
+        );
+        const date = this.stripHtml(
+          row.match(/<td[^>]*class="date"[^>]*>([\s\S]*?)<\/td>/i)?.[1] ?? '',
+        );
+        const item = {
+          category: 'kr',
+          datetime: this.parseNaverNewsDate(date),
+          headline,
+          id: this.numericId(itemUrl),
+          image: '',
+          related: symbol,
+          source: source || 'Naver Finance',
+          summary: headline,
+          url: itemUrl,
+        };
+        if (this.isKoreanStockRelatedNews(item, companyName)) {
+          articles.push(item);
+        }
+      }
+
+      if (articles.length >= 5) {
+        break;
+      }
     }
 
-    return articles;
+    const byUrl = new Map<string, MarketNews>();
+    articles.forEach((item) => byUrl.set(item.url, item));
+    return [...byUrl.values()].slice(0, 5);
   }
 
   private async getNaverSearchNews(query: string): Promise<MarketNews[]> {
@@ -1927,12 +2006,14 @@ export class MarketsService {
     return DEFAULT_US_STOCKS.map((symbol) => ({
       symbol,
       displaySymbol: symbol,
-      description: symbol,
-      type: symbol === 'QQQ' || symbol === 'SPY' || symbol === 'DIA' || symbol === 'GLD' || symbol === 'USO'
-        ? 'ETP'
-        : 'Common Stock',
+      description: DEFAULT_US_STOCK_NAMES[symbol] ?? symbol,
+      type: this.isEtpSymbol(symbol) ? 'ETP' : 'Common Stock',
       currency: 'USD',
     }));
+  }
+
+  private isEtpSymbol(symbol: string): boolean {
+    return ['QQQ', 'SPY', 'DIA', 'GLD', 'USO'].includes(symbol);
   }
 
   private toYahooRange(period: ChartPeriod): { range: string; interval: string } {
@@ -2143,9 +2224,7 @@ export class MarketsService {
       currency: 'USD',
       country: 'US',
       ipo: null,
-      industry: symbol === 'QQQ' || symbol === 'SPY' || symbol === 'DIA' || symbol === 'GLD' || symbol === 'USO'
-        ? 'ETF'
-        : 'Common Stock',
+      industry: this.isEtpSymbol(symbol) ? 'ETF' : 'Common Stock',
       website: null,
       logo: null,
       marketCapitalization: null,
@@ -2176,7 +2255,9 @@ export class MarketsService {
     }));
 
     if (missingUs.length || missingKr.length) {
-      await this.stockProfilesRepository.save([...missingUs, ...missingKr]);
+      await this.stockProfilesRepository.upsert([...missingUs, ...missingKr], [
+        'symbol',
+      ]);
     }
   }
 

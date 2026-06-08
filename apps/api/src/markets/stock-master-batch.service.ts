@@ -106,13 +106,20 @@ export class StockMasterBatchService {
       mic?: string;
     }>;
     const majorMics = new Set(['XNAS', 'XNYS', 'ARCX', 'BATS']);
+    const supportedTypes = new Set([
+      'ADR',
+      'Common Stock',
+      'Depositary Receipt',
+      'ETF',
+      'ETP',
+    ]);
     const rows: MasterInput[] = body
       .filter(
         (item) =>
           !!item.symbol &&
           !!item.description &&
           item.currency === 'USD' &&
-          ['Common Stock', 'ETF', 'ETP'].includes(item.type ?? '') &&
+          supportedTypes.has(item.type ?? '') &&
           majorMics.has(item.mic ?? ''),
       )
       .map((item) => ({

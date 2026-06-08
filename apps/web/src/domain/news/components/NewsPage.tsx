@@ -31,7 +31,7 @@ export function NewsPage() {
     setError("");
     try {
       const nextNews = await apiRequest<MarketNews[]>(
-        `/markets/news?market=${nextCategory === "kr" ? "KR" : "US"}`,
+        `/markets/news?market=${nextCategory === "kr" ? "KR" : "US"}&language=${language}`,
         "GET",
         { accessToken: token },
       );
@@ -42,7 +42,7 @@ export function NewsPage() {
     } finally {
       setLoading(false);
     }
-  }, [accessToken, category]);
+  }, [accessToken, category, language]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -65,6 +65,7 @@ export function NewsPage() {
           setPage={setPage}
           category={category}
           setCategory={setCategory}
+          language={language}
           title={language === "ko" ? "뉴스" : "News"}
         />
       </div>
@@ -79,6 +80,7 @@ function NewsList({
   setPage,
   category,
   setCategory,
+  language,
   title,
 }: {
   news: MarketNews[];
@@ -87,6 +89,7 @@ function NewsList({
   setPage: (page: number) => void;
   category: NewsCategory;
   setCategory: (category: NewsCategory) => void;
+  language: "en" | "ko";
   title: string;
 }) {
   const pageSize = 10;
@@ -148,7 +151,9 @@ function NewsList({
                   <p className="text-xs font-semibold text-[#607086]">
                     {item.source} · {new Date(item.datetime * 1000).toLocaleString()}
                   </p>
-                  <h3 className="mt-1 font-semibold">{item.headline}</h3>
+                  <h3 className="mt-1 font-semibold">
+                    {language === "ko" ? item.translatedHeadline || item.headline : item.headline}
+                  </h3>
                   <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#607086]">
                     {item.summary}
                   </p>

@@ -16,6 +16,7 @@ type MarketDataState = {
   marketLoading: boolean;
   /** pulse/종목/심볼 일괄 로드. 부분 실패는 무시(성공분만 반영). */
   loadMarketData: (token: string) => Promise<string[]>;
+  refreshMarketPulse: (token: string) => Promise<string[]>;
   loadStockQuotes: (
     tags: Array<{ symbol: string; market: "US" | "KR" }>,
     token: string,
@@ -87,6 +88,33 @@ export const useMarketDataStore = create<MarketDataState>((set) => ({
       return [];
     } finally {
       set({ marketLoading: false });
+    }
+  },
+
+  refreshMarketPulse: async (token) => {
+    if (!token) {
+      return [];
+    }
+
+    try {
+      const pulse = await apiRequest<MarketQuote[]>("/markets/pulse", "GET", {
+        accessToken: token,
+      });
+      const exchangeRate = pulse.find((quote) => quote.symbol === "KIS_FX:USDKRW")?.current;
+      set({
+        pulse,
+        ...(exchangeRate && exchangeRate > 0 ? { exchangeRate } : {}),
+      });
+      return [
+        ...new Set(
+          pulse
+            .map((quote) => quote.symbol)
+            .filter((symbol) => symbol && !symbol.startsWith("KIS_")),
+        ),
+      ];
+    } catch (marketError) {
+      console.error("Could not refresh market pulse", marketError);
+      return [];
     }
   },
 

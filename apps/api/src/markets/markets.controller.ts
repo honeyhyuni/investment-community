@@ -90,8 +90,9 @@ export class MarketsController {
   getMarketNews(
     @Query('category') category = 'general',
     @Query('market') market = 'US',
+    @Query('language') language = 'en',
   ): Promise<MarketNews[]> {
-    return this.marketsService.getMarketNews(category, market);
+    return this.marketsService.getMarketNews(category, market, language);
   }
 
   @Get('candles')
