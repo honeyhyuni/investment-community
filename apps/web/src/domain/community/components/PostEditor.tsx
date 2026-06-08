@@ -67,7 +67,7 @@ export function PostEditor({
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: "tiptap-content min-h-[480px] px-6 py-5 outline-none",
+        class: "tiptap-content min-h-[620px] px-6 py-5 outline-none",
       },
     },
     onUpdate: ({ editor }) => {
@@ -137,14 +137,14 @@ export function PostEditor({
   }
 
   return (
-    <div className="rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
+    <div className="w-full rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between border-b border-[#eef1f6] pb-4">
         <p className="text-sm font-semibold text-[#344052]">
           {editingPostId ? "피드 수정" : "투자 글쓰기"}
         </p>
         <button
           onClick={onCancel}
-          className="grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-[#c7ceda]"
+          className="grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-[#c7ceda] transition-colors hover:bg-[#eef1f6]"
           title="닫기"
         >
           <X size={15} />
@@ -304,14 +304,14 @@ export function PostEditor({
       <div className="mt-4 flex justify-end gap-2">
         <button
           onClick={onCancel}
-          className="h-10 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-sm font-semibold"
+          className="h-10 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-sm font-semibold transition-colors hover:bg-[#eef1f6]"
         >
           취소
         </button>
         <button
           disabled={loading}
           onClick={onSubmit}
-          className="h-10 cursor-pointer rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white disabled:opacity-60"
+          className="h-10 cursor-pointer rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195c74] disabled:opacity-60"
         >
           {editingPostId ? "수정 완료" : "게시"}
         </button>

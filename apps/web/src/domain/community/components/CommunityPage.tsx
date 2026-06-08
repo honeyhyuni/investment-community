@@ -290,6 +290,40 @@ export function CommunityPage() {
     return null;
   }
 
+  if (editorOpen) {
+    return (
+      <>
+        {error ? <Notice message="" error={error} /> : null}
+
+        <div className="flex-1 py-6">
+          <PostEditor
+            title={postTitle}
+            setTitle={setPostTitle}
+            blocks={postBlocks}
+            setBlocks={setPostBlocks}
+            tagQuery={postTagQuery}
+            setTagQuery={setPostTagQuery}
+            tags={postTags}
+            setTags={setPostTags}
+            stockSymbols={stockSymbols}
+            usStocks={usStocks}
+            krStocks={krStocks}
+            livePrices={livePrices}
+            extraQuotes={extraQuotes}
+            exchangeRate={exchangeRate}
+            editingPostId={editingPostId}
+            loading={loading}
+            onSubmit={savePost}
+            onCancel={() => {
+              resetEditor();
+              setEditorOpen(false);
+            }}
+          />
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       {error ? <Notice message="" error={error} /> : null}
@@ -302,10 +336,10 @@ export function CommunityPage() {
                   <button
                     key={item}
                     onClick={() => setScope(item)}
-                    className={`h-9 rounded-md px-3 text-sm font-semibold ${
+                    className={`h-9 cursor-pointer rounded-md px-3 text-sm font-semibold transition-colors ${
                       scope === item
                         ? "bg-[#1f6f8b] text-white"
-                        : "border border-[#c7ceda] bg-white text-[#344052]"
+                        : "border border-[#c7ceda] bg-white text-[#344052] hover:bg-[#eef1f6]"
                     }`}
                   >
                     {item === "all" ? "전체 피드" : item === "subscribed" ? "구독 피드" : "내 피드"}
@@ -315,10 +349,10 @@ export function CommunityPage() {
                   <button
                     key={item}
                     onClick={() => setSort(item)}
-                    className={`h-9 rounded-md px-3 text-sm font-semibold ${
+                    className={`h-9 cursor-pointer rounded-md px-3 text-sm font-semibold transition-colors ${
                       sort === item
                         ? "bg-[#344052] text-white"
-                        : "border border-[#c7ceda] bg-white text-[#344052]"
+                        : "border border-[#c7ceda] bg-white text-[#344052] hover:bg-[#eef1f6]"
                     }`}
                   >
                     {item === "latest" ? "최신순" : "인기순"}
@@ -330,7 +364,7 @@ export function CommunityPage() {
                   resetEditor();
                   setEditorOpen(true);
                 }}
-                className="inline-flex h-10 items-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white"
+                className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195c74]"
               >
                 <Plus size={17} />
                 피드 글 쓰기
@@ -427,10 +461,10 @@ export function CommunityPage() {
                     {!communityUser.isMe ? (
                       <button
                         onClick={() => toggleSubscription(communityUser.id)}
-                        className={`h-8 rounded-md px-2.5 text-xs font-semibold ${
+                        className={`h-8 cursor-pointer rounded-md px-2.5 text-xs font-semibold transition-colors ${
                           communityUser.isSubscribed
-                            ? "border border-[#c7ceda] text-[#344052]"
-                            : "bg-[#1f6f8b] text-white"
+                            ? "border border-[#c7ceda] text-[#344052] hover:bg-[#eef1f6]"
+                            : "bg-[#1f6f8b] text-white hover:bg-[#195c74]"
                         }`}
                       >
                         {communityUser.isSubscribed ? "구독중" : "구독"}

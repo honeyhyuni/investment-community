@@ -30,8 +30,9 @@ export function NewsPage() {
     setLoading(true);
     setError("");
     try {
+      const newsLanguage = nextCategory === "us" ? "ko" : language;
       const nextNews = await apiRequest<MarketNews[]>(
-        `/markets/news?market=${nextCategory === "kr" ? "KR" : "US"}&language=${language}`,
+        `/markets/news?market=${nextCategory === "kr" ? "KR" : "US"}&language=${newsLanguage}`,
         "GET",
         { accessToken: token },
       );
@@ -152,7 +153,7 @@ function NewsList({
                     {item.source} · {new Date(item.datetime * 1000).toLocaleString()}
                   </p>
                   <h3 className="mt-1 font-semibold">
-                    {language === "ko" ? item.translatedHeadline || item.headline : item.headline}
+                    {item.translatedHeadline || item.headline}
                   </h3>
                   <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#607086]">
                     {item.summary}

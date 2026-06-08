@@ -76,10 +76,18 @@ export function PostCard({
         </div>
         {post.author.id === currentUserId ? (
           <div className="flex gap-1">
-            <button onClick={() => onEditPost(post)} title="수정">
+            <button
+              onClick={() => onEditPost(post)}
+              title="수정"
+              className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-[#344052] transition-colors hover:bg-[#eef1f6]"
+            >
               <Pencil size={15} />
             </button>
-            <button onClick={() => onDeletePost(post.id)} title="삭제" className="text-[#9a2f2f]">
+            <button
+              onClick={() => onDeletePost(post.id)}
+              title="삭제"
+              className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-[#9a2f2f] transition-colors hover:bg-[#fff1f1]"
+            >
               <Trash2 size={15} />
             </button>
           </div>
@@ -92,7 +100,7 @@ export function PostCard({
       {!showFull ? (
         <button
           onClick={() => setExpanded(true)}
-          className="mt-3 text-sm font-semibold text-[#1f6f8b]"
+          className="mt-3 cursor-pointer text-sm font-semibold text-[#1f6f8b] hover:underline"
         >
           전체 글 보기
         </button>
@@ -119,10 +127,10 @@ export function PostCard({
       <div className="mt-4 flex items-center gap-2 border-t border-[#eef1f6] pt-3">
         <button
           onClick={() => onLike(post.id)}
-          className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-semibold ${
+          className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-semibold transition-colors ${
             post.likedByMe
-              ? "border-[#b64242] bg-[#fff1f1] text-[#b64242]"
-              : "border-[#c7ceda] text-[#344052]"
+              ? "border-[#b64242] bg-[#fff1f1] text-[#b64242] hover:bg-[#ffe6e6]"
+              : "border-[#c7ceda] text-[#344052] hover:bg-[#eef1f6]"
           }`}
         >
           <Heart size={16} fill={post.likedByMe ? "currentColor" : "none"} />
@@ -163,7 +171,7 @@ export function PostCard({
             />
             <button
               onClick={() => onComment(post.id)}
-              className="grid h-10 w-10 place-items-center rounded-md bg-[#1f6f8b] text-white"
+              className="grid h-10 w-10 cursor-pointer place-items-center rounded-md bg-[#1f6f8b] text-white transition-colors hover:bg-[#195c74]"
             >
               <Send size={16} />
             </button>

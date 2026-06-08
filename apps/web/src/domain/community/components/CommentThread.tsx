@@ -29,10 +29,18 @@ export function CommentThread({
         <p className="text-sm font-semibold">{comment.author.nickname}</p>
         {comment.author.id === currentUserId ? (
           <div className="flex gap-1">
-            <button onClick={() => onEditComment(comment.id, comment.content)} title="수정">
+            <button
+              onClick={() => onEditComment(comment.id, comment.content)}
+              title="수정"
+              className="grid h-7 w-7 cursor-pointer place-items-center rounded-md text-[#344052] transition-colors hover:bg-[#e8edf4]"
+            >
               <Pencil size={13} />
             </button>
-            <button onClick={() => onDeleteComment(comment.id)} title="삭제" className="text-[#9a2f2f]">
+            <button
+              onClick={() => onDeleteComment(comment.id)}
+              title="삭제"
+              className="grid h-7 w-7 cursor-pointer place-items-center rounded-md text-[#9a2f2f] transition-colors hover:bg-[#fff1f1]"
+            >
               <Trash2 size={13} />
             </button>
           </div>
@@ -47,10 +55,18 @@ export function CommentThread({
                 <p className="text-xs font-semibold">{reply.author.nickname}</p>
                 {reply.author.id === currentUserId ? (
                   <div className="flex gap-1">
-                    <button onClick={() => onEditComment(reply.id, reply.content)} title="수정">
+                    <button
+                      onClick={() => onEditComment(reply.id, reply.content)}
+                      title="수정"
+                      className="grid h-7 w-7 cursor-pointer place-items-center rounded-md text-[#344052] transition-colors hover:bg-[#eef1f6]"
+                    >
                       <Pencil size={12} />
                     </button>
-                    <button onClick={() => onDeleteComment(reply.id)} title="삭제" className="text-[#9a2f2f]">
+                    <button
+                      onClick={() => onDeleteComment(reply.id)}
+                      title="삭제"
+                      className="grid h-7 w-7 cursor-pointer place-items-center rounded-md text-[#9a2f2f] transition-colors hover:bg-[#fff1f1]"
+                    >
                       <Trash2 size={12} />
                     </button>
                   </div>
@@ -75,7 +91,7 @@ export function CommentThread({
         />
         <button
           onClick={() => onComment(postId, comment.id)}
-          className="grid h-9 w-9 place-items-center rounded-md bg-[#344052] text-white"
+          className="grid h-9 w-9 cursor-pointer place-items-center rounded-md bg-[#344052] text-white transition-colors hover:bg-[#1f2937]"
         >
           <Send size={15} />
         </button>
