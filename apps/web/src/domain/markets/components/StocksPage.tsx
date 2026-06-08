@@ -94,6 +94,9 @@ const copy = {
 
 export function StocksPage() {
   const searchParams = useSearchParams();
+  const notice = searchParams.get("notice");
+  const noticeMessage =
+    notice === "profile-updated" ? "저장 완료되었습니다." : "";
   const initialMarket: StockTab =
     searchParams.get("market")?.toUpperCase() === "KR" ? "KR" : "US";
   const initialSymbol =
@@ -293,6 +296,7 @@ export function StocksPage() {
 
   return (
     <>
+      {noticeMessage ? <Notice message={noticeMessage} error="" /> : null}
       {error ? <Notice message="" error={error} /> : null}
       <div className="grid flex-1 gap-6 py-6 lg:grid-cols-[1fr]">
               <StocksView

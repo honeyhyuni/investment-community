@@ -46,7 +46,7 @@ export function ProfilePage() {
         body: { nickname: nicknameDraft },
       });
       setUser(updatedUser);
-      setMessage("Profile updated.");
+      router.replace("/?notice=profile-updated");
     } catch (profileError) {
       setError(
         profileError instanceof Error ? profileError.message : "Could not update profile.",
@@ -158,7 +158,7 @@ function ProfilePanel({
         </div>
         <button
           onClick={onBack}
-          className="rounded-md border border-[#c7ceda] bg-white px-3 py-2 text-sm font-semibold text-[#344052] hover:bg-[#eef1f6]"
+          className="cursor-pointer rounded-md border border-[#c7ceda] bg-white px-3 py-2 text-sm font-semibold text-[#344052] transition-colors hover:border-[#1f6f8b] hover:bg-[#eef1f6] hover:text-[#1f6f8b]"
         >
           Back
         </button>
@@ -187,7 +187,7 @@ function ProfilePanel({
 
         <button
           disabled={loading}
-          className="inline-flex h-11 items-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white hover:bg-[#195b72] disabled:opacity-60"
+          className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195b72] disabled:cursor-not-allowed disabled:opacity-60"
         >
           <UserPen size={16} />
           {loading ? "Saving" : "Save profile"}
@@ -219,7 +219,7 @@ function ProfilePanel({
         />
         <button
           disabled={loading}
-          className="inline-flex h-11 items-center rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white hover:bg-[#195b72] disabled:opacity-60"
+          className="inline-flex h-11 cursor-pointer items-center rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195b72] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? "Saving" : "Change password"}
         </button>

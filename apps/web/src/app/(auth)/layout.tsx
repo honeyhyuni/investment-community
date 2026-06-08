@@ -80,7 +80,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2">
             <button
               onClick={toggleLanguage}
-              className="h-10 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#1f6f8b] shadow-sm hover:bg-[#eef1f6]"
+              className="h-10 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#1f6f8b] shadow-sm transition-colors hover:border-[#1f6f8b] hover:bg-[#eef1f6]"
             >
               {language === "en" ? "한국어" : "English"}
             </button>
@@ -88,16 +88,16 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
               onClick={toggleDarkMode}
               title={darkMode ? "Light mode" : "Dark mode"}
               aria-label={darkMode ? "Light mode" : "Dark mode"}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#c7ceda] bg-white text-[#344052] shadow-sm hover:bg-[#eef1f6]"
+              className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md border border-[#c7ceda] bg-white text-[#344052] shadow-sm transition-colors hover:border-[#1f6f8b] hover:bg-[#eef1f6] hover:text-[#1f6f8b]"
             >
               {darkMode ? <Sun size={17} /> : <Moon size={17} />}
             </button>
             <button
               onClick={() => router.push("/profile")}
-              className={`inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm font-semibold shadow-sm hover:bg-[#eef1f6] ${
+              className={`inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-semibold shadow-sm transition-colors hover:bg-[#eef1f6] ${
                 isProfile
                   ? "border-[#1f6f8b] bg-[#eef6f9] text-[#1f6f8b]"
-                  : "border-[#c7ceda] bg-white text-[#344052]"
+                  : "border-[#c7ceda] bg-white text-[#344052] hover:border-[#1f6f8b] hover:text-[#1f6f8b]"
               }`}
             >
               <UserPen size={16} />
@@ -105,7 +105,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             </button>
             <button
               onClick={logout}
-              className="inline-flex h-10 items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-medium shadow-sm hover:bg-[#eef1f6]"
+              className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-medium shadow-sm transition-colors hover:border-[#9a2f2f] hover:bg-[#fff1f1] hover:text-[#9a2f2f]"
             >
               <LogOut size={16} />
               {language === "ko" ? "로그아웃" : "Logout"}
