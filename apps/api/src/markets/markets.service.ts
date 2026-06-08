@@ -551,6 +551,9 @@ export class MarketsService {
     let profile: CompanyProfile;
     if (cachedProfile) {
       profile = this.toCompanyProfile(cachedProfile);
+      if (!profile.logo) {
+        profile = await this.enrichCachedProfileLogo(normalizedSymbol, cachedProfile, profile);
+      }
     } else {
       try {
         profile = await this.finnhubGet<CompanyProfile>('/stock/profile2', {
@@ -592,6 +595,64 @@ export class MarketsService {
           },
       quote,
     };
+  }
+
+  private async enrichCachedProfileLogo(
+    symbol: string,
+    cachedProfile: StockProfileEntity,
+    profile: CompanyProfile,
+  ): Promise<CompanyProfile> {
+    try {
+      const freshProfile = await this.finnhubGet<CompanyProfile>('/stock/profile2', {
+        symbol,
+      });
+      const nextProfile: CompanyProfile = {
+        ...profile,
+        country: freshProfile.country ?? profile.country,
+        currency: freshProfile.currency ?? profile.currency,
+        exchange: freshProfile.exchange ?? profile.exchange,
+        finnhubIndustry: freshProfile.finnhubIndustry ?? profile.finnhubIndustry,
+        ipo: freshProfile.ipo ?? profile.ipo,
+        logo: freshProfile.logo ?? profile.logo,
+        marketCapitalization:
+          freshProfile.marketCapitalization ?? profile.marketCapitalization,
+        name: freshProfile.name ?? profile.name,
+        shareOutstanding: freshProfile.shareOutstanding ?? profile.shareOutstanding,
+        ticker: freshProfile.ticker ?? profile.ticker,
+        weburl: freshProfile.weburl ?? profile.weburl,
+      };
+
+      if (freshProfile.logo || freshProfile.weburl || freshProfile.name) {
+        await this.stockProfilesRepository.update(
+          { symbol },
+          {
+            country: nextProfile.country ?? cachedProfile.country,
+            currency: nextProfile.currency ?? cachedProfile.currency,
+            exchange: nextProfile.exchange ?? cachedProfile.exchange,
+            industry: nextProfile.finnhubIndustry ?? cachedProfile.industry,
+            ipo: nextProfile.ipo ?? cachedProfile.ipo,
+            logo: nextProfile.logo ?? cachedProfile.logo,
+            marketCapitalization:
+              nextProfile.marketCapitalization ??
+              cachedProfile.marketCapitalization,
+            name: nextProfile.name ?? cachedProfile.name,
+            shareOutstanding:
+              nextProfile.shareOutstanding ?? cachedProfile.shareOutstanding,
+            website: nextProfile.weburl ?? cachedProfile.website,
+            fetchedAt: new Date(),
+          },
+        );
+      }
+
+      return nextProfile;
+    } catch (error) {
+      this.logger.warn(
+        `Profile logo enrichment skipped for ${symbol}: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+      return profile;
+    }
   }
 
   async getKoreanStockDetail(symbol: string): Promise<StockDetail> {
