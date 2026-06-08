@@ -19,7 +19,9 @@ export type AuthResponse = {
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api";
 
-export const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, "");
+export const API_ORIGIN = API_BASE_URL.startsWith("/")
+  ? ""
+  : API_BASE_URL.replace(/\/api\/?$/, "");
 
 type RequestOptions = {
   accessToken?: string | null;
