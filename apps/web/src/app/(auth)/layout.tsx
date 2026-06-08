@@ -41,7 +41,6 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   const marketLoading = useMarketDataStore((s) => s.marketLoading);
   const exchangeRate = useMarketDataStore((s) => s.exchangeRate);
   const loadMarketData = useMarketDataStore((s) => s.loadMarketData);
-  const refreshMarketPulse = useMarketDataStore((s) => s.refreshMarketPulse);
 
   const isAdmin = user?.role === "ADMIN";
   const isProfile = pathname === "/profile";
@@ -51,18 +50,6 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       router.replace("/login");
     }
   }, [authChecking, user?.status, router]);
-
-  useEffect(() => {
-    if (!accessToken || user?.status !== "APPROVED") {
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      refreshMarketPulse(accessToken);
-    }, 15000);
-
-    return () => window.clearInterval(interval);
-  }, [accessToken, user?.status, refreshMarketPulse]);
 
   if (authChecking || user?.status !== "APPROVED") {
     return (

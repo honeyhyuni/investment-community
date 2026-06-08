@@ -7,9 +7,10 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleDestroy } from '@nestjs/common';
 import { Server } from 'socket.io';
 import WebSocket from 'ws';
+import { MarketsService } from './markets.service';
 
 type FinnhubTradeMessage =
   | {
@@ -32,7 +33,9 @@ type FinnhubTradeMessage =
     credentials: true,
   },
 })
-export class MarketsGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class MarketsGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy
+{
   @WebSocketServer()
   server: Server;
 
@@ -49,25 +52,62 @@ export class MarketsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     'TSLA',
   ]);
   private finnhubSocket: WebSocket | null = null;
+  private pulseInterval: NodeJS.Timeout | null = null;
   private reconnectDelayMs = 5000;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly marketsService: MarketsService,
+  ) {}
 
   handleConnection(): void {
     this.connectFinnhub();
+    this.startPulseBroadcast();
   }
 
   handleDisconnect(): void {
     return;
   }
 
+  onModuleDestroy(): void {
+    if (this.pulseInterval) {
+      clearInterval(this.pulseInterval);
+      this.pulseInterval = null;
+    }
+    this.finnhubSocket?.close();
+  }
+
   @SubscribeMessage('market:subscribe')
   subscribeToSymbols(@MessageBody() body: { symbols?: string[] }): void {
     body.symbols
       ?.map((symbol) => symbol.toUpperCase().trim())
-      .filter((symbol) => symbol && !symbol.startsWith('KIS_'))
+      .filter((symbol) => this.isFinnhubStreamSymbol(symbol))
       .slice(0, 24)
       .forEach((symbol) => this.subscribeSymbol(symbol));
+  }
+
+  private startPulseBroadcast(): void {
+    if (this.pulseInterval) {
+      return;
+    }
+
+    const broadcast = async () => {
+      try {
+        const pulse = await this.marketsService.getMarketPulse();
+        this.server.emit('market:pulse', pulse);
+      } catch (error) {
+        this.logger.warn(
+          `Market pulse broadcast failed: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+      }
+    };
+
+    void broadcast();
+    this.pulseInterval = setInterval(() => {
+      void broadcast();
+    }, 15000);
   }
 
   private connectFinnhub(): void {
@@ -123,6 +163,10 @@ export class MarketsGateway implements OnGatewayConnection, OnGatewayDisconnect 
   }
 
   private subscribeSymbol(symbol: string): void {
+    if (!this.isFinnhubStreamSymbol(symbol)) {
+      return;
+    }
+
     this.symbols.add(symbol);
 
     if (this.finnhubSocket?.readyState !== WebSocket.OPEN) {
@@ -130,5 +174,13 @@ export class MarketsGateway implements OnGatewayConnection, OnGatewayDisconnect 
     }
 
     this.finnhubSocket.send(JSON.stringify({ type: 'subscribe', symbol }));
+  }
+
+  private isFinnhubStreamSymbol(symbol: string): boolean {
+    if (!symbol || symbol.startsWith('KIS_') || symbol.startsWith('^') || symbol.includes('=')) {
+      return false;
+    }
+
+    return true;
   }
 }

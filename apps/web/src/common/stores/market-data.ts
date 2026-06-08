@@ -23,6 +23,7 @@ type MarketDataState = {
   ) => Promise<void>;
   /** 웹소켓 market:trade 틱 반영 (livePrices + 최근 40개 시리즈). */
   applyTrade: (tick: TradeTick) => void;
+  applyPulse: (pulse: MarketQuote[]) => void;
 };
 
 export const useMarketDataStore = create<MarketDataState>((set) => ({
@@ -155,4 +156,12 @@ export const useMarketDataStore = create<MarketDataState>((set) => ({
         [tick.symbol]: [...(state.liveSeries[tick.symbol] ?? []), tick].slice(-40),
       },
     })),
+
+  applyPulse: (pulse) => {
+    const exchangeRate = pulse.find((quote) => quote.symbol === "KIS_FX:USDKRW")?.current;
+    set({
+      pulse,
+      ...(exchangeRate && exchangeRate > 0 ? { exchangeRate } : {}),
+    });
+  },
 }));

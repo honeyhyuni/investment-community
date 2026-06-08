@@ -18,11 +18,16 @@ import { StockProfileEntity } from './stock-profile.entity';
 import { StockMasterEntity } from './stock-master.entity';
 
 const MARKET_PULSE = [
-  { symbol: 'QQQ', name: 'Nasdaq 100 proxy' },
-  { symbol: 'SPY', name: 'S&P 500 proxy' },
+  { symbol: '^IXIC', name: 'Nasdaq Composite' },
+  { symbol: '^GSPC', name: 'S&P 500' },
+  { symbol: '^DJI', name: 'Dow Jones' },
+  { symbol: 'GC=F', name: 'Gold Futures' },
+  { symbol: 'CL=F', name: 'WTI Crude Futures' },
+  { symbol: 'QQQ', name: 'Nasdaq 100 ETF' },
+  { symbol: 'SPY', name: 'S&P 500 ETF' },
   { symbol: 'DIA', name: 'Dow Jones proxy' },
-  { symbol: 'GLD', name: 'Gold proxy' },
-  { symbol: 'USO', name: 'WTI Oil proxy' },
+  { symbol: 'GLD', name: 'Gold ETF' },
+  { symbol: 'USO', name: 'WTI Oil ETF' },
   { symbol: 'BINANCE:BTCUSDT', name: 'Bitcoin' },
   { symbol: 'BINANCE:ETHUSDT', name: 'Ethereum' },
 ];
@@ -1489,6 +1494,13 @@ export class MarketsService {
   }
 
   private async getQuote(symbol: string): Promise<MarketQuote> {
+    if (this.isYahooOnlyQuoteSymbol(symbol)) {
+      const yahooQuote = await this.getYahooQuote(symbol).catch(() => null);
+      if (yahooQuote) {
+        return yahooQuote;
+      }
+    }
+
     try {
       const quote = await this.finnhubGet<FinnhubQuote>('/quote', { symbol });
 
@@ -1529,6 +1541,10 @@ export class MarketsService {
         timestamp: Math.floor(Date.now() / 1000),
       };
     }
+  }
+
+  private isYahooOnlyQuoteSymbol(symbol: string): boolean {
+    return symbol.startsWith('^') || symbol.includes('=');
   }
 
   private async getKoreanQuote(stock: KisStock): Promise<MarketQuote> {
@@ -2368,6 +2384,7 @@ export class MarketsService {
 
     return {
       symbol,
+      currency: 'USD',
       current: result.regularMarketPrice ?? 0,
       change: result.regularMarketChange ?? 0,
       percentChange: result.regularMarketChangePercent ?? 0,
