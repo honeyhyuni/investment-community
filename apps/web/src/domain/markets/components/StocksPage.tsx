@@ -37,6 +37,7 @@ import {
   TradeTick,
 } from "@/common/types";
 import { CommunityPost } from "@/domain/community/types";
+import { getPostHtml, htmlToPlainText } from "@/common/utils/community";
 import { useStockRouteSelection } from "@/domain/markets/hooks/useStockRouteSelection";
 import {
   buildMetricItems,
@@ -608,6 +609,7 @@ function StockDetailPanel({
     );
     const isKoreanMarket =
       detail.profile.currency === "KRW" && detail.profile.country === "대한민국";
+    const logoUrl = detail.profile.logo || getFallbackLogoUrl(detail.profile.weburl);
     const valuationItems = [
     {
       label: translateDetailLabel(language, "marketCap"),
@@ -639,13 +641,11 @@ function StockDetailPanel({
               {priceCurrency === "USD" ? "원" : "$"}
             </button>
           ) : null}
-          {detail.profile.logo ? (
-            <img
-              src={detail.profile.logo}
-              alt=""
-              className="h-12 w-12 rounded-md border border-[#d9dee8] object-contain"
-            />
-          ) : null}
+          <CompanyIcon
+            logoUrl={logoUrl}
+            name={detail.profile.name || detail.symbol}
+            symbol={detail.symbol}
+          />
         </div>
       </div>
       <div className="mt-6">
@@ -956,31 +956,104 @@ function RelatedPosts({
       <p className="text-xs font-semibold text-[#344052]">이 종목과 관련된 피드</p>
       <div className="mt-2 space-y-2">
         {posts.length ? (
-          posts.slice(0, 3).map((post) => (
-            <button
-              key={post.id}
-              onClick={() => onPostClick(post.id)}
-              className="block w-full cursor-pointer border-t border-[#eef1f6] pt-2 text-left first:border-0 first:pt-0"
-            >
-              <div className="flex items-baseline gap-2">
-                <p className="max-w-[45%] truncate text-sm font-semibold">
-                  {post.title || post.content}
+          posts.slice(0, 3).map((post) => {
+            const preview = getRelatedPostPreview(post);
+            return (
+              <button
+                key={post.id}
+                onClick={() => onPostClick(post.id)}
+                className="block w-full cursor-pointer border-t border-[#eef1f6] pt-2 text-left first:border-0 first:pt-0"
+              >
+                <div className="flex items-baseline gap-2">
+                  <p className="max-w-[45%] truncate text-sm font-semibold">
+                    {post.title || post.content}
+                  </p>
+                  <p className="min-w-0 flex-1 truncate text-[11px] text-[#607086]">
+                    {preview}
+                  </p>
+                </div>
+                <p className="mt-0.5 text-xs text-[#607086]">
+                  {post.author.nickname} · {new Date(post.createdAt).toLocaleDateString()}
                 </p>
-                <p className="min-w-0 flex-1 truncate text-[11px] text-[#607086]">
-                  {post.contentBlocks.find((block) => block.type === "text")?.text || post.content}
-                </p>
-              </div>
-              <p className="mt-0.5 text-xs text-[#607086]">
-                {post.author.nickname} · {new Date(post.createdAt).toLocaleDateString()}
-              </p>
-            </button>
-          ))
+              </button>
+            );
+          })
         ) : (
           <p className="text-xs text-[#607086]">아직 관련 게시글이 없습니다.</p>
         )}
       </div>
     </div>
   );
+}
+
+function CompanyIcon({
+  logoUrl,
+  name,
+  symbol,
+}: {
+  logoUrl?: string | null;
+  name: string;
+  symbol: string;
+}) {
+  const initials = getInitials(name || symbol);
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  if (logoUrl && !logoFailed) {
+    return (
+      <img
+        src={logoUrl}
+        alt=""
+        className="h-12 w-12 rounded-md border border-[#d9dee8] bg-white object-contain"
+        onError={() => setLogoFailed(true)}
+      />
+    );
+  }
+
+  return <FallbackCompanyIcon initials={initials} />;
+}
+
+function FallbackCompanyIcon({ initials }: { initials: string }) {
+  return (
+    <div className="grid h-12 w-12 place-items-center rounded-md border border-[#d9dee8] bg-[#eef6f9] text-sm font-bold text-[#1f6f8b]">
+      {initials}
+    </div>
+  );
+}
+
+function getFallbackLogoUrl(weburl?: string): string | null {
+  if (!weburl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(weburl.startsWith("http") ? weburl : `https://${weburl}`);
+    return `https://logo.clearbit.com/${url.hostname.replace(/^www\./, "")}`;
+  } catch {
+    return null;
+  }
+}
+
+function getInitials(value: string): string {
+  const words = value
+    .replace(/[^a-zA-Z0-9가-힣 ]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 0) {
+    return "-";
+  }
+
+  return words
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase();
+}
+
+function getRelatedPostPreview(post: CommunityPost): string {
+  const text = htmlToPlainText(getPostHtml(post).replace(/<img\b[^>]*>/gi, " "));
+  return text || "본문 글 없음";
 }
 
 function RelatedNews({ news }: { news: MarketNews[] }) {
