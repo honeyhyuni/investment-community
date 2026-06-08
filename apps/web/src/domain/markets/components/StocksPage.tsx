@@ -918,7 +918,6 @@ function QuoteCard({
       <div className="flex items-center justify-between">
         <div>
           <p className="font-semibold">{quote.name || quote.symbol}</p>
-          <p className="text-xs text-[#607086]">{quote.symbol}</p>
         </div>
         {positive ? (
           <TrendingUp size={18} className="text-[#2e7d4f]" />
