@@ -167,6 +167,11 @@ export class CommunityService {
     return (await this.toPostDtos([post], currentUserId))[0];
   }
 
+  async getPost(currentUserId: string, postId: string): Promise<CommunityPostDto> {
+    const post = await this.findPost(postId);
+    return (await this.toPostDtos([post], currentUserId))[0];
+  }
+
   async updatePost(
     currentUserId: string,
     postId: string,

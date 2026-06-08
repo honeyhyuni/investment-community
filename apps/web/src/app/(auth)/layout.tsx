@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, Moon, Sun, UserPen } from "lucide-react";
 import { SessionLoading } from "@/common/components/SessionLoading";
@@ -128,23 +129,25 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         />
 
         <nav className="mt-4 flex gap-2 border-b border-[#d9dee8]">
-          {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => (
-            <button
-              key={item.id}
-              onClick={() => {
-                if (pathname !== item.href) {
-                  router.push(item.href);
-                }
-              }}
-              className={`h-11 cursor-pointer border-b-2 px-3 text-sm font-semibold transition-colors ${
-                pathname === item.href
-                  ? "border-[#1f6f8b] text-[#1f6f8b]"
-                  : "border-transparent text-[#607086] hover:border-[#c7ceda] hover:text-[#1f6f8b]"
-              }`}
-            >
-              {language === "ko" ? item.label.ko : item.label.en}
-            </button>
-          ))}
+          {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
+            const active =
+              pathname === item.href ||
+              (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                className={`h-11 cursor-pointer border-b-2 px-3 text-sm font-semibold transition-colors ${
+                  active
+                    ? "border-[#1f6f8b] text-[#1f6f8b]"
+                    : "border-transparent text-[#607086] hover:border-[#c7ceda] hover:text-[#1f6f8b]"
+                }`}
+              >
+                {language === "ko" ? item.label.ko : item.label.en}
+              </Link>
+            );
+          })}
         </nav>
 
         {children}

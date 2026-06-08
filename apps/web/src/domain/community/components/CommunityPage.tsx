@@ -26,7 +26,7 @@ import { PostEditor } from "@/domain/community/components/PostEditor";
 import { stockSearchScore } from "@/common/utils/stock-search";
 import { StockSymbol } from "@/common/types";
 
-export function CommunityPage() {
+export function CommunityPage({ postId }: { postId?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const accessToken = useSessionStore((s) => s.accessToken);
@@ -57,14 +57,19 @@ export function CommunityPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const selectedPostId = searchParams.get("post");
+  const selectedPostId = postId ?? searchParams.get("post");
+  const detailMode = !!selectedPostId;
   const stockSymbols = useMemo(() => [...krSymbols, ...usSymbols], [krSymbols, usSymbols]);
   useEffect(() => {
     if (!accessToken) {
       return;
     }
+    if (selectedPostId) {
+      loadSinglePost(selectedPostId, accessToken);
+      return;
+    }
     loadCommunity(accessToken, scope, sort);
-  }, [accessToken, scope, sort]);
+  }, [accessToken, scope, sort, selectedPostId]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -290,6 +295,32 @@ export function CommunityPage() {
     return null;
   }
 
+  async function loadSinglePost(nextPostId: string, token = accessToken) {
+    if (!token) {
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      const post = await apiRequest<CommunityPost>(
+        `/community/posts/${encodeURIComponent(nextPostId)}`,
+        "GET",
+        { accessToken: token },
+      );
+      setPosts([post]);
+    } catch (communityError) {
+      setPosts([]);
+      setError(
+        communityError instanceof Error
+          ? communityError.message
+          : "Could not load community post.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (editorOpen) {
     return (
       <>
@@ -319,6 +350,78 @@ export function CommunityPage() {
               setEditorOpen(false);
             }}
           />
+        </div>
+      </>
+    );
+  }
+
+  if (detailMode) {
+    return (
+      <>
+        {error ? <Notice message="" error={error} /> : null}
+
+        <div className="flex-1 py-6">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <button
+              onClick={() => router.push("/community")}
+              className="h-10 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-4 text-sm font-semibold text-[#344052] transition-colors hover:border-[#1f6f8b] hover:bg-[#eef1f6] hover:text-[#1f6f8b]"
+            >
+              피드 목록으로
+            </button>
+            <button
+              onClick={() => {
+                resetEditor();
+                setEditorOpen(true);
+              }}
+              className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195c74]"
+            >
+              <Plus size={17} />
+              피드 글 쓰기
+            </button>
+          </div>
+
+          <div className="grid gap-4">
+            {loading && posts.length === 0 ? (
+              <p className="rounded-lg border border-[#d9dee8] bg-white p-8 text-center text-sm text-[#607086]">
+                불러오는 중입니다.
+              </p>
+            ) : null}
+            {!loading && visiblePosts.length === 0 ? (
+              <p className="rounded-lg border border-[#d9dee8] bg-white p-8 text-center text-sm text-[#607086]">
+                표시할 피드가 없습니다.
+              </p>
+            ) : null}
+            {visiblePosts.map((post) => (
+              <PostCard
+                key={post.id}
+                post={{
+                  ...post,
+                  stockTags: post.stockTags.map((tag) =>
+                    resolveCommunityStockTag(tag, stockSymbols),
+                  ),
+                }}
+                currentUserId={user.id}
+                commentDrafts={commentDrafts}
+                setCommentDrafts={setCommentDrafts}
+                replyDrafts={replyDrafts}
+                setReplyDrafts={setReplyDrafts}
+                onLike={toggleLike}
+                onComment={createComment}
+                onEditPost={editPost}
+                onDeletePost={deletePost}
+                onEditComment={editComment}
+                onDeleteComment={deleteComment}
+                onStockTagClick={openStock}
+                usStocks={usStocks}
+                krStocks={krStocks}
+                livePrices={livePrices}
+                extraQuotes={extraQuotes}
+                exchangeRate={exchangeRate}
+                forceExpanded
+                enableImagePreview
+              />
+            ))}
+          </div>
         </div>
       </>
     );
@@ -435,6 +538,8 @@ export function CommunityPage() {
                   extraQuotes={extraQuotes}
                   exchangeRate={exchangeRate}
                   forceExpanded={post.id === selectedPostId}
+                  enableImagePreview={false}
+                  onOpenPost={(nextPostId) => router.push(`/community/${nextPostId}`)}
                 />
               ))}
             </div>

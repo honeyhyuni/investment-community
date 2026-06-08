@@ -8,6 +8,8 @@ export function AuthForm({
   setMode,
   email,
   setEmail,
+  rememberEmail,
+  setRememberEmail,
   password,
   setPassword,
   nickname,
@@ -19,6 +21,8 @@ export function AuthForm({
   setMode: (mode: AuthMode) => void;
   email: string;
   setEmail: (value: string) => void;
+  rememberEmail: boolean;
+  setRememberEmail: (value: boolean) => void;
   password: string;
   setPassword: (value: string) => void;
   nickname: string;
@@ -53,6 +57,17 @@ export function AuthForm({
 
       <form onSubmit={submitAuth} className="mt-5 space-y-4">
         <TextInput label="Email" value={email} setValue={setEmail} type="email" />
+        {mode === "login" ? (
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-[#344052]">
+            <input
+              type="checkbox"
+              checked={rememberEmail}
+              onChange={(event) => setRememberEmail(event.target.checked)}
+              className="h-4 w-4 cursor-pointer accent-[#1f6f8b]"
+            />
+            email 기억
+          </label>
+        ) : null}
         {mode === "register" ? (
           <TextInput label="Nickname" value={nickname} setValue={setNickname} />
         ) : null}
@@ -65,7 +80,7 @@ export function AuthForm({
         />
         <button
           disabled={loading}
-          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white hover:bg-[#195b72] disabled:opacity-60"
+          className="inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white hover:bg-[#195b72] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {mode === "register" ? <UserPlus size={16} /> : <ShieldCheck size={16} />}
           {loading ? "Working" : mode === "register" ? "Request access" : "Sign in"}
