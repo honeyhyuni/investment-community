@@ -83,6 +83,12 @@ body {
   margin: 0.4em 0;
   white-space: break-spaces;
 }
+.tiptap-content :where(p:empty, p:has(> br:only-child)) {
+  min-height: 1.75em;
+}
+.tiptap-content :where(p:empty)::before {
+  content: "\00a0";
+}
 .tiptap-content :where(ul) {
   list-style: disc;
   padding-left: 1.4em;
