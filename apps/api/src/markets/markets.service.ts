@@ -858,7 +858,7 @@ export class MarketsService {
       this.getMarketBriefingNews(normalizedMarket, language),
       this.getMarketPulse().catch(() => [] as MarketQuote[]),
     ]);
-    if (news.length < 3) {
+    if (news.length < 3 && !pulse.length) {
       throw new ServiceUnavailableException('Not enough market news to create a briefing.');
     }
     const generated = await this.generateMarketBriefing(
