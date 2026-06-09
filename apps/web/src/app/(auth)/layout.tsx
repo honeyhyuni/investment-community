@@ -11,11 +11,12 @@ import { useMarketDataStore } from "@/common/stores/market-data";
 import { MarketPulse } from "@/domain/markets/components/MarketPulse";
 
 const NAV_ITEMS: Array<{
-  id: "stocks" | "news" | "community" | "admin";
+  id: "stocks" | "news" | "marketBriefing" | "community" | "admin";
   href: string;
   label: { en: string; ko: string };
   adminOnly?: boolean;
 }> = [
+  { id: "marketBriefing", href: "/market-briefing", label: { en: "Market Briefing", ko: "마켓 브리핑" } },
   { id: "stocks", href: "/", label: { en: "Stocks", ko: "종목" } },
   { id: "news", href: "/news", label: { en: "News", ko: "뉴스" } },
   { id: "community", href: "/community", label: { en: "Community", ko: "커뮤니티" } },

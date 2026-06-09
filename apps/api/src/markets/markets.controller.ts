@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -6,6 +6,7 @@ import { UserRole } from '../users/user-role.enum';
 import {
   CandlePoint,
   MarketNews,
+  MarketBriefing,
   MarketQuote,
   StockDetail,
   StockSymbol,
@@ -93,6 +94,35 @@ export class MarketsController {
     @Query('language') language = 'en',
   ): Promise<MarketNews[]> {
     return this.marketsService.getMarketNews(category, market, language);
+  }
+
+  @Get('briefing')
+  getMarketBriefing(
+    @Query('market') market = 'US',
+    @Query('language') language = 'ko',
+  ): Promise<MarketBriefing> {
+    return this.marketsService.getLatestMarketBriefing(market, language);
+  }
+
+  @Get('briefings')
+  getMarketBriefings(
+    @Query('market') market = 'US',
+  ): Promise<MarketBriefing[]> {
+    return this.marketsService.getMarketBriefings(market);
+  }
+
+  @Get('briefings/:id')
+  getMarketBriefingById(@Param('id') id: string): Promise<MarketBriefing> {
+    return this.marketsService.getMarketBriefingById(id);
+  }
+
+  @Post('briefings/run')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  runMarketBriefing(
+    @Query('market') market = 'US',
+  ): Promise<MarketBriefing> {
+    return this.marketsService.runMarketBriefing(market);
   }
 
   @Get('candles')

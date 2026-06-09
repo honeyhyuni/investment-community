@@ -1,4 +1,10 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -13,9 +19,11 @@ import {
   StockDetail,
   StockSymbol,
   MarketNews,
+  MarketBriefing,
 } from './finnhub-quote.dto';
 import { StockProfileEntity } from './stock-profile.entity';
 import { StockMasterEntity } from './stock-master.entity';
+import { MarketBriefingEntity } from './market-briefing.entity';
 
 const MARKET_PULSE = [
   { symbol: '^IXIC', name: 'Nasdaq Composite' },
@@ -178,6 +186,8 @@ export class MarketsService {
     private readonly stockProfilesRepository: Repository<StockProfileEntity>,
     @InjectRepository(StockMasterEntity)
     private readonly stockMasterRepository: Repository<StockMasterEntity>,
+    @InjectRepository(MarketBriefingEntity)
+    private readonly marketBriefingsRepository: Repository<MarketBriefingEntity>,
   ) {
     this.redis = new Redis(
       this.configService.get<string>('REDIS_URL') ?? 'redis://redis:6379',
@@ -796,6 +806,152 @@ export class MarketsService {
     return this.localizeNewsHeadlines(news, language);
   }
 
+  async getLatestMarketBriefing(
+    market = 'US',
+    language = 'ko',
+  ): Promise<MarketBriefing> {
+    const normalizedMarket = market.toUpperCase() === 'KR' ? 'KR' : 'US';
+    const briefing = await this.marketBriefingsRepository.findOne({
+      where: { market: normalizedMarket },
+      order: { generatedAt: 'DESC' },
+    });
+    if (briefing) {
+      return this.toMarketBriefingDto(briefing);
+    }
+    return this.runMarketBriefing(normalizedMarket, language);
+  }
+
+  async getMarketBriefings(market = 'US'): Promise<MarketBriefing[]> {
+    const normalizedMarket = market.toUpperCase() === 'KR' ? 'KR' : 'US';
+    const briefings = await this.marketBriefingsRepository.find({
+      where: { market: normalizedMarket },
+      order: { generatedAt: 'DESC' },
+      take: 100,
+    });
+    return briefings.map((briefing) => this.toMarketBriefingDto(briefing));
+  }
+
+  async getMarketBriefingById(id: string): Promise<MarketBriefing> {
+    const briefing = await this.marketBriefingsRepository.findOne({ where: { id } });
+    if (!briefing) {
+      throw new NotFoundException('Market briefing not found.');
+    }
+    return this.toMarketBriefingDto(briefing);
+  }
+
+  @Cron('0 25 8 * * 2-6', { timeZone: 'Asia/Seoul' })
+  async runScheduledUsMarketBriefing(): Promise<void> {
+    await this.runScheduledMarketBriefing('US');
+  }
+
+  @Cron('0 55 15 * * 1-5', { timeZone: 'Asia/Seoul' })
+  async runScheduledKrMarketBriefing(): Promise<void> {
+    await this.runScheduledMarketBriefing('KR');
+  }
+
+  async runMarketBriefing(
+    market = 'US',
+    language = 'ko',
+  ): Promise<MarketBriefing> {
+    const normalizedMarket = market.toUpperCase() === 'KR' ? 'KR' : 'US';
+    const [news, pulse] = await Promise.all([
+      this.getMarketBriefingNews(normalizedMarket, language),
+      this.getMarketPulse().catch(() => [] as MarketQuote[]),
+    ]);
+    if (news.length < 3) {
+      throw new ServiceUnavailableException('Not enough market news to create a briefing.');
+    }
+    const generated = await this.generateMarketBriefing(
+      normalizedMarket,
+      news.slice(0, 20),
+      pulse,
+      language,
+    );
+    if (!generated) {
+      throw new ServiceUnavailableException('휴장이었습니다.');
+    }
+    const datedTitle = this.withKoreanDatePrefix(generated.title);
+    const imageUrl = await this.generateMarketBriefingImage(
+      normalizedMarket,
+      datedTitle,
+      generated.keywords,
+      generated.summaryLines,
+    ).catch((error) => {
+      this.logger.warn(
+        `Market briefing image generation failed for ${normalizedMarket}: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+      return null;
+    });
+    const saved = await this.marketBriefingsRepository.save(
+        this.marketBriefingsRepository.create({
+        market: normalizedMarket,
+        title: datedTitle,
+        titleCandidates: generated.titleCandidates,
+        summary: generated.summary,
+        summaryLines: generated.summaryLines,
+        macroLines: generated.macroLines,
+        companyNews: generated.companyNews,
+        keywords: generated.keywords,
+        watchPoints: generated.watchPoints,
+        imageUrl,
+        sources: generated.sources,
+        source: 'openai',
+        model: generated.model,
+        imageModel: imageUrl
+          ? this.configService.get<string>('OPENAI_IMAGE_MODEL')?.trim() ||
+            'gpt-image-1'
+          : null,
+        generatedAt: new Date(),
+      }),
+    );
+    return this.toMarketBriefingDto(saved);
+  }
+
+  private async getMarketBriefingNews(
+    market: 'US' | 'KR',
+    language: string,
+  ): Promise<MarketNews[]> {
+    if (market === 'KR') {
+      return this.getMarketNews('kr', market, language);
+    }
+
+    const symbolQueries = [
+      'NVDA Nvidia stock AI chips',
+      'MU Micron stock memory semiconductor',
+      'AAPL Apple stock',
+      'MSFT Microsoft stock AI cloud',
+      'TSLA Tesla stock',
+      'AMZN Amazon stock',
+      'META Meta stock',
+      'GOOGL Alphabet stock',
+      'AMD stock semiconductor',
+      'AVGO Broadcom stock',
+      'ORCL Oracle stock',
+    ];
+    const newsGroups = await Promise.all([
+      this.getYahooTrendingNews().catch(() => []),
+      this.getYahooSearchNews('US stock market close Nasdaq S&P 500 Dow').catch(
+        () => [],
+      ),
+      ...symbolQueries.map((query) =>
+        this.getYahooSearchNews(query).catch(() => []),
+      ),
+    ]);
+    const byUrl = new Map<string, MarketNews>();
+    newsGroups.flat().forEach((item) => {
+      if (item.headline && item.url && !byUrl.has(item.url)) {
+        byUrl.set(item.url, item);
+      }
+    });
+
+    return this.localizeNewsHeadlines(
+      [...byUrl.values()].sort((a, b) => b.datetime - a.datetime).slice(0, 60),
+      language,
+    );
+  }
+
   async getStockNews(
     symbol: string,
     market = 'US',
@@ -1227,6 +1383,363 @@ export class MarketsService {
       from: from.toISOString().slice(0, 10),
       to: to.toISOString().slice(0, 10),
     });
+  }
+
+  private async generateMarketBriefing(
+    market: 'US' | 'KR',
+    news: MarketNews[],
+    pulse: MarketQuote[],
+    language: string,
+  ): Promise<Omit<MarketBriefing, 'id' | 'imageUrl' | 'imageModel' | 'generatedAt'> | null> {
+    const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+    const model =
+      this.configService.get<string>('OPENAI_MODEL')?.trim() || 'gpt-5.5';
+    if (!apiKey) {
+      throw new ServiceUnavailableException('OpenAI API key is not configured.');
+    }
+
+    const sources = news.slice(0, 15).map((item) => ({
+      headline: item.translatedHeadline || item.headline,
+      source: item.source,
+      url: item.url,
+      datetime: item.datetime,
+    }));
+    const pulseLines = pulse
+      .filter((item) => market === 'US' ? !item.symbol.startsWith('KIS_') : item.symbol.startsWith('KIS_'))
+      .slice(0, 8)
+      .map(
+        (item) =>
+          `${item.name ?? item.symbol}: ${item.current} (${item.change}, ${item.percentChange}%)`,
+      );
+    const targetLanguage = language.toLowerCase() === 'en' ? 'English' : 'Korean';
+    const reportScope =
+      market === 'KR'
+        ? '한국장은 오늘 장 마감 이후 확인하는 오늘장 주식 요약입니다.'
+        : '미국장은 한국 출근길에 보는 전날 미국장 주식 요약입니다.';
+
+    const response = await this.fetchOpenAiWithRetry('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        service_tier: 'flex',
+        input: [
+          {
+            role: 'system',
+            content:
+              'You are a market close report writer for Korean retail investors. Return only valid JSON matching the schema. Do not include markdown fences.',
+          },
+          {
+            role: 'user',
+            content: [
+              `Market: ${market}`,
+              `Language: ${targetLanguage}`,
+              `Report scope: ${reportScope}`,
+              'Instruction:',
+              '중요: 이 프롬프트 안에 깨진 한글(mojibake)이 보이면 모두 무시하고, 아래 정상 한국어 지시문만 따라라.',
+              '너는 한국 개인투자자를 위한 장 마감 리포트 작성자다.',
+              '아래 제공된 시장 데이터와 뉴스 데이터만 근거로 사용해라.',
+              '제공되지 않은 사실, 주가, 날짜, 기업 발언은 절대 추측하지 마라.',
+              '투자 권유 표현은 피하고, 정보 전달 중심으로 작성해라.',
+              '모든 문장은 존댓말 문체로 작성해라. "~했다", "~강조했다"가 아니라 "~했습니다", "~강조했습니다"처럼 끝내라.',
+              '제목은 본문 날짜 기준으로 [M월 D일] 제목 형식이어야 한다.',
+              '회사/종목 표기는 "삼성전자 #005930", "Nvidia #NVDA"처럼 괄호 없이 종목명 뒤에 #티커를 붙여라.',
+              '미국장은 ETF보다 개별 기업 뉴스와 업종 이슈를 우선 정리해라. ETF 뉴스만 반복하지 마라.',
+              '전일 미국장이 휴장이었을 경우 다른 내용 없이 정확히 "휴장이었습니다." 만 답변해라.',
+              '금일 한국장이 휴장이었을 경우 다른 내용 없이 정확히 "휴장이었습니다." 만 답변해라.',
+              '모든 문장은 존댓말 문체로 작성해라. "~했다", "~강조했다"가 아니라 "~했습니다", "~강조했습니다"처럼 끝내라.',
+              '제목은 본문 날짜 기준으로 [M월 D일] 제목 형식이어야 한다.',
+              '회사/종목 표기는 "삼성전자 #005930", "Nvidia #NVDA"처럼 괄호 없이 종목명 뒤에 #티커를 붙여라.',
+              '미국장은 ETF보다 개별 기업 뉴스와 업종 이슈를 우선 정리해라. ETF 뉴스만 반복하지 마라.',
+              '너는 한국 개인투자자를 위한 장 마감 리포트 작성자다.',
+              '아래 제공된 시장 데이터와 뉴스 데이터만 근거로 사용해라.',
+              '제공되지 않은 사실, 주가, 날짜, 기업 발언은 절대 추측하지 마라.',
+              '투자 권유 표현은 피하고, 정보 전달 중심으로 작성해라.',
+              '너는 한국 개인투자자를 위한 장 마감 리포트 작성자다.',
+              '아래 제공된 시장 데이터와 뉴스 데이터만 근거로 사용해라.',
+              '제공되지 않은 사실, 주가, 날짜, 기업 발언은 절대 추측하지 마라.',
+              '투자 권유 표현은 피하고, 정보 전달 중심으로 작성해라.',
+              `Market indicators:\n${pulseLines.join('\n') || 'No indicator data.'}`,
+              `News:\n${sources
+                .map((item, index) => `${index + 1}. ${item.headline} (${item.source})`)
+                .join('\n') || 'No news.'}`,
+              [
+                '정상 출력 요구사항:',
+                '휴장이 아닌 경우에는 JSON만 출력해라. 마크다운 코드블록은 쓰지 마라.',
+                '1. 게시글 제목 후보 3개 작성',
+                '2. 가장 좋은 제목 1개 선택',
+                '3. 시장 전체 요약은 5줄로 작성',
+                '4. 매크로 점검은 10~15줄로 작성. 전일 지정학, 물가, CPI, 금리, 환율, 원자재, 정책, 수급 등 시장이 왜 움직였는지를 설명해라.',
+                '5. 주요 종목/기업 뉴스 5~10개 작성',
+                '6. 각 종목/기업 뉴스는 2~5줄로 작성',
+                '7. 오늘의 핵심 키워드 3~5개 작성',
+                '8. 마지막 단기 관전 포인트 2~3줄 작성',
+                '9. PNG 그림은 별도 이미지 생성 API에서 만들 예정이므로 JSON에는 넣지 마라.',
+                '10. 휴장일이면 JSON을 출력하지 말고 "휴장이었습니다." 만 출력해라.',
+                'JSON 필드는 titleCandidates, title, summaryLines, macroLines, companyNews, keywords, watchPoints 만 사용해라.',
+              ].join('\n'),
+              [
+                'Output goals:',
+                '1. 게시글 제목 후보 3개 작성',
+                '2. 가장 좋은 제목 1개 선택',
+                '3. 시장 전체 요약 5줄 작성',
+                '4. 매크로 점검 10~15줄 작성',
+                '5. 주요 종목/기업 뉴스 5~10개 작성',
+                '6. 각 종목/기업 뉴스는 2~5줄로 작성',
+                '7. 오늘의 핵심 키워드 3~5개 작성',
+                '8. 마지막 단기 관전 포인트 2~3줄 작성',
+                '8. PNG 그림은 별도 이미지 생성 API에서 만들 예정이므로 JSON에는 넣지 마라.',
+              ].join('\n'),
+              [
+                'Required output:',
+                '1. 게시글 제목 후보 3개',
+                '2. 가장 좋은 제목 1개 선택',
+                '3. 시장 전체 요약 5줄',
+                '4. 매크로 점검 10~15줄',
+                '5. 주요 종목/기업 뉴스 5~10개. 종목명 옆에는 가능한 경우 #[티커명] 형식 포함',
+                '6. 각 종목/기업 뉴스는 2~5줄',
+                '7. 오늘의 핵심 키워드 3~5개',
+                '8. 마지막 단기 관전 포인트 2~3줄',
+              ].join('\n'),
+            ].join('\n\n'),
+          },
+        ],
+        max_output_tokens: 5000,
+      }),
+    }, 120_000, 300_000);
+
+    if (!response.ok) {
+      const message = await response.text().catch(() => '');
+      throw new ServiceUnavailableException(
+        `OpenAI briefing request failed: ${message || response.status}`,
+      );
+    }
+
+    const body = (await response.json()) as {
+      output_text?: string;
+      output?: Array<{ content?: Array<{ text?: string }> }>;
+    };
+    const outputText =
+      body.output_text ??
+      body.output
+        ?.flatMap((item) => item.content ?? [])
+        .map((item) => item.text)
+        .filter(Boolean)
+        .join('\n');
+    if (!outputText) {
+      throw new ServiceUnavailableException('OpenAI briefing response is empty.');
+    }
+
+    const trimmedOutput = outputText.trim();
+    if (trimmedOutput === '휴장이었습니다.') {
+      return null;
+    }
+
+    const jsonText = this.extractJsonObject(trimmedOutput);
+    const parsed = JSON.parse(jsonText) as Pick<
+      MarketBriefing,
+      | 'titleCandidates'
+      | 'title'
+      | 'summaryLines'
+      | 'macroLines'
+      | 'companyNews'
+      | 'keywords'
+      | 'watchPoints'
+    >;
+    return {
+      titleCandidates: parsed.titleCandidates,
+      market,
+      title: parsed.title,
+      summary: (parsed.summaryLines ?? []).join('\n\n'),
+      summaryLines: parsed.summaryLines ?? [],
+      macroLines: parsed.macroLines ?? [],
+      companyNews: parsed.companyNews ?? [],
+      keywords: parsed.keywords ?? [],
+      watchPoints: parsed.watchPoints ?? [],
+      model,
+      sources,
+    };
+  }
+
+  private async fetchOpenAiWithRetry(
+    url: string,
+    init: RequestInit,
+    firstTimeoutMs: number,
+    retryTimeoutMs: number,
+  ): Promise<Response> {
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(firstTimeoutMs),
+      });
+      if (!this.shouldRetryOpenAiResponse(response)) {
+        return response;
+      }
+
+      const message = await response.clone().text().catch(() => '');
+      this.logger.warn(
+        `OpenAI request retrying after retryable response ${response.status}: ${
+          message || response.statusText
+        }`,
+      );
+    } catch (error) {
+      if (!this.isRetryableOpenAiError(error)) {
+        throw error;
+      }
+      this.logger.warn(
+        `OpenAI request retrying after retryable error: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+    }
+
+    return fetch(url, {
+      ...init,
+      signal: AbortSignal.timeout(retryTimeoutMs),
+    });
+  }
+
+  private shouldRetryOpenAiResponse(response: Response): boolean {
+    return response.status === 429;
+  }
+
+  private isRetryableOpenAiError(error: unknown): boolean {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      return true;
+    }
+    const message =
+      error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    return (
+      message.includes('timeout') ||
+      message.includes('resource unavailable') ||
+      message.includes('429')
+    );
+  }
+
+  private extractJsonObject(value: string): string {
+    const fenced = value.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
+    if (fenced) {
+      return fenced;
+    }
+    const start = value.indexOf('{');
+    const end = value.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      return value.slice(start, end + 1);
+    }
+    return value;
+  }
+
+  private withKoreanDatePrefix(title: string): string {
+    const now = new Date();
+    const koreaDate = new Date(
+      now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }),
+    );
+    const prefix = `[${koreaDate.getMonth() + 1}월 ${koreaDate.getDate()}일]`;
+    const cleanTitle = title.replace(/^\[\d{1,2}월\s+\d{1,2}일\]\s*/, '').trim();
+    return `${prefix} ${cleanTitle}`;
+  }
+
+  private async generateMarketBriefingImage(
+    market: 'US' | 'KR',
+    title: string,
+    keywords: string[],
+    summaryLines: string[],
+  ): Promise<string> {
+    const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+    const model =
+      this.configService.get<string>('OPENAI_IMAGE_MODEL')?.trim() ||
+      'gpt-image-1';
+    if (!apiKey) {
+      throw new ServiceUnavailableException('OpenAI API key is not configured.');
+    }
+
+    const response = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        size: '1536x1024',
+        prompt: [
+          'Create a polished 16:9 PNG editorial cover image for a Korean retail investor market close report.',
+          'Style: premium financial PPT cover, clean dashboard composition, restrained dark navy and white background, subtle green/red market accents, professional typography feel.',
+          'Use 3 to 5 simple visual blocks at most. Avoid clutter, tiny text, fake logos, overloaded numbers, comic style, neon cyberpunk, or sensational news graphics.',
+          'Do not render Korean text, article titles, ticker labels, numbers, or readable words inside the image because generated text can break. Use abstract charts, icons, panels, and clean visual hierarchy instead.',
+          'The image should work as a top banner inside a web article without cropping important content.',
+          `Market: ${market}`,
+          `Title: ${title}`,
+          `Keywords: ${keywords.join(', ')}`,
+          `Facts only from summary: ${summaryLines.slice(0, 5).join(' / ')}`,
+          'No fake logos, no specific unprovided prices, no investment advice text.',
+        ].join('\n'),
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+
+    if (!response.ok) {
+      const message = await response.text().catch(() => '');
+      throw new ServiceUnavailableException(
+        `OpenAI image request failed: ${message || response.status}`,
+      );
+    }
+    const body = (await response.json()) as {
+      data?: Array<{ b64_json?: string }>;
+    };
+    const image = body.data?.[0]?.b64_json;
+    if (!image) {
+      throw new ServiceUnavailableException('OpenAI image response is empty.');
+    }
+    return `data:image/png;base64,${image}`;
+  }
+
+  private async runScheduledMarketBriefing(market: 'US' | 'KR'): Promise<void> {
+    try {
+      const latest = await this.marketBriefingsRepository.findOne({
+        where: { market },
+        order: { generatedAt: 'DESC' },
+      });
+      if (
+        latest &&
+        new Date(latest.generatedAt).toDateString() === new Date().toDateString()
+      ) {
+        return;
+      }
+      const briefing = await this.runMarketBriefing(market);
+      this.logger.log(
+        `Scheduled ${market} market briefing generated: ${briefing.id}`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Scheduled ${market} market briefing skipped: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+    }
+  }
+
+  private toMarketBriefingDto(entity: MarketBriefingEntity): MarketBriefing {
+    return {
+      id: entity.id,
+      market: entity.market,
+      title: entity.title,
+      titleCandidates: entity.titleCandidates,
+      summary: entity.summary,
+      summaryLines: entity.summaryLines,
+      macroLines: entity.macroLines ?? [],
+      companyNews: entity.companyNews,
+      keywords: entity.keywords,
+      watchPoints: entity.watchPoints,
+      imageUrl: entity.imageUrl,
+      generatedAt: Math.floor(entity.generatedAt.getTime() / 1000),
+      model: entity.model,
+      imageModel: entity.imageModel,
+      sources: entity.sources,
+    };
   }
 
   private async localizeNewsHeadlines(

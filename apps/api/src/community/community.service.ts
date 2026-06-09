@@ -290,7 +290,7 @@ export class CommunityService {
     content: string,
   ): Promise<CommunityPostDto> {
     const comment = await this.findComment(commentId);
-    await this.assertOwnerOrAdmin(comment.author.id, currentUserId);
+    this.assertOwner(comment.author.id, currentUserId);
     if (!content?.trim()) {
       throw new BadRequestException('Comment content is required.');
     }
@@ -304,7 +304,7 @@ export class CommunityService {
     commentId: string,
   ): Promise<CommunityPostDto> {
     const comment = await this.findComment(commentId);
-    this.assertOwner(comment.author.id, currentUserId);
+    await this.assertOwnerOrAdmin(comment.author.id, currentUserId);
     const post = comment.post;
     await this.commentsRepository.remove(comment);
     return (await this.toPostDtos([post], currentUserId))[0];
