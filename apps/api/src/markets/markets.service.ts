@@ -1559,6 +1559,7 @@ export class MarketsService {
       | 'keywords'
       | 'watchPoints'
     >;
+    const companyNews = this.normalizeBriefingCompanyNews(parsed.companyNews);
     return {
       titleCandidates: parsed.titleCandidates,
       market,
@@ -1566,7 +1567,9 @@ export class MarketsService {
       summary: (parsed.summaryLines ?? []).join('\n\n'),
       summaryLines: parsed.summaryLines ?? [],
       macroLines: parsed.macroLines ?? [],
-      companyNews: this.normalizeBriefingCompanyNews(parsed.companyNews),
+      companyNews: companyNews.length
+        ? companyNews
+        : this.buildBriefingCompanyNewsFallback(news),
       keywords: parsed.keywords ?? [],
       watchPoints: parsed.watchPoints ?? [],
       model,
@@ -1615,6 +1618,34 @@ export class MarketsService {
         };
       })
       .filter((item) => item.name || item.headline || item.lines.length);
+  }
+
+  private buildBriefingCompanyNewsFallback(
+    news: MarketNews[],
+  ): MarketBriefing['companyNews'] {
+    const seen = new Set<string>();
+    return news
+      .filter((item) => item.headline && item.url)
+      .filter((item) => {
+        if (seen.has(item.url)) {
+          return false;
+        }
+        seen.add(item.url);
+        return true;
+      })
+      .slice(0, 5)
+      .map((item) => {
+        const headline = item.translatedHeadline || item.headline;
+        const symbol =
+          headline.match(/#([A-Z0-9.]{1,10}|\d{6})/i)?.[1]?.toUpperCase() ??
+          (item.related.match(/\b([A-Z]{1,5}|[0-9]{6})\b/)?.[1] || '');
+        return {
+          symbol,
+          name: symbol || item.source || 'Market',
+          headline,
+          lines: [item.summary || headline],
+        };
+      });
   }
 
   private async fetchOpenAiWithRetry(
