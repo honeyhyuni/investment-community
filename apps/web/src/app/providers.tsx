@@ -69,14 +69,20 @@ export function Providers({ children }: { children: ReactNode }) {
       return;
     }
 
-    const interval = window.setInterval(verify, 5000);
-    window.addEventListener("focus", verify);
-    document.addEventListener("visibilitychange", verify);
+    let lastVerifiedAt = 0;
+    const verifyIfNeeded = () => {
+      if (document.visibilityState !== "visible" || Date.now() - lastVerifiedAt < 5 * 60_000) {
+        return;
+      }
+      lastVerifiedAt = Date.now();
+      void verify();
+    };
+    window.addEventListener("focus", verifyIfNeeded);
+    document.addEventListener("visibilitychange", verifyIfNeeded);
 
     return () => {
-      window.clearInterval(interval);
-      window.removeEventListener("focus", verify);
-      document.removeEventListener("visibilitychange", verify);
+      window.removeEventListener("focus", verifyIfNeeded);
+      document.removeEventListener("visibilitychange", verifyIfNeeded);
     };
   }, [accessToken, verify]);
 

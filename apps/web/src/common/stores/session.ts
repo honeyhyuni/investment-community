@@ -23,6 +23,8 @@ type SessionState = {
   setUser: (user: User) => void;
 };
 
+let verifyPromise: Promise<void> | null = null;
+
 export const useSessionStore = create<SessionState>((set, get) => ({
   accessToken: null,
   user: null,
@@ -68,15 +70,29 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   verify: async () => {
+    if (verifyPromise) {
+      return verifyPromise;
+    }
     const { accessToken } = get();
     if (!accessToken) {
       return;
     }
-    try {
-      await apiRequest<User>("/auth/me", "GET", { accessToken });
-    } catch {
-      set({ accessToken: null, user: null });
-    }
+    verifyPromise = (async () => {
+      try {
+        const user = await apiRequest<User>("/auth/me", "GET", { accessToken });
+        set({ user });
+      } catch {
+        try {
+          const response = await apiRequest<AuthResponse>("/auth/refresh", "POST");
+          set({ accessToken: response.accessToken, user: response.user });
+        } catch {
+          set({ accessToken: null, user: null });
+        }
+      } finally {
+        verifyPromise = null;
+      }
+    })();
+    return verifyPromise;
   },
 
   setUser: (user) => set({ user }),

@@ -112,6 +112,7 @@ export function StocksPage() {
   const krSymbols = useMarketDataStore((s) => s.krSymbols);
   const livePrices = useMarketDataStore((s) => s.livePrices);
   const liveSeries = useMarketDataStore((s) => s.liveSeries);
+  const applyTrade = useMarketDataStore((s) => s.applyTrade);
   const exchangeRate = useMarketDataStore((s) => s.exchangeRate);
   const router = useRouter();
   const [relatedPosts, setRelatedPosts] = useState<CommunityPost[]>([]);
@@ -294,6 +295,35 @@ export function StocksPage() {
       );
     }
   }, [selectedSymbol, stockTab]);
+
+  useEffect(() => {
+    if (!accessToken || stockTab !== "KR" || !selectedSymbol) {
+      return;
+    }
+    let active = true;
+    const refreshQuote = async () => {
+      const quote = await apiRequest<MarketQuote>(
+        `/markets/stocks/quote?symbol=${encodeURIComponent(selectedSymbol)}&market=KR`,
+        "GET",
+        { accessToken },
+      ).catch(() => null);
+      if (!active || !quote || quote.current <= 0) {
+        return;
+      }
+      applyTrade({
+        symbol: selectedSymbol,
+        price: quote.current,
+        timestamp: Date.now(),
+        volume: 0,
+      });
+    };
+    void refreshQuote();
+    const interval = window.setInterval(refreshQuote, 15_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [accessToken, applyTrade, selectedSymbol, stockTab]);
 
   return (
     <>
@@ -609,7 +639,11 @@ function StockDetailPanel({
     );
     const isKoreanMarket =
       detail.profile.currency === "KRW" && detail.profile.country === "대한민국";
-    const logoUrl = detail.profile.logo || getFallbackLogoUrl(detail.profile.weburl);
+    const logoUrl =
+      detail.profile.logo ||
+      (isKoreanMarket
+        ? `https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${detail.symbol}.svg`
+        : getFallbackLogoUrl(detail.profile.weburl));
     const valuationItems = [
     {
       label: translateDetailLabel(language, "marketCap"),

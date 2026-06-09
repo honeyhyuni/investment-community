@@ -3,6 +3,7 @@
 import { Dispatch, SetStateAction, useEffect, useMemo, useRef } from "react";
 import { Image as ImageIcon, X } from "lucide-react";
 import { useEditor, EditorContent } from "@tiptap/react";
+import { Mark, mergeAttributes } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -11,6 +12,34 @@ import { stockSearchScore } from "@/common/utils/stock-search";
 import { CommunityContentBlock, StockTag } from "@/domain/community/types";
 import { MarketQuote, StockSymbol, TradeTick } from "@/common/types";
 import { StockTagQuote } from "@/domain/community/components/StockTagQuote";
+
+const StyledText = Mark.create({
+  name: "styledText",
+  addAttributes() {
+    return {
+      color: {
+        default: null,
+        parseHTML: (element) => element.style.color || null,
+      },
+      fontSize: {
+        default: null,
+        parseHTML: (element) => element.style.fontSize || null,
+      },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "span[style]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const style = [
+      HTMLAttributes.color ? `color: ${HTMLAttributes.color}` : "",
+      HTMLAttributes.fontSize ? `font-size: ${HTMLAttributes.fontSize}` : "",
+    ]
+      .filter(Boolean)
+      .join("; ");
+    return ["span", mergeAttributes(HTMLAttributes, { style }), 0];
+  },
+});
 
 export function PostEditor({
   title,
@@ -58,6 +87,7 @@ export function PostEditor({
     extensions: [
       StarterKit.configure({ link: { openOnClick: false } }),
       Image,
+      StyledText,
       Placeholder.configure({
         placeholder:
           "자유롭게 글을 작성하세요. 예) 투자 근거 · 핵심 지표 · 리스크 점검",
@@ -222,6 +252,38 @@ export function PostEditor({
                 active={editor.isActive("link")}
                 onClick={promptLink}
               />
+              <select
+                title="글자 크기"
+                defaultValue=""
+                onChange={(event) => {
+                  const fontSize = event.target.value;
+                  if (fontSize) {
+                    editor.chain().focus().setMark("styledText", { fontSize }).run();
+                  } else {
+                    editor.chain().focus().unsetMark("styledText").run();
+                  }
+                }}
+                className="h-9 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-2 text-sm font-semibold text-[#344052]"
+              >
+                <option value="">기본 크기</option>
+                <option value="13px">작게</option>
+                <option value="16px">보통</option>
+                <option value="20px">크게</option>
+                <option value="28px">매우 크게</option>
+              </select>
+              <label
+                title="글자 색상"
+                className="grid h-9 w-9 cursor-pointer place-items-center rounded-md border border-[#c7ceda] bg-white"
+              >
+                <span className="h-4 w-4 rounded-sm border border-[#c7ceda] bg-[linear-gradient(135deg,#b64242_0_33%,#1f6f8b_33%_66%,#344052_66%)]" />
+                <input
+                  type="color"
+                  className="sr-only"
+                  onChange={(event) =>
+                    editor.chain().focus().setMark("styledText", { color: event.target.value }).run()
+                  }
+                />
+              </label>
             </>
           ) : null}
           <label className="ml-auto inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold">

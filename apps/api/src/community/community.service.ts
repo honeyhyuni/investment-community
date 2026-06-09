@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, MoreThanOrEqual, Repository } from 'typeorm';
 import { User } from '../users/user.entity';
 import { UserStatus } from '../users/user-status.enum';
+import { UserRole } from '../users/user-role.enum';
 import { CommunityPost } from './community-post.entity';
 import { PostComment } from './post-comment.entity';
 import { PostLike } from './post-like.entity';
@@ -194,7 +195,7 @@ export class CommunityService {
 
   async deletePost(currentUserId: string, postId: string): Promise<{ ok: true }> {
     const post = await this.findPost(postId);
-    this.assertOwner(post.author.id, currentUserId);
+    await this.assertOwnerOrAdmin(post.author.id, currentUserId);
     await this.postsRepository.remove(post);
     return { ok: true };
   }
@@ -289,7 +290,7 @@ export class CommunityService {
     content: string,
   ): Promise<CommunityPostDto> {
     const comment = await this.findComment(commentId);
-    this.assertOwner(comment.author.id, currentUserId);
+    await this.assertOwnerOrAdmin(comment.author.id, currentUserId);
     if (!content?.trim()) {
       throw new BadRequestException('Comment content is required.');
     }
@@ -594,6 +595,19 @@ export class CommunityService {
   private assertOwner(ownerId: string, currentUserId: string): void {
     if (ownerId !== currentUserId) {
       throw new ForbiddenException('Only the author can modify this content.');
+    }
+  }
+
+  private async assertOwnerOrAdmin(ownerId: string, currentUserId: string): Promise<void> {
+    if (ownerId === currentUserId) {
+      return;
+    }
+    const currentUser = await this.usersRepository.findOne({
+      where: { id: currentUserId },
+      select: { id: true, role: true },
+    });
+    if (currentUser?.role !== UserRole.Admin) {
+      throw new ForbiddenException('Only the author or an admin can delete this content.');
     }
   }
 }

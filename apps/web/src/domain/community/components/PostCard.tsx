@@ -31,6 +31,8 @@ export function PostCard({
   forceExpanded = false,
   enableImagePreview = true,
   onOpenPost,
+  onAuthorClick,
+  canModerate = false,
 }: {
   post: CommunityPost;
   currentUserId: string;
@@ -53,6 +55,8 @@ export function PostCard({
   forceExpanded?: boolean;
   enableImagePreview?: boolean;
   onOpenPost?: (postId: string) => void;
+  onAuthorClick?: (userId: string) => void;
+  canModerate?: boolean;
 }) {
   const [expanded, setExpanded] = useState(forceExpanded);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -77,14 +81,25 @@ export function PostCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-[#607086]">
-            {post.author.nickname} · {new Date(post.createdAt).toLocaleString()}
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onAuthorClick?.(post.author.id);
+              }}
+              className="cursor-pointer hover:text-[#1f6f8b] hover:underline"
+            >
+              {post.author.nickname}
+            </button>{" "}
+            · {new Date(post.createdAt).toLocaleString()}
           </p>
           <h3 className="mt-1 truncate text-lg font-semibold">
             {post.title || post.content || "제목 없음"}
           </h3>
         </div>
-        {post.author.id === currentUserId ? (
+        {post.author.id === currentUserId || canModerate ? (
           <div className="flex gap-1">
+            {post.author.id === currentUserId ? (
             <button
               onClick={() => onEditPost(post)}
               title="수정"
@@ -92,6 +107,7 @@ export function PostCard({
             >
               <Pencil size={15} />
             </button>
+            ) : null}
             <button
               onClick={() => onDeletePost(post.id)}
               title="삭제"
@@ -171,6 +187,8 @@ export function PostCard({
               currentUserId={currentUserId}
               onEditComment={onEditComment}
               onDeleteComment={onDeleteComment}
+              canModerate={canModerate}
+              onAuthorClick={onAuthorClick}
             />
           ))}
           <div className="flex gap-2">

@@ -13,6 +13,8 @@ export function CommentThread({
   currentUserId,
   onEditComment,
   onDeleteComment,
+  canModerate = false,
+  onAuthorClick,
 }: {
   postId: string;
   comment: CommunityComment;
@@ -22,13 +24,18 @@ export function CommentThread({
   currentUserId: string;
   onEditComment: (commentId: string, content: string) => void;
   onDeleteComment: (commentId: string) => void;
+  canModerate?: boolean;
+  onAuthorClick?: (userId: string) => void;
 }) {
   return (
     <div className="rounded-md bg-[#f6f8fb] p-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold">{comment.author.nickname}</p>
-        {comment.author.id === currentUserId ? (
+        <button type="button" onClick={() => onAuthorClick?.(comment.author.id)} className="cursor-pointer text-sm font-semibold hover:text-[#1f6f8b] hover:underline">
+          {comment.author.nickname}
+        </button>
+        {comment.author.id === currentUserId || canModerate ? (
           <div className="flex gap-1">
+            {comment.author.id === currentUserId ? (
             <button
               onClick={() => onEditComment(comment.id, comment.content)}
               title="수정"
@@ -36,6 +43,7 @@ export function CommentThread({
             >
               <Pencil size={13} />
             </button>
+            ) : null}
             <button
               onClick={() => onDeleteComment(comment.id)}
               title="삭제"
@@ -52,9 +60,12 @@ export function CommentThread({
           {comment.replies.map((reply) => (
             <div key={reply.id} className="rounded-md bg-white p-2">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold">{reply.author.nickname}</p>
-                {reply.author.id === currentUserId ? (
+                <button type="button" onClick={() => onAuthorClick?.(reply.author.id)} className="cursor-pointer text-xs font-semibold hover:text-[#1f6f8b] hover:underline">
+                  {reply.author.nickname}
+                </button>
+                {reply.author.id === currentUserId || canModerate ? (
                   <div className="flex gap-1">
+                    {reply.author.id === currentUserId ? (
                     <button
                       onClick={() => onEditComment(reply.id, reply.content)}
                       title="수정"
@@ -62,6 +73,7 @@ export function CommentThread({
                     >
                       <Pencil size={12} />
                     </button>
+                    ) : null}
                     <button
                       onClick={() => onDeleteComment(reply.id)}
                       title="삭제"

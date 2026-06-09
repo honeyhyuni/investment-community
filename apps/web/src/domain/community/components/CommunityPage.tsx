@@ -26,7 +26,7 @@ import { PostEditor } from "@/domain/community/components/PostEditor";
 import { stockSearchScore } from "@/common/utils/stock-search";
 import { StockSymbol } from "@/common/types";
 
-export function CommunityPage({ postId }: { postId?: string }) {
+export function CommunityPage({ postId, userId }: { postId?: string; userId?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const accessToken = useSessionStore((s) => s.accessToken);
@@ -58,7 +58,7 @@ export function CommunityPage({ postId }: { postId?: string }) {
   const [error, setError] = useState("");
 
   const selectedPostId = postId ?? searchParams.get("post");
-  const detailMode = !!selectedPostId;
+  const detailMode = !!selectedPostId || !!userId;
   const stockSymbols = useMemo(() => [...krSymbols, ...usSymbols], [krSymbols, usSymbols]);
   useEffect(() => {
     if (!accessToken) {
@@ -68,8 +68,8 @@ export function CommunityPage({ postId }: { postId?: string }) {
       loadSinglePost(selectedPostId, accessToken);
       return;
     }
-    loadCommunity(accessToken, scope, sort);
-  }, [accessToken, scope, sort, selectedPostId]);
+    loadCommunity(accessToken, userId ? "user" : scope, sort, userId);
+  }, [accessToken, scope, sort, selectedPostId, userId]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -85,8 +85,9 @@ export function CommunityPage({ postId }: { postId?: string }) {
 
   async function loadCommunity(
     token = accessToken,
-    nextScope: CommunityScope = scope,
+    nextScope: CommunityScope | "user" = scope,
     nextSort: FeedSort = sort,
+    nextUserId?: string,
   ) {
     if (!token) {
       return;
@@ -97,7 +98,9 @@ export function CommunityPage({ postId }: { postId?: string }) {
     try {
       const [postsResult, usersResult] = await Promise.all([
         apiRequest<CommunityPost[]>(
-          `/community/feed?scope=${nextScope}&sort=${nextSort}`,
+          `/community/feed?scope=${nextScope}&sort=${nextSort}${
+            nextUserId ? `&userId=${encodeURIComponent(nextUserId)}` : ""
+          }`,
           "GET",
           { accessToken: token },
         ),
@@ -156,7 +159,7 @@ export function CommunityPage({ postId }: { postId?: string }) {
       );
       resetEditor();
       setEditorOpen(false);
-      await loadCommunity(accessToken, scope, sort);
+      await loadCommunity(accessToken, userId ? "user" : scope, sort, userId);
     } catch (postError) {
       setError(postError instanceof Error ? postError.message : "Could not post.");
     } finally {
@@ -270,7 +273,7 @@ export function CommunityPage({ postId }: { postId?: string }) {
         "POST",
         { accessToken },
       );
-      await loadCommunity(accessToken, scope, sort);
+      await loadCommunity(accessToken, userId ? "user" : scope, sort, userId);
     } catch (subscribeError) {
       setError(
         subscribeError instanceof Error
@@ -419,6 +422,8 @@ export function CommunityPage({ postId }: { postId?: string }) {
                 exchangeRate={exchangeRate}
                 forceExpanded
                 enableImagePreview
+                canModerate={user.role === "ADMIN"}
+                onAuthorClick={(nextUserId) => router.push(`/community/users/${nextUserId}`)}
               />
             ))}
           </div>
@@ -540,6 +545,8 @@ export function CommunityPage({ postId }: { postId?: string }) {
                   forceExpanded={post.id === selectedPostId}
                   enableImagePreview={false}
                   onOpenPost={(nextPostId) => router.push(`/community/${nextPostId}`)}
+                  canModerate={user.role === "ADMIN"}
+                  onAuthorClick={(nextUserId) => router.push(`/community/users/${nextUserId}`)}
                 />
               ))}
             </div>
@@ -555,10 +562,14 @@ export function CommunityPage({ postId }: { postId?: string }) {
                 <div key={communityUser.id} className="rounded-md border border-[#eef1f6] p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/community/users/${communityUser.id}`)}
+                        className="block max-w-full cursor-pointer truncate text-sm font-semibold hover:text-[#1f6f8b] hover:underline"
+                      >
                         {communityUser.nickname}
                         {communityUser.isMe ? " · 나" : ""}
-                      </p>
+                      </button>
                       <p className="truncate text-xs text-[#607086]">
                         구독자 {communityUser.subscriberCount} · 구독중 {communityUser.followingCount}
                       </p>

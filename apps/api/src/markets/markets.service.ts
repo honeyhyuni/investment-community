@@ -1714,20 +1714,15 @@ export class MarketsService {
       return cached;
     }
 
-    void this.getKoreanBasicMetrics(stock)
-      .then((metrics) =>
-        metrics
-          ? this.redis.set(key, JSON.stringify(metrics), 'EX', 6 * 60 * 60)
-          : undefined,
-      )
-      .catch((error) => {
-        this.logger.warn(
-          `Background KIS metrics refresh failed for ${stock.symbol}: ${
-            error instanceof Error ? error.message : 'unknown error'
-          }`,
-        );
-      });
-    return null;
+    const metrics =
+      (await this.getKoreanMetrics(stock)) ??
+      (await this.getKoreanBasicMetrics(stock).catch(() => null));
+    if (metrics) {
+      await this.redis
+        .set(key, JSON.stringify(metrics), 'EX', 6 * 60 * 60)
+        .catch(() => undefined);
+    }
+    return metrics;
   }
 
   private async getKoreanBasicMetrics(
