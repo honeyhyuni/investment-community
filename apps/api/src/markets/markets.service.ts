@@ -914,26 +914,7 @@ export class MarketsService {
     language: string,
   ): Promise<MarketNews[]> {
     if (market === 'KR') {
-      const financeNews = await this.getMarketNews('kr', market, language).catch(
-        () => [] as MarketNews[],
-      );
-      if (financeNews.length >= 3) {
-        return financeNews;
-      }
-
-      const fallbackGroups = await Promise.all(
-        ['코스피 코스닥 증시 마감', '한국 증시 마감', '코스피 반도체 코스닥'].map(
-          (query) => this.getNaverSearchNews(query).catch(() => [] as MarketNews[]),
-        ),
-      );
-      const byUrl = new Map<string, MarketNews>();
-      [...financeNews, ...fallbackGroups.flat()].forEach((item) => {
-        if (item.headline && item.url && !byUrl.has(item.url)) {
-          byUrl.set(item.url, item);
-        }
-      });
-
-      return [...byUrl.values()].sort((a, b) => b.datetime - a.datetime).slice(0, 60);
+      return this.getMarketNews('kr', market, language);
     }
 
     const symbolQueries = [
@@ -1242,7 +1223,7 @@ export class MarketsService {
   private async getNaverFinanceNews(): Promise<MarketNews[]> {
     const news: MarketNews[] = [];
 
-    for (const page of [1, 2, 3]) {
+    for (const page of [1, 2, 3, 4, 5, 6, 7, 8]) {
       const url = new URL('https://finance.naver.com/news/mainnews.naver');
       url.searchParams.set('page', String(page));
       const response = await fetch(url, {
@@ -1258,6 +1239,18 @@ export class MarketsService {
 
       const html = new TextDecoder('euc-kr').decode(await response.arrayBuffer());
       news.push(...this.parseNaverFinanceNews(html));
+      if (news.length >= 60) {
+        break;
+      }
+    }
+
+    if (news.length < 60) {
+      const searchGroups = await Promise.all([
+        this.getNaverSearchNews('코스피 코스닥 증시').catch(() => [] as MarketNews[]),
+        this.getNaverSearchNews('한국 증시 마감').catch(() => [] as MarketNews[]),
+        this.getNaverSearchNews('반도체 2차전지 증시').catch(() => [] as MarketNews[]),
+      ]);
+      news.push(...searchGroups.flat());
     }
 
     const byUrl = new Map<string, MarketNews>();
@@ -1267,7 +1260,7 @@ export class MarketsService {
       }
     });
 
-    return [...byUrl.values()].slice(0, 60);
+    return [...byUrl.values()].sort((a, b) => b.datetime - a.datetime).slice(0, 60);
   }
 
   private async getNaverStockNews(
@@ -1424,7 +1417,11 @@ export class MarketsService {
       datetime: item.datetime,
     }));
     const pulseLines = pulse
-      .filter((item) => market === 'US' ? !item.symbol.startsWith('KIS_') : item.symbol.startsWith('KIS_'))
+      .filter((item) =>
+        market === 'US'
+          ? !item.symbol.startsWith('KIS_')
+          : item.symbol.startsWith('KIS_'),
+      )
       .slice(0, 8)
       .map(
         (item) =>
@@ -1433,8 +1430,8 @@ export class MarketsService {
     const targetLanguage = language.toLowerCase() === 'en' ? 'English' : 'Korean';
     const reportScope =
       market === 'KR'
-        ? '한국장은 오늘 장 마감 이후 확인하는 오늘장 주식 요약입니다.'
-        : '미국장은 한국 출근길에 보는 전날 미국장 주식 요약입니다.';
+        ? '한국 개인투자자가 오늘 장 마감 후 확인하는 당일 한국 주식 요약입니다.'
+        : '한국 개인투자자가 출근길에 확인하는 전일 미국 주식 요약입니다.';
 
     const response = await this.fetchOpenAiWithRetry('https://api.openai.com/v1/responses', {
       method: 'POST',
@@ -1457,40 +1454,24 @@ export class MarketsService {
               `Market: ${market}`,
               `Language: ${targetLanguage}`,
               `Report scope: ${reportScope}`,
-              'Instruction:',
-              '중요: 이 프롬프트 안에 깨진 한글(mojibake)이 보이면 모두 무시하고, 아래 정상 한국어 지시문만 따라라.',
-              '너는 한국 개인투자자를 위한 장 마감 리포트 작성자다.',
               '아래 제공된 시장 데이터와 뉴스 데이터만 근거로 사용해라.',
               '제공되지 않은 사실, 주가, 날짜, 기업 발언은 절대 추측하지 마라.',
               '투자 권유 표현은 피하고, 정보 전달 중심으로 작성해라.',
-              '모든 문장은 존댓말 문체로 작성해라. "~했다", "~강조했다"가 아니라 "~했습니다", "~강조했습니다"처럼 끝내라.',
-              '제목은 본문 날짜 기준으로 [M월 D일] 제목 형식이어야 한다.',
-              '회사/종목 표기는 "삼성전자 #005930", "Nvidia #NVDA"처럼 괄호 없이 종목명 뒤에 #티커를 붙여라.',
-              '미국장은 ETF보다 개별 기업 뉴스와 업종 이슈를 우선 정리해라. ETF 뉴스만 반복하지 마라.',
-              '전일 미국장이 휴장이었을 경우 다른 내용 없이 정확히 "휴장이었습니다." 만 답변해라.',
-              '금일 한국장이 휴장이었을 경우 다른 내용 없이 정확히 "휴장이었습니다." 만 답변해라.',
-              '모든 문장은 존댓말 문체로 작성해라. "~했다", "~강조했다"가 아니라 "~했습니다", "~강조했습니다"처럼 끝내라.',
-              '제목은 본문 날짜 기준으로 [M월 D일] 제목 형식이어야 한다.',
-              '회사/종목 표기는 "삼성전자 #005930", "Nvidia #NVDA"처럼 괄호 없이 종목명 뒤에 #티커를 붙여라.',
-              '미국장은 ETF보다 개별 기업 뉴스와 업종 이슈를 우선 정리해라. ETF 뉴스만 반복하지 마라.',
-              '너는 한국 개인투자자를 위한 장 마감 리포트 작성자다.',
-              '아래 제공된 시장 데이터와 뉴스 데이터만 근거로 사용해라.',
-              '제공되지 않은 사실, 주가, 날짜, 기업 발언은 절대 추측하지 마라.',
-              '투자 권유 표현은 피하고, 정보 전달 중심으로 작성해라.',
-              '너는 한국 개인투자자를 위한 장 마감 리포트 작성자다.',
-              '아래 제공된 시장 데이터와 뉴스 데이터만 근거로 사용해라.',
-              '제공되지 않은 사실, 주가, 날짜, 기업 발언은 절대 추측하지 마라.',
-              '투자 권유 표현은 피하고, 정보 전달 중심으로 작성해라.',
+              '모든 문장은 "~했습니다", "~보였습니다", "~영향을 줬습니다" 같은 종결형으로 작성해라.',
+              '제목은 본문 날짜 기준으로 [M월 D일] 형식을 반드시 붙여라.',
+              '종목 표기는 괄호 없이 "삼성전자 #005930", "Nvidia #NVDA" 형식으로 작성해라.',
+              '미국장 리포트는 전일 미국장 요약이고, 한국장 리포트는 당일 한국장 요약이다.',
+              '전일 미국장이 휴장이었거나 금일 한국장이 휴장이었으면 다른 JSON을 쓰지 말고 정확히 "휴장이었습니다."만 출력해라.',
               `Market indicators:\n${pulseLines.join('\n') || 'No indicator data.'}`,
               `News:\n${sources
                 .map((item, index) => `${index + 1}. ${item.headline} (${item.source})`)
                 .join('\n') || 'No news.'}`,
               [
                 '정상 출력 요구사항:',
-                '휴장이 아닌 경우에는 JSON만 출력해라. 마크다운 코드블록은 쓰지 마라.',
+                'JSON만 출력해라. 마크다운 코드 블록은 쓰지 마라.',
                 '1. 게시글 제목 후보 3개 작성',
                 '2. 가장 좋은 제목 1개 선택',
-                '3. 시장 전체 요약은 5줄로 작성',
+                '3. 시장 전체 요약 5줄 작성',
                 '4. 매크로 점검은 10~15줄로 작성해라.',
                 '전일 시장 방향성에 실제로 영향을 준 매크로 요인만 선별해서 설명해라.',
                 '탐색 범위는 지정학, 물가, CPI/PCE, 고용, 금리, 채권금리, 환율, 원자재, 유가, 정책, 중앙은행 발언, 재정 이슈, 수급, 신용위험, 변동성, 투자심리, 글로벌 주요국 증시 흐름, 업종 로테이션 등을 포함하되 이에 한정하지 마라.',
@@ -1499,39 +1480,30 @@ export class MarketsService {
                 '근거가 없거나 시장 영향이 확인되지 않은 항목은 언급하지 마라.',
                 '예를 들어 전일 CPI 관련 데이터나 뉴스가 제공되지 않았으면 CPI를 쓰지 마라.',
                 '개별 기업 뉴스는 companyNews에서 따로 다루므로, 매크로 점검에서는 개별 기업 이슈를 중심 소재로 작성하지 마라.',
-                '다만 개별 기업 뉴스가 지수, 업종, 투자심리, 수급에 영향을 준 경우에는 “반도체 업종”, “대형 기술주”, “2차전지주”처럼 업종·시장 단위로만 연결해서 설명해라.',
-                '각 줄은 단순 나열이 아니라 “무슨 일이 있었고 → 시장이 어떻게 해석했고 → 어떤 지수·업종·자산에 영향을 줬는지”의 흐름으로 작성해라.',
-                '중요도 기준은 “지수와 주요 업종 움직임을 설명하는 데 도움이 되는가”로 판단해라.',
-                '5. 주요 종목/기업 뉴스 5~10개 작성',
-                '6. 각 종목/기업 뉴스는 2~5줄로 작성',
-                '7. 오늘의 핵심 키워드 3~5개 작성',
-                '8. 마지막 단기 관전 포인트 2~3줄 작성',
-                '9. PNG 그림은 별도 이미지 생성 API에서 만들 예정이므로 JSON에는 넣지 마라.',
-                '10. 휴장일이면 JSON을 출력하지 말고 "휴장이었습니다." 만 출력해라.',
-                'JSON 필드는 titleCandidates, title, summaryLines, macroLines, companyNews, keywords, watchPoints 만 사용해라.',
-              ].join('\n'),
-              [
-                'Output goals:',
-                '1. 게시글 제목 후보 3개 작성',
-                '2. 가장 좋은 제목 1개 선택',
-                '3. 시장 전체 요약 5줄 작성',
-                '4. 매크로 점검 10~15줄 작성',
-                '5. 주요 종목/기업 뉴스 5~10개 작성',
-                '6. 각 종목/기업 뉴스는 2~5줄로 작성',
-                '7. 오늘의 핵심 키워드 3~5개 작성',
-                '8. 마지막 단기 관전 포인트 2~3줄 작성',
+                '다만 개별 기업 뉴스가 지수, 업종, 투자심리, 수급에 영향을 준 경우에는 반도체 업종, 대형 기술주, 2차전지주처럼 업종·시장 단위로만 연결해서 설명해라.',
+                '각 줄은 단순 나열이 아니라 "무슨 일이 있었고 -> 시장이 어떻게 해석했고 -> 어떤 지수·업종·자산에 영향을 줬는지"의 흐름으로 작성해라.',
+                '중요도 기준은 지수와 주요 업종 움직임을 설명하는 데 도움이 되는가로 판단해라.',
+                '5. 주요 종목/기업 뉴스는 5~10개 작성해라.',
+                '제공된 News 안에서 실제로 중요한 기업/종목 이슈만 선별해라.',
+                '단순히 시가총액이 크거나 유명하다는 이유만으로 Nvidia #NVDA, Tesla #TSLA, Apple #AAPL, Microsoft #MSFT 같은 대형 기술주를 반복해서 선택하지 마라.',
+                '선정 기준은 다음 순서로 판단해라.',
+                '전일 주가지수 또는 업종 흐름에 영향을 준 기업 뉴스',
+                '실적, 가이던스, 규제, 인수합병, 공급계약, 제품 출시, 소송, 정책 영향처럼 구체적 이벤트가 있는 뉴스',
+                '특정 업종 전체의 투자심리나 수급에 영향을 준 대표 기업 뉴스',
+                '한국 개인투자자가 관심을 가질 만한 글로벌 주도 업종 뉴스',
+                '단순 주가 등락보다 원인과 파급효과가 명확한 뉴스',
+                '미국장 리포트에서는 대형 기술주, 반도체, 전기차, 금융, 헬스케어, 소비재, 에너지, 산업재, 방산, 중국 ADR 등 여러 업종이 함께 보이도록 균형 있게 선택해라.',
+                '한 업종에 뉴스가 몰려 있더라도 같은 업종 뉴스만 반복하지 말고, 시장 흐름을 설명하는 데 필요한 경우에만 집중해서 다뤄라.',
+                'Nvidia #NVDA, Tesla #TSLA 같은 종목은 제공된 News에 실제 관련 뉴스가 있고 전일 시장 영향도가 클 때만 포함해라.',
+                '제공된 News에 명확한 근거가 없으면 유명 종목이라도 넣지 마라.',
+                'ETF 뉴스는 개별 기업 뉴스보다 우선순위를 낮춰라.',
+                '다만 ETF 뉴스가 업종 수급이나 시장 전체 흐름을 설명하는 핵심 근거일 때만 제한적으로 활용해라.',
+                '각 종목 뉴스는 2~5줄로 작성해라.',
+                '각 뉴스는 "무슨 일이 있었고 -> 시장이 왜 주목했고 -> 관련 업종이나 투자심리에 어떤 의미가 있었는지"의 흐름으로 작성해라.',
+                '6. 오늘의 핵심 키워드 3~5개 작성',
+                '7. 마지막 단기 관전 포인트 2~3줄 작성',
                 '8. PNG 그림은 별도 이미지 생성 API에서 만들 예정이므로 JSON에는 넣지 마라.',
-              ].join('\n'),
-              [
-                'Required output:',
-                '1. 게시글 제목 후보 3개',
-                '2. 가장 좋은 제목 1개 선택',
-                '3. 시장 전체 요약 5줄',
-                '4. 매크로 점검 10~15줄',
-                '5. 주요 종목/기업 뉴스 5~10개. 종목명 옆에는 가능한 경우 #[티커명] 형식 포함',
-                '6. 각 종목/기업 뉴스는 2~5줄',
-                '7. 오늘의 핵심 키워드 3~5개',
-                '8. 마지막 단기 관전 포인트 2~3줄',
+                'JSON 필드는 titleCandidates, title, summaryLines, macroLines, companyNews, keywords, watchPoints 만 사용해라.',
               ].join('\n'),
             ].join('\n\n'),
           },
@@ -1578,7 +1550,6 @@ export class MarketsService {
       | 'keywords'
       | 'watchPoints'
     >;
-    const companyNews = this.normalizeBriefingCompanyNews(parsed.companyNews);
     return {
       titleCandidates: parsed.titleCandidates,
       market,
@@ -1586,9 +1557,7 @@ export class MarketsService {
       summary: (parsed.summaryLines ?? []).join('\n\n'),
       summaryLines: parsed.summaryLines ?? [],
       macroLines: parsed.macroLines ?? [],
-      companyNews: companyNews.length
-        ? companyNews
-        : this.buildBriefingCompanyNewsFallback(market, news),
+      companyNews: this.normalizeBriefingCompanyNews(parsed.companyNews),
       keywords: parsed.keywords ?? [],
       watchPoints: parsed.watchPoints ?? [],
       model,
@@ -1637,72 +1606,6 @@ export class MarketsService {
         };
       })
       .filter((item) => item.name || item.headline || item.lines.length);
-  }
-
-  private buildBriefingCompanyNewsFallback(
-    market: 'US' | 'KR',
-    news: MarketNews[],
-  ): MarketBriefing['companyNews'] {
-    const marketNews = news
-      .map((item) => ({
-        item,
-        symbol: this.extractBriefingNewsSymbol(item),
-      }))
-      .sort((a, b) => {
-        const symbolScore = Number(Boolean(b.symbol)) - Number(Boolean(a.symbol));
-        if (symbolScore !== 0) {
-          return symbolScore;
-        }
-        return b.item.datetime - a.item.datetime;
-      });
-    const seen = new Set<string>();
-    return marketNews
-      .filter(({ item }) => item.headline && item.url)
-      .filter(({ item }) => {
-        if (seen.has(item.url)) {
-          return false;
-        }
-        seen.add(item.url);
-        return true;
-      })
-      .slice(0, 5)
-      .map(({ item, symbol }) => {
-        const headline = item.translatedHeadline || item.headline;
-        const name = symbol || (market === 'KR' ? '한국증시' : '미국증시');
-        return {
-          symbol,
-          name,
-          headline,
-          lines: [item.summary || headline],
-        };
-      });
-  }
-
-  private extractBriefingNewsSymbol(news: MarketNews): string {
-    const headline = news.translatedHeadline || news.headline;
-    const tagged = headline.match(/#([A-Z0-9.]{1,10}|\d{6})/i)?.[1];
-    if (tagged) {
-      return tagged.toUpperCase();
-    }
-
-    const knownSymbols = new Set([
-      'NVDA',
-      'MU',
-      'AAPL',
-      'MSFT',
-      'TSLA',
-      'AMZN',
-      'META',
-      'GOOGL',
-      'AMD',
-      'AVGO',
-      'ORCL',
-    ]);
-    const relatedParts = news.related.toUpperCase().split(/[^A-Z0-9.]+/);
-    const relatedSymbol = relatedParts.find((part) =>
-      knownSymbols.has(part) || /^\d{6}$/.test(part),
-    );
-    return relatedSymbol ?? '';
   }
 
   private async fetchOpenAiWithRetry(
