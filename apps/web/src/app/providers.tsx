@@ -77,10 +77,12 @@ export function Providers({ children }: { children: ReactNode }) {
       lastVerifiedAt = Date.now();
       void verify();
     };
+    const interval = window.setInterval(verifyIfNeeded, 5 * 60_000);
     window.addEventListener("focus", verifyIfNeeded);
     document.addEventListener("visibilitychange", verifyIfNeeded);
 
     return () => {
+      window.clearInterval(interval);
       window.removeEventListener("focus", verifyIfNeeded);
       document.removeEventListener("visibilitychange", verifyIfNeeded);
     };
