@@ -914,7 +914,26 @@ export class MarketsService {
     language: string,
   ): Promise<MarketNews[]> {
     if (market === 'KR') {
-      return this.getMarketNews('kr', market, language);
+      const financeNews = await this.getMarketNews('kr', market, language).catch(
+        () => [] as MarketNews[],
+      );
+      if (financeNews.length >= 3) {
+        return financeNews;
+      }
+
+      const fallbackGroups = await Promise.all(
+        ['코스피 코스닥 증시 마감', '한국 증시 마감', '코스피 반도체 코스닥'].map(
+          (query) => this.getNaverSearchNews(query).catch(() => [] as MarketNews[]),
+        ),
+      );
+      const byUrl = new Map<string, MarketNews>();
+      [...financeNews, ...fallbackGroups.flat()].forEach((item) => {
+        if (item.headline && item.url && !byUrl.has(item.url)) {
+          byUrl.set(item.url, item);
+        }
+      });
+
+      return [...byUrl.values()].sort((a, b) => b.datetime - a.datetime).slice(0, 60);
     }
 
     const symbolQueries = [
