@@ -1569,7 +1569,7 @@ export class MarketsService {
       macroLines: parsed.macroLines ?? [],
       companyNews: companyNews.length
         ? companyNews
-        : this.buildBriefingCompanyNewsFallback(news),
+        : this.buildBriefingCompanyNewsFallback(market, news),
       keywords: parsed.keywords ?? [],
       watchPoints: parsed.watchPoints ?? [],
       model,
@@ -1621,12 +1621,25 @@ export class MarketsService {
   }
 
   private buildBriefingCompanyNewsFallback(
+    market: 'US' | 'KR',
     news: MarketNews[],
   ): MarketBriefing['companyNews'] {
+    const marketNews = news
+      .map((item) => ({
+        item,
+        symbol: this.extractBriefingNewsSymbol(item),
+      }))
+      .sort((a, b) => {
+        const symbolScore = Number(Boolean(b.symbol)) - Number(Boolean(a.symbol));
+        if (symbolScore !== 0) {
+          return symbolScore;
+        }
+        return b.item.datetime - a.item.datetime;
+      });
     const seen = new Set<string>();
-    return news
-      .filter((item) => item.headline && item.url)
-      .filter((item) => {
+    return marketNews
+      .filter(({ item }) => item.headline && item.url)
+      .filter(({ item }) => {
         if (seen.has(item.url)) {
           return false;
         }
@@ -1634,18 +1647,43 @@ export class MarketsService {
         return true;
       })
       .slice(0, 5)
-      .map((item) => {
+      .map(({ item, symbol }) => {
         const headline = item.translatedHeadline || item.headline;
-        const symbol =
-          headline.match(/#([A-Z0-9.]{1,10}|\d{6})/i)?.[1]?.toUpperCase() ??
-          (item.related.match(/\b([A-Z]{1,5}|[0-9]{6})\b/)?.[1] || '');
+        const name = symbol || (market === 'KR' ? '한국증시' : '미국증시');
         return {
           symbol,
-          name: symbol || item.source || 'Market',
+          name,
           headline,
           lines: [item.summary || headline],
         };
       });
+  }
+
+  private extractBriefingNewsSymbol(news: MarketNews): string {
+    const headline = news.translatedHeadline || news.headline;
+    const tagged = headline.match(/#([A-Z0-9.]{1,10}|\d{6})/i)?.[1];
+    if (tagged) {
+      return tagged.toUpperCase();
+    }
+
+    const knownSymbols = new Set([
+      'NVDA',
+      'MU',
+      'AAPL',
+      'MSFT',
+      'TSLA',
+      'AMZN',
+      'META',
+      'GOOGL',
+      'AMD',
+      'AVGO',
+      'ORCL',
+    ]);
+    const relatedParts = news.related.toUpperCase().split(/[^A-Z0-9.]+/);
+    const relatedSymbol = relatedParts.find((part) =>
+      knownSymbols.has(part) || /^\d{6}$/.test(part),
+    );
+    return relatedSymbol ?? '';
   }
 
   private async fetchOpenAiWithRetry(
@@ -1995,7 +2033,7 @@ export class MarketsService {
       }>;
     };
 
-    return this.mapYahooNews(body.news ?? []);
+    return this.mapYahooNews(body.news ?? [], query);
   }
 
   private async getYahooTrendingNews(): Promise<MarketNews[]> {
@@ -2722,6 +2760,7 @@ export class MarketsService {
         resolutions?: Array<{ url?: string }>;
       };
     }>,
+    related = '',
   ): MarketNews[] {
     return news.map((item, index) => ({
       category: 'general',
@@ -2729,7 +2768,7 @@ export class MarketsService {
       headline: item.title ?? '',
       id: this.numericId(item.uuid ?? item.link ?? String(index)),
       image: item.thumbnail?.resolutions?.at(-1)?.url ?? '',
-      related: '',
+      related,
       source: item.publisher ?? 'Yahoo Finance',
       summary: item.title ?? '',
       url: item.link ?? '',
