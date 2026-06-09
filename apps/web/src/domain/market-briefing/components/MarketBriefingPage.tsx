@@ -241,7 +241,7 @@ function BriefingDetail({
           <img
             src={briefing.imageUrl}
             alt=""
-            className="mx-auto max-h-[620px] w-full object-contain"
+            className="mx-auto max-h-[460px] w-full object-contain"
           />
         </div>
       ) : null}
@@ -284,34 +284,47 @@ function BriefingDetail({
           주요 종목/기업 뉴스
         </h4>
         <div className="grid gap-4">
-          {(briefing.companyNews ?? []).map((item, index) => (
-            <div
-              key={`${item.symbol ?? "symbol"}-${item.headline ?? "headline"}-${index}`}
-              className="border-b border-[#eef1f6] pb-4 last:border-0 last:pb-0"
-            >
-              <h5 className="text-base font-semibold text-[#17202e]">
-                {item.name || item.symbol || "종목/기업"}{" "}
-                {item.symbol ? (
-                  <a
-                    href={stockHref(item.symbol, briefing.market)}
-                    className="cursor-pointer text-[#1f6f8b] underline-offset-2 hover:underline"
-                  >
-                    #{item.symbol.replace(/^#/, "")}
-                  </a>
+          {(briefing.companyNews ?? []).map((item, index) => {
+            const lines =
+              Array.isArray(item.lines) && item.lines.length
+                ? item.lines
+                : item.headline
+                  ? [item.headline]
+                  : [];
+            return (
+              <div
+                key={`${item.symbol ?? "symbol"}-${item.headline ?? "headline"}-${index}`}
+                className="border-b border-[#eef1f6] pb-4 last:border-0 last:pb-0"
+              >
+                <h5 className="text-base font-semibold text-[#17202e]">
+                  {item.name || item.symbol || "종목/기업"}{" "}
+                  {item.symbol ? (
+                    <a
+                      href={stockHref(item.symbol, briefing.market)}
+                      className="cursor-pointer text-[#1f6f8b] underline-offset-2 hover:underline"
+                    >
+                      #{item.symbol.replace(/^#/, "")}
+                    </a>
+                  ) : null}
+                </h5>
+                {item.headline && lines[0] !== item.headline ? (
+                  <p className="mt-1 text-base font-medium text-[#344052]">
+                    {item.headline}
+                  </p>
                 ) : null}
-              </h5>
-              {item.headline ? (
-                <p className="mt-1 text-base font-medium text-[#344052]">
-                  {item.headline}
-                </p>
-              ) : null}
-              <div className="mt-3 space-y-4 text-base leading-8 text-[#607086]">
-                {(Array.isArray(item.lines) ? item.lines : []).map((line, lineIndex) => (
-                  <p key={`${lineIndex}-${line}`}>{line}</p>
-                ))}
+                <div className="mt-3 space-y-4 text-base leading-8 text-[#607086]">
+                  {lines.map((line, lineIndex) => (
+                    <p key={`${lineIndex}-${line}`}>{line}</p>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
+          {!(briefing.companyNews ?? []).length ? (
+            <p className="text-base leading-8 text-[#607086]">
+              표시할 주요 종목/기업 뉴스가 없습니다.
+            </p>
+          ) : null}
         </div>
       </section>
 

@@ -1472,7 +1472,17 @@ export class MarketsService {
                 '1. 게시글 제목 후보 3개 작성',
                 '2. 가장 좋은 제목 1개 선택',
                 '3. 시장 전체 요약은 5줄로 작성',
-                '4. 매크로 점검은 10~15줄로 작성. 전일 지정학, 물가, CPI, 금리, 환율, 원자재, 정책, 수급 등 시장이 왜 움직였는지를 설명해라.',
+                '4. 매크로 점검은 10~15줄로 작성해라.',
+                '전일 시장 방향성에 실제로 영향을 준 매크로 요인만 선별해서 설명해라.',
+                '탐색 범위는 지정학, 물가, CPI/PCE, 고용, 금리, 채권금리, 환율, 원자재, 유가, 정책, 중앙은행 발언, 재정 이슈, 수급, 신용위험, 변동성, 투자심리, 글로벌 주요국 증시 흐름, 업종 로테이션 등을 포함하되 이에 한정하지 마라.',
+                '단, 위 항목들은 예시 탐색 범위일 뿐이며 모든 항목을 반드시 언급하지 마라.',
+                '제공된 Market indicators와 매크로 관련 News에 근거가 있는 항목만 작성해라.',
+                '근거가 없거나 시장 영향이 확인되지 않은 항목은 언급하지 마라.',
+                '예를 들어 전일 CPI 관련 데이터나 뉴스가 제공되지 않았으면 CPI를 쓰지 마라.',
+                '개별 기업 뉴스는 companyNews에서 따로 다루므로, 매크로 점검에서는 개별 기업 이슈를 중심 소재로 작성하지 마라.',
+                '다만 개별 기업 뉴스가 지수, 업종, 투자심리, 수급에 영향을 준 경우에는 “반도체 업종”, “대형 기술주”, “2차전지주”처럼 업종·시장 단위로만 연결해서 설명해라.',
+                '각 줄은 단순 나열이 아니라 “무슨 일이 있었고 → 시장이 어떻게 해석했고 → 어떤 지수·업종·자산에 영향을 줬는지”의 흐름으로 작성해라.',
+                '중요도 기준은 “지수와 주요 업종 움직임을 설명하는 데 도움이 되는가”로 판단해라.',
                 '5. 주요 종목/기업 뉴스 5~10개 작성',
                 '6. 각 종목/기업 뉴스는 2~5줄로 작성',
                 '7. 오늘의 핵심 키워드 3~5개 작성',
@@ -1556,12 +1566,55 @@ export class MarketsService {
       summary: (parsed.summaryLines ?? []).join('\n\n'),
       summaryLines: parsed.summaryLines ?? [],
       macroLines: parsed.macroLines ?? [],
-      companyNews: parsed.companyNews ?? [],
+      companyNews: this.normalizeBriefingCompanyNews(parsed.companyNews),
       keywords: parsed.keywords ?? [],
       watchPoints: parsed.watchPoints ?? [],
       model,
       sources,
     };
+  }
+
+  private normalizeBriefingCompanyNews(
+    value: MarketBriefing['companyNews'] | unknown,
+  ): MarketBriefing['companyNews'] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .map((item) => {
+        const record = item as {
+          symbol?: unknown;
+          name?: unknown;
+          headline?: unknown;
+          lines?: unknown;
+          summary?: unknown;
+          description?: unknown;
+        };
+        const symbol = typeof record.symbol === 'string' ? record.symbol : '';
+        const name = typeof record.name === 'string' ? record.name : symbol;
+        const headline =
+          typeof record.headline === 'string'
+            ? record.headline
+            : typeof record.summary === 'string'
+              ? record.summary
+              : '';
+        const fallbackLine =
+          typeof record.description === 'string'
+            ? record.description
+            : headline;
+        const lines = Array.isArray(record.lines)
+          ? record.lines.filter((line): line is string => typeof line === 'string' && line.trim().length > 0)
+          : [];
+
+        return {
+          symbol,
+          name,
+          headline,
+          lines: lines.length ? lines : fallbackLine ? [fallbackLine] : [],
+        };
+      })
+      .filter((item) => item.name || item.headline || item.lines.length);
   }
 
   private async fetchOpenAiWithRetry(
