@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Notice } from "@/common/components/Notice";
 import { apiRequest } from "@/common/lib/api";
 import { useSessionStore } from "@/common/stores/session";
@@ -14,18 +15,27 @@ const briefingTabs: Array<{ id: BriefingMarket; label: string; caption: string }
 const pageSize = 10;
 const oneDayMs = 24 * 60 * 60 * 1000;
 
-export function MarketBriefingPage() {
+export function MarketBriefingPage({
+  briefingId,
+}: {
+  briefingId?: string;
+} = {}) {
+  const router = useRouter();
   const accessToken = useSessionStore((s) => s.accessToken);
   const [market, setMarket] = useState<BriefingMarket>("KR");
   const [briefings, setBriefings] = useState<MarketBriefing[]>([]);
+  const [detailBriefing, setDetailBriefing] = useState<MarketBriefing | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const selectedBriefing = useMemo(
-    () => briefings.find((briefing) => briefing.id === selectedId) ?? null,
-    [briefings, selectedId],
+    () =>
+      detailBriefing ??
+      briefings.find((briefing) => briefing.id === selectedId) ??
+      null,
+    [briefings, detailBriefing, selectedId],
   );
   const totalPages = Math.max(1, Math.ceil(briefings.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -49,7 +59,10 @@ export function MarketBriefingPage() {
           { accessToken: token },
         );
         setBriefings(nextBriefings);
-        setSelectedId(null);
+        if (!briefingId) {
+          setSelectedId(null);
+          setDetailBriefing(null);
+        }
         setPage(1);
       } catch (briefingError) {
         setBriefings([]);
@@ -63,7 +76,7 @@ export function MarketBriefingPage() {
         setLoading(false);
       }
     },
-    [accessToken, market],
+    [accessToken, briefingId, market],
   );
 
   useEffect(() => {
@@ -73,6 +86,48 @@ export function MarketBriefingPage() {
 
     void loadBriefings(accessToken, market);
   }, [accessToken, market, loadBriefings]);
+
+  useEffect(() => {
+    if (!accessToken || !briefingId) {
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    apiRequest<MarketBriefing>(`/markets/briefings/${briefingId}`, "GET", {
+      accessToken,
+    })
+      .then((briefing) => {
+        if (cancelled) {
+          return;
+        }
+        setDetailBriefing(briefing);
+        setSelectedId(briefing.id);
+        setMarket(briefing.market);
+      })
+      .catch((briefingError) => {
+        if (cancelled) {
+          return;
+        }
+        setDetailBriefing(null);
+        setSelectedId(null);
+        setError(
+          briefingError instanceof Error
+            ? briefingError.message
+            : "마켓 브리핑을 불러오지 못했습니다.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, briefingId]);
 
   return (
     <>
@@ -117,7 +172,11 @@ export function MarketBriefingPage() {
             {selectedBriefing ? (
               <BriefingDetail
                 briefing={selectedBriefing}
-                onBack={() => setSelectedId(null)}
+                onBack={() => {
+                  setSelectedId(null);
+                  setDetailBriefing(null);
+                  router.push("/market-briefing");
+                }}
               />
             ) : (
               <BriefingList
@@ -126,7 +185,7 @@ export function MarketBriefingPage() {
                 page={safePage}
                 totalPages={totalPages}
                 onPageChange={setPage}
-                onSelect={setSelectedId}
+                onSelect={(nextId) => router.push(`/market-briefing/${nextId}`)}
               />
             )}
           </div>
@@ -286,19 +345,21 @@ function BriefingDetail({
         <div className="grid gap-4">
           {(briefing.companyNews ?? []).map((item, index) => {
             const ticker = briefingCompanyTicker(item);
+            const companyName = briefingCompanyName(item, ticker);
             const lines =
               Array.isArray(item.lines) && item.lines.length
                 ? item.lines
                 : item.headline
                   ? [item.headline]
                   : [];
+            const headline = cleanCompanyHeadline(item.headline, companyName, ticker);
             return (
               <div
                 key={`${ticker || item.symbol || "symbol"}-${item.headline ?? "headline"}-${index}`}
                 className="border-b border-[#eef1f6] pb-4 last:border-0 last:pb-0"
               >
                 <h5 className="text-base font-semibold text-[#17202e]">
-                  {item.name || item.symbol || "종목/기업"}{" "}
+                  {companyName || item.symbol || "종목/기업"}{" "}
                   {ticker ? (
                     <a
                       href={stockHref(ticker, briefing.market)}
@@ -308,9 +369,9 @@ function BriefingDetail({
                     </a>
                   ) : null}
                 </h5>
-                {item.headline && lines[0] !== item.headline ? (
+                {headline && lines[0] !== item.headline ? (
                   <p className="mt-1 text-base font-medium text-[#344052]">
-                    {item.headline}
+                    {headline}
                   </p>
                 ) : null}
                 <div className="mt-3 space-y-4 text-base leading-8 text-[#607086]">
@@ -403,6 +464,66 @@ function briefingCompanyTicker(
   );
 }
 
+function briefingCompanyName(
+  item: MarketBriefing["companyNews"][number],
+  ticker: string,
+): string {
+  const source = item.name || item.headline || item.symbol || "";
+  const escapedTicker = escapeRegExp(ticker);
+  if (!item.name && escapedTicker) {
+    const prefix = source.match(new RegExp(`^(.+?)\\s*#${escapedTicker}\\b`, "i"))?.[1];
+    if (prefix?.trim()) {
+      return prefix.trim();
+    }
+  }
+
+  return stripTickerTags(source, ticker)
+    .replace(/\s{2,}/g, " ")
+    .replace(/[,\s]+$/g, "")
+    .trim();
+}
+
+function cleanCompanyHeadline(
+  headline: string | undefined,
+  companyName: string,
+  ticker: string,
+): string {
+  let nextHeadline = (headline ?? "").trim();
+  if (!nextHeadline) {
+    return "";
+  }
+
+  const escapedName = escapeRegExp(companyName);
+  const escapedTicker = escapeRegExp(ticker);
+  if (escapedName && escapedTicker) {
+    nextHeadline = nextHeadline.replace(
+      new RegExp(`^${escapedName}\\s*(?:#${escapedTicker})?(?:\\s+#${escapedTicker})*\\s*[,，:-]?\\s*`, "i"),
+      "",
+    );
+  }
+
+  if (escapedTicker) {
+    nextHeadline = nextHeadline.replace(
+      new RegExp(`^#${escapedTicker}\\s*[,，:-]?\\s*`, "i"),
+      "",
+    );
+  }
+
+  return nextHeadline.trim();
+}
+
+function stripTickerTags(value: string, ticker: string): string {
+  const escapedTicker = escapeRegExp(ticker);
+  if (!escapedTicker) {
+    return value.replace(/#[A-Z0-9.]{1,12}|#\d{6}/gi, "").trim();
+  }
+
+  return value
+    .replace(new RegExp(`#${escapedTicker}\\b`, "gi"), "")
+    .replace(/#[A-Z0-9.]{1,12}|#\d{6}/gi, "")
+    .trim();
+}
+
 function extractTickerTag(value: string | undefined): string {
   const text = (value ?? "").trim();
   if (!text) {
@@ -416,6 +537,10 @@ function extractTickerTag(value: string | undefined): string {
 
   const clean = text.replace(/^#/, "").trim().toUpperCase();
   return /^[A-Z0-9.]{1,12}$/.test(clean) || /^\d{6}$/.test(clean) ? clean : "";
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function stockHref(symbol: string, fallbackMarket: BriefingMarket): string {
