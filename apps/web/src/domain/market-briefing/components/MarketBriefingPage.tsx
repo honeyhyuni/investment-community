@@ -285,6 +285,7 @@ function BriefingDetail({
         </h4>
         <div className="grid gap-4">
           {(briefing.companyNews ?? []).map((item, index) => {
+            const ticker = briefingCompanyTicker(item);
             const lines =
               Array.isArray(item.lines) && item.lines.length
                 ? item.lines
@@ -293,17 +294,17 @@ function BriefingDetail({
                   : [];
             return (
               <div
-                key={`${item.symbol ?? "symbol"}-${item.headline ?? "headline"}-${index}`}
+                key={`${ticker || item.symbol || "symbol"}-${item.headline ?? "headline"}-${index}`}
                 className="border-b border-[#eef1f6] pb-4 last:border-0 last:pb-0"
               >
                 <h5 className="text-base font-semibold text-[#17202e]">
                   {item.name || item.symbol || "종목/기업"}{" "}
-                  {item.symbol ? (
+                  {ticker ? (
                     <a
-                      href={stockHref(item.symbol, briefing.market)}
+                      href={stockHref(ticker, briefing.market)}
                       className="cursor-pointer text-[#1f6f8b] underline-offset-2 hover:underline"
                     >
-                      #{item.symbol.replace(/^#/, "")}
+                      #{ticker}
                     </a>
                   ) : null}
                 </h5>
@@ -389,8 +390,36 @@ function isNewBriefing(briefing: MarketBriefing): boolean {
   return Date.now() - briefing.generatedAt * 1000 <= oneDayMs;
 }
 
+function briefingCompanyTicker(
+  item: MarketBriefing["companyNews"][number],
+): string {
+  const explicitSymbol = extractTickerTag(item.symbol);
+  if (explicitSymbol) {
+    return explicitSymbol;
+  }
+
+  return extractTickerTag(
+    [item.name, item.headline, ...(item.lines ?? [])].filter(Boolean).join(" "),
+  );
+}
+
+function extractTickerTag(value: string | undefined): string {
+  const text = (value ?? "").trim();
+  if (!text) {
+    return "";
+  }
+
+  const tagged = text.match(/#([A-Z0-9.]{1,12}|\d{6})/i)?.[1];
+  if (tagged) {
+    return tagged.toUpperCase();
+  }
+
+  const clean = text.replace(/^#/, "").trim().toUpperCase();
+  return /^[A-Z0-9.]{1,12}$/.test(clean) || /^\d{6}$/.test(clean) ? clean : "";
+}
+
 function stockHref(symbol: string, fallbackMarket: BriefingMarket): string {
-  const cleanSymbol = symbol.replace(/^#/, "").trim().toUpperCase();
+  const cleanSymbol = extractTickerTag(symbol);
   const market = /^\d{6}$/.test(cleanSymbol) ? "KR" : fallbackMarket;
   return `/?symbol=${encodeURIComponent(cleanSymbol)}&market=${market}`;
 }
