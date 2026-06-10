@@ -14,7 +14,7 @@ const briefingTabs: Array<{ id: BriefingMarket; label: string; caption: string }
 
 const pageSize = 10;
 const oneDayMs = 24 * 60 * 60 * 1000;
-const changePattern = /\(([+-]?\d+(?:\.\d+)?%)\)/;
+const changePattern = /\(([+-]\s*\d+(?:\.\d+)?%[^)]*)\)/;
 
 export function MarketBriefingPage({
   briefingId,
@@ -759,14 +759,14 @@ function cleanCompanyHeadline(
   const escapedTicker = escapeRegExp(ticker);
   if (escapedName && escapedTicker) {
     nextHeadline = nextHeadline.replace(
-      new RegExp(`^${escapedName}\\s*(?:#${escapedTicker})?(?:\\s+#${escapedTicker})*\\s*(?:\\([+-]?\\d+(?:\\.\\d+)?%\\))?\\s*[,，:-]?\\s*`, "i"),
+      new RegExp(`^${escapedName}\\s*(?:#${escapedTicker})?(?:\\s+#${escapedTicker})*\\s*(?:\\([+-]\\s*\\d+(?:\\.\\d+)?%[^)]*\\))?\\s*[,，:-]?\\s*`, "i"),
       "",
     );
   }
 
   if (escapedTicker) {
     nextHeadline = nextHeadline.replace(
-      new RegExp(`^#${escapedTicker}\\s*(?:\\([+-]?\\d+(?:\\.\\d+)?%\\))?\\s*[,，:-]?\\s*`, "i"),
+      new RegExp(`^#${escapedTicker}\\s*(?:\\([+-]\\s*\\d+(?:\\.\\d+)?%[^)]*\\))?\\s*[,，:-]?\\s*`, "i"),
       "",
     );
   }
