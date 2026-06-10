@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -114,6 +114,24 @@ export class MarketsController {
   @Get('briefings/:id')
   getMarketBriefingById(@Param('id') id: string): Promise<MarketBriefing> {
     return this.marketsService.getMarketBriefingById(id);
+  }
+
+  @Patch('briefings/:id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  updateMarketBriefing(
+    @Param('id') id: string,
+    @Body() body: Partial<MarketBriefing>,
+  ): Promise<MarketBriefing> {
+    return this.marketsService.updateMarketBriefing(id, body);
+  }
+
+  @Delete('briefings/:id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  async deleteMarketBriefing(@Param('id') id: string): Promise<{ ok: true }> {
+    await this.marketsService.deleteMarketBriefing(id);
+    return { ok: true };
   }
 
   @Post('briefings/run')

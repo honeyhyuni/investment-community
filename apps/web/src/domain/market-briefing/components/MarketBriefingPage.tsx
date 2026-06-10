@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Notice } from "@/common/components/Notice";
 import { apiRequest } from "@/common/lib/api";
@@ -14,6 +14,7 @@ const briefingTabs: Array<{ id: BriefingMarket; label: string; caption: string }
 
 const pageSize = 10;
 const oneDayMs = 24 * 60 * 60 * 1000;
+const changePattern = /\(([+-]?\d+(?:\.\d+)?%)\)/;
 
 export function MarketBriefingPage({
   briefingId,
@@ -22,6 +23,7 @@ export function MarketBriefingPage({
 } = {}) {
   const router = useRouter();
   const accessToken = useSessionStore((s) => s.accessToken);
+  const user = useSessionStore((s) => s.user);
   const [market, setMarket] = useState<BriefingMarket>("KR");
   const [briefings, setBriefings] = useState<MarketBriefing[]>([]);
   const [detailBriefing, setDetailBriefing] = useState<MarketBriefing | null>(null);
@@ -43,6 +45,16 @@ export function MarketBriefingPage({
     (safePage - 1) * pageSize,
     safePage * pageSize,
   );
+  const isAdmin = user?.role === "ADMIN";
+
+  const applyBriefing = useCallback((nextBriefing: MarketBriefing) => {
+    setDetailBriefing(nextBriefing);
+    setSelectedId(nextBriefing.id);
+    setMarket(nextBriefing.market);
+    setBriefings((items) =>
+      items.map((item) => (item.id === nextBriefing.id ? nextBriefing : item)),
+    );
+  }, []);
 
   const loadBriefings = useCallback(
     async (token = accessToken, nextMarket: BriefingMarket = market) => {
@@ -172,6 +184,15 @@ export function MarketBriefingPage({
             {selectedBriefing ? (
               <BriefingDetail
                 briefing={selectedBriefing}
+                accessToken={accessToken}
+                isAdmin={isAdmin}
+                onSaved={applyBriefing}
+                onDeleted={(deletedId) => {
+                  setBriefings((items) => items.filter((item) => item.id !== deletedId));
+                  setSelectedId(null);
+                  setDetailBriefing(null);
+                  router.push("/market-briefing");
+                }}
                 onBack={() => {
                   setSelectedId(null);
                   setDetailBriefing(null);
@@ -281,11 +302,46 @@ function BriefingList({
 
 function BriefingDetail({
   briefing,
+  accessToken,
+  isAdmin,
+  onSaved,
+  onDeleted,
   onBack,
 }: {
   briefing: MarketBriefing;
+  accessToken: string | null;
+  isAdmin: boolean;
+  onSaved: (briefing: MarketBriefing) => void;
+  onDeleted: (id: string) => void;
   onBack: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  const handleDelete = async () => {
+    if (!accessToken || deletePending) {
+      return;
+    }
+    if (!window.confirm("이 마켓 브리핑을 삭제할까요?")) {
+      return;
+    }
+
+    setDeletePending(true);
+    setFormError("");
+    try {
+      await apiRequest<{ ok: true }>(`/markets/briefings/${briefing.id}`, "DELETE", {
+        accessToken,
+      });
+      onDeleted(briefing.id);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "삭제하지 못했습니다.");
+    } finally {
+      setDeletePending(false);
+    }
+  };
+
   return (
     <article className="rounded-md border border-[#d9dee8] bg-[#f9fafc] p-5">
       <button
@@ -294,6 +350,44 @@ function BriefingDetail({
       >
         목록으로
       </button>
+
+      {isAdmin ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              setEditing((value) => !value);
+              setFormError("");
+            }}
+            className="h-10 cursor-pointer rounded-md border border-[#1f6f8b] bg-white px-4 text-base font-semibold text-[#1f6f8b] hover:bg-[#eef6f9]"
+          >
+            {editing ? "수정 취소" : "수정"}
+          </button>
+          <button
+            disabled={deletePending}
+            onClick={handleDelete}
+            className="h-10 cursor-pointer rounded-md border border-[#d74848] bg-white px-4 text-base font-semibold text-[#c43232] hover:bg-[#fff1f1] disabled:cursor-default disabled:opacity-50"
+          >
+            {deletePending ? "삭제 중" : "삭제"}
+          </button>
+        </div>
+      ) : null}
+
+      {formError ? <Notice message="" error={formError} /> : null}
+
+      {editing ? (
+        <BriefingEditForm
+          briefing={briefing}
+          accessToken={accessToken}
+          saving={saving}
+          setSaving={setSaving}
+          onCancel={() => setEditing(false)}
+          onSaved={(nextBriefing) => {
+            onSaved(nextBriefing);
+            setEditing(false);
+          }}
+          onError={setFormError}
+        />
+      ) : null}
 
       {briefing.imageUrl ? (
         <div className="mb-6 overflow-hidden rounded-md border border-[#d9dee8] bg-[#101722]">
@@ -345,6 +439,7 @@ function BriefingDetail({
         <div className="grid gap-4">
           {(briefing.companyNews ?? []).map((item, index) => {
             const ticker = briefingCompanyTicker(item);
+            const change = briefingCompanyChange(item);
             const companyName = briefingCompanyName(item, ticker);
             const lines =
               Array.isArray(item.lines) && item.lines.length
@@ -367,6 +462,15 @@ function BriefingDetail({
                     >
                       #{ticker}
                     </a>
+                  ) : null}
+                  {change ? (
+                    <span
+                      className={`ml-1 font-semibold ${
+                        change.startsWith("-") ? "text-[#d74848]" : "text-[#178447]"
+                      }`}
+                    >
+                      ({change})
+                    </span>
                   ) : null}
                 </h5>
                 {headline && lines[0] !== item.headline ? (
@@ -447,6 +551,156 @@ function BriefingDetail({
   );
 }
 
+function BriefingEditForm({
+  briefing,
+  accessToken,
+  saving,
+  setSaving,
+  onCancel,
+  onSaved,
+  onError,
+}: {
+  briefing: MarketBriefing;
+  accessToken: string | null;
+  saving: boolean;
+  setSaving: (saving: boolean) => void;
+  onCancel: () => void;
+  onSaved: (briefing: MarketBriefing) => void;
+  onError: (message: string) => void;
+}) {
+  const [title, setTitle] = useState(briefing.title);
+  const [summaryLines, setSummaryLines] = useState(linesToText(briefing.summaryLines));
+  const [macroLines, setMacroLines] = useState(linesToText(briefing.macroLines ?? []));
+  const [companyNews, setCompanyNews] = useState(
+    JSON.stringify(briefing.companyNews ?? [], null, 2),
+  );
+  const [keywords, setKeywords] = useState((briefing.keywords ?? []).join(", "));
+  const [watchPoints, setWatchPoints] = useState(linesToText(briefing.watchPoints));
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!accessToken || saving) {
+      return;
+    }
+
+    let parsedCompanyNews: MarketBriefing["companyNews"];
+    try {
+      parsedCompanyNews = JSON.parse(companyNews) as MarketBriefing["companyNews"];
+      if (!Array.isArray(parsedCompanyNews)) {
+        throw new Error("companyNews must be an array.");
+      }
+    } catch {
+      onError("종목/기업 뉴스 JSON 형식이 올바르지 않습니다.");
+      return;
+    }
+
+    setSaving(true);
+    onError("");
+    try {
+      const updated = await apiRequest<MarketBriefing>(
+        `/markets/briefings/${briefing.id}`,
+        "PATCH",
+        {
+          accessToken,
+          body: {
+            title,
+            summaryLines: textToLines(summaryLines),
+            macroLines: textToLines(macroLines),
+            companyNews: parsedCompanyNews,
+            keywords: keywords
+              .split(/[,\n]/)
+              .map((keyword) => keyword.trim())
+              .filter(Boolean),
+            watchPoints: textToLines(watchPoints),
+          },
+        },
+      );
+      onSaved(updated);
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="mb-6 grid gap-4 rounded-md border border-[#c7d6df] bg-white p-4"
+    >
+      <label className="grid gap-1 text-sm font-semibold text-[#344052]">
+        제목
+        <input
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          className="h-11 rounded-md border border-[#c7ceda] px-3 text-base font-medium"
+        />
+      </label>
+      <EditTextarea label="시장 전체 요약" value={summaryLines} onChange={setSummaryLines} />
+      <EditTextarea label="매크로 점검" value={macroLines} onChange={setMacroLines} />
+      <EditTextarea
+        label="주요 종목/기업 뉴스 JSON"
+        value={companyNews}
+        onChange={setCompanyNews}
+        minHeight="260px"
+      />
+      <EditTextarea label="핵심 키워드" value={keywords} onChange={setKeywords} />
+      <EditTextarea label="단기 관전 포인트" value={watchPoints} onChange={setWatchPoints} />
+      <div className="flex flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="h-10 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-base font-semibold hover:bg-[#eef1f6]"
+        >
+          취소
+        </button>
+        <button
+          type="submit"
+          disabled={saving}
+          className="h-10 cursor-pointer rounded-md bg-[#1f6f8b] px-4 text-base font-semibold text-white hover:bg-[#185970] disabled:cursor-default disabled:opacity-50"
+        >
+          {saving ? "저장 중" : "저장"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function EditTextarea({
+  label,
+  value,
+  onChange,
+  minHeight = "150px",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  minHeight?: string;
+}) {
+  return (
+    <label className="grid gap-1 text-sm font-semibold text-[#344052]">
+      {label}
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        style={{ minHeight }}
+        className="resize-y rounded-md border border-[#c7ceda] px-3 py-2 text-base font-medium leading-7"
+      />
+    </label>
+  );
+}
+
+function linesToText(value: string[] | undefined): string {
+  return (value ?? []).join("\n");
+}
+
+function textToLines(value: string): string[] {
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 function isNewBriefing(briefing: MarketBriefing): boolean {
   return Date.now() - briefing.generatedAt * 1000 <= oneDayMs;
 }
@@ -478,9 +732,17 @@ function briefingCompanyName(
   }
 
   return stripTickerTags(source, ticker)
+    .replace(changePattern, "")
     .replace(/\s{2,}/g, " ")
     .replace(/[,\s]+$/g, "")
     .trim();
+}
+
+function briefingCompanyChange(item: MarketBriefing["companyNews"][number]): string {
+  const source = [item.name, item.headline, ...(item.lines ?? [])]
+    .filter(Boolean)
+    .join(" ");
+  return source.match(changePattern)?.[1] ?? "";
 }
 
 function cleanCompanyHeadline(
@@ -497,19 +759,19 @@ function cleanCompanyHeadline(
   const escapedTicker = escapeRegExp(ticker);
   if (escapedName && escapedTicker) {
     nextHeadline = nextHeadline.replace(
-      new RegExp(`^${escapedName}\\s*(?:#${escapedTicker})?(?:\\s+#${escapedTicker})*\\s*[,，:-]?\\s*`, "i"),
+      new RegExp(`^${escapedName}\\s*(?:#${escapedTicker})?(?:\\s+#${escapedTicker})*\\s*(?:\\([+-]?\\d+(?:\\.\\d+)?%\\))?\\s*[,，:-]?\\s*`, "i"),
       "",
     );
   }
 
   if (escapedTicker) {
     nextHeadline = nextHeadline.replace(
-      new RegExp(`^#${escapedTicker}\\s*[,，:-]?\\s*`, "i"),
+      new RegExp(`^#${escapedTicker}\\s*(?:\\([+-]?\\d+(?:\\.\\d+)?%\\))?\\s*[,，:-]?\\s*`, "i"),
       "",
     );
   }
 
-  return nextHeadline.trim();
+  return nextHeadline.replace(changePattern, "").trim();
 }
 
 function stripTickerTags(value: string, ticker: string): string {

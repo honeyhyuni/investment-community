@@ -839,6 +839,51 @@ export class MarketsService {
     return this.toMarketBriefingDto(briefing);
   }
 
+  async updateMarketBriefing(
+    id: string,
+    body: Partial<MarketBriefing>,
+  ): Promise<MarketBriefing> {
+    const briefing = await this.marketBriefingsRepository.findOne({ where: { id } });
+    if (!briefing) {
+      throw new NotFoundException('Market briefing not found.');
+    }
+
+    if (typeof body.title === 'string') {
+      briefing.title = body.title.trim().slice(0, 240);
+    }
+
+    if (Array.isArray(body.summaryLines)) {
+      briefing.summaryLines = this.cleanBriefingLines(body.summaryLines);
+      briefing.summary = briefing.summaryLines.join('\n\n');
+    }
+
+    if (Array.isArray(body.macroLines)) {
+      briefing.macroLines = this.cleanBriefingLines(body.macroLines);
+    }
+
+    if (Array.isArray(body.companyNews)) {
+      briefing.companyNews = this.normalizeBriefingCompanyNews(body.companyNews);
+    }
+
+    if (Array.isArray(body.keywords)) {
+      briefing.keywords = this.cleanBriefingLines(body.keywords);
+    }
+
+    if (Array.isArray(body.watchPoints)) {
+      briefing.watchPoints = this.cleanBriefingLines(body.watchPoints);
+    }
+
+    const saved = await this.marketBriefingsRepository.save(briefing);
+    return this.toMarketBriefingDto(saved);
+  }
+
+  async deleteMarketBriefing(id: string): Promise<void> {
+    const result = await this.marketBriefingsRepository.delete(id);
+    if (!result.affected) {
+      throw new NotFoundException('Market briefing not found.');
+    }
+  }
+
   @Cron('0 25 8 * * 2-6', { timeZone: 'Asia/Seoul' })
   async runScheduledUsMarketBriefing(): Promise<void> {
     await this.runScheduledMarketBriefing('US');
@@ -1442,7 +1487,7 @@ export class MarketsService {
       'companyNews에는 참고 뉴스 원문 목록을 그대로 복사하지 말고, 제공된 News 안에서 실제로 중요한 기업/종목 이슈만 선별해서 5~10개 작성해라.',
       '각 companyNews 항목은 반드시 {"symbol":"티커", "name":"종목명 #티커", "headline":"한 줄 제목", "lines":["본문 1","본문 2"]} 구조로 작성해라.',
       'symbol에는 #을 빼고 NVDA, TSLA, 005930 같은 티커만 넣어라.',
-      'name 또는 headline에는 사용자가 클릭할 수 있도록 종목명 옆에 반드시 #티커를 포함해라. 예: "Nvidia #NVDA", "삼성전자 #005930".',
+      'name 또는 headline에는 사용자가 클릭할 수 있도록 종목명 옆에 반드시 #티커와 (%등락률)를 포함해라. 예: "Nvidia #NVDA (+2.15%)", "삼성전자 #005930 (-1.02%)".',
       '각 종목 뉴스는 2~5줄로 작성하고, "무슨 일이 있었고 -> 시장이 왜 주목했고 -> 관련 업종이나 투자심리에 어떤 의미가 있었는지"의 흐름으로 작성해라.',
       '미국장 리포트에서는 대형 기술주, 반도체, 전기차, 금융, 헬스케어, 소비재, 에너지, 산업재, 방산, 중국 ADR 등 여러 업종이 함께 보이도록 균형 있게 선택해라.',
       'Nvidia #NVDA, Tesla #TSLA 같은 종목은 제공된 News에 실제 관련 뉴스가 있고 전일 시장 영향도가 클 때만 포함해라.',
@@ -1636,6 +1681,13 @@ export class MarketsService {
         };
       })
       .filter((item) => item.name || item.headline || item.lines.length);
+  }
+
+  private cleanBriefingLines(value: unknown[]): string[] {
+    return value
+      .filter((line): line is string => typeof line === 'string')
+      .map((line) => line.trim())
+      .filter(Boolean);
   }
 
   private extractBriefingTicker(value: string): string {
