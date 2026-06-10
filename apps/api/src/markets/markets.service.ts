@@ -1433,6 +1433,23 @@ export class MarketsService {
         ? '한국 개인투자자가 오늘 장 마감 후 확인하는 당일 한국 주식 요약입니다.'
         : '한국 개인투자자가 출근길에 확인하는 전일 미국 주식 요약입니다.';
 
+    const effectiveReportScope =
+      market === 'KR'
+        ? '한국 개인투자자가 오늘 장 마감 후 확인하는 당일 한국장 요약입니다.'
+        : '한국 개인투자자가 출근길에 확인하는 전일 미국장 요약입니다.';
+    const companyNewsPrompt = [
+      '중요: companyNews는 반드시 OpenAI가 제공된 News를 분석해서 직접 작성한 주요 종목/기업 뉴스 배열이어야 한다.',
+      'companyNews에는 참고 뉴스 원문 목록을 그대로 복사하지 말고, 제공된 News 안에서 실제로 중요한 기업/종목 이슈만 선별해서 5~10개 작성해라.',
+      '각 companyNews 항목은 반드시 {"symbol":"티커", "name":"종목명 #티커", "headline":"한 줄 제목", "lines":["본문 1","본문 2"]} 구조로 작성해라.',
+      'symbol에는 #을 빼고 NVDA, TSLA, 005930 같은 티커만 넣어라.',
+      'name 또는 headline에는 사용자가 클릭할 수 있도록 종목명 옆에 반드시 #티커를 포함해라. 예: "Nvidia #NVDA", "삼성전자 #005930".',
+      '각 종목 뉴스는 2~5줄로 작성하고, "무슨 일이 있었고 -> 시장이 왜 주목했고 -> 관련 업종이나 투자심리에 어떤 의미가 있었는지"의 흐름으로 작성해라.',
+      '미국장 리포트에서는 대형 기술주, 반도체, 전기차, 금융, 헬스케어, 소비재, 에너지, 산업재, 방산, 중국 ADR 등 여러 업종이 함께 보이도록 균형 있게 선택해라.',
+      'Nvidia #NVDA, Tesla #TSLA 같은 종목은 제공된 News에 실제 관련 뉴스가 있고 전일 시장 영향도가 클 때만 포함해라.',
+      'ETF 뉴스는 개별 기업 뉴스보다 우선순위를 낮춰라.',
+      'JSON 필드명은 반드시 companyNews를 사용해라.',
+    ].join('\n');
+
     const response = await this.fetchOpenAiWithRetry('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
@@ -1451,9 +1468,10 @@ export class MarketsService {
           {
             role: 'user',
             content: [
+              companyNewsPrompt,
               `Market: ${market}`,
               `Language: ${targetLanguage}`,
-              `Report scope: ${reportScope}`,
+              `Report scope: ${effectiveReportScope}`,
               '아래 제공된 시장 데이터와 뉴스 데이터만 근거로 사용해라.',
               '제공되지 않은 사실, 주가, 날짜, 기업 발언은 절대 추측하지 마라.',
               '투자 권유 표현은 피하고, 정보 전달 중심으로 작성해라.',
@@ -1550,6 +1568,11 @@ export class MarketsService {
       | 'keywords'
       | 'watchPoints'
     >;
+    const parsedRecord = parsed as typeof parsed & {
+      company_news?: unknown;
+    };
+    const companyNewsInput =
+      parsedRecord.companyNews ?? parsedRecord.company_news;
     return {
       titleCandidates: parsed.titleCandidates,
       market,
@@ -1557,7 +1580,7 @@ export class MarketsService {
       summary: (parsed.summaryLines ?? []).join('\n\n'),
       summaryLines: parsed.summaryLines ?? [],
       macroLines: parsed.macroLines ?? [],
-      companyNews: this.normalizeBriefingCompanyNews(parsed.companyNews),
+      companyNews: this.normalizeBriefingCompanyNews(companyNewsInput),
       keywords: parsed.keywords ?? [],
       watchPoints: parsed.watchPoints ?? [],
       model,
@@ -1582,21 +1605,28 @@ export class MarketsService {
           summary?: unknown;
           description?: unknown;
         };
-        const symbol = typeof record.symbol === 'string' ? record.symbol : '';
-        const name = typeof record.name === 'string' ? record.name : symbol;
+        const lines = Array.isArray(record.lines)
+          ? record.lines.filter((line): line is string => typeof line === 'string' && line.trim().length > 0)
+          : [];
         const headline =
           typeof record.headline === 'string'
             ? record.headline
             : typeof record.summary === 'string'
               ? record.summary
-              : '';
+              : lines[0] ?? '';
+        const symbol = this.extractBriefingTicker(
+          [
+            typeof record.symbol === 'string' ? record.symbol : '',
+            typeof record.name === 'string' ? record.name : '',
+            headline,
+            ...lines,
+          ].join(' '),
+        );
+        const name = typeof record.name === 'string' ? record.name : symbol;
         const fallbackLine =
           typeof record.description === 'string'
             ? record.description
             : headline;
-        const lines = Array.isArray(record.lines)
-          ? record.lines.filter((line): line is string => typeof line === 'string' && line.trim().length > 0)
-          : [];
 
         return {
           symbol,
@@ -1606,6 +1636,23 @@ export class MarketsService {
         };
       })
       .filter((item) => item.name || item.headline || item.lines.length);
+  }
+
+  private extractBriefingTicker(value: string): string {
+    const text = value.trim();
+    if (!text) {
+      return '';
+    }
+
+    const tagged = text.match(/#([A-Z0-9.]{1,12}|\d{6})/i)?.[1];
+    if (tagged) {
+      return tagged.toUpperCase();
+    }
+
+    const clean = text.replace(/^#/, '').trim().toUpperCase();
+    return /^[A-Z0-9.]{1,12}$/.test(clean) || /^\d{6}$/.test(clean)
+      ? clean
+      : '';
   }
 
   private async fetchOpenAiWithRetry(
