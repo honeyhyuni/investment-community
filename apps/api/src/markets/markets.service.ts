@@ -915,6 +915,10 @@ export class MarketsService {
     if (!generated) {
       throw new ServiceUnavailableException('휴장이었습니다.');
     }
+    generated.companyNews = await this.enrichBriefingCompanyNewsChanges(
+      normalizedMarket,
+      generated.companyNews,
+    );
     const datedTitle = this.withKoreanDatePrefix(generated.title);
     const imageUrl = await this.generateMarketBriefingImage(
       normalizedMarket,
@@ -1690,6 +1694,60 @@ export class MarketsService {
       .filter((line): line is string => typeof line === 'string')
       .map((line) => line.trim())
       .filter(Boolean);
+  }
+
+  private async enrichBriefingCompanyNewsChanges(
+    market: 'US' | 'KR',
+    companyNews: MarketBriefing['companyNews'],
+  ): Promise<MarketBriefing['companyNews']> {
+    const changePattern = /\([+-]\s*\d+(?:\.\d+)?%\)/;
+
+    return Promise.all(
+      companyNews.map(async (item) => {
+        const symbol = item.symbol?.trim().toUpperCase();
+        if (!symbol || changePattern.test(`${item.name} ${item.headline}`)) {
+          return item;
+        }
+
+        const quote = await this.getStockQuote(symbol, market).catch((error) => {
+          this.logger.warn(
+            `Briefing quote enrichment skipped for ${symbol}: ${
+              error instanceof Error ? error.message : 'unknown error'
+            }`,
+          );
+          return null;
+        });
+        const percentChange = quote?.percentChange;
+        if (typeof percentChange !== 'number' || !Number.isFinite(percentChange)) {
+          return item;
+        }
+
+        const formattedChange = `(${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(2)}%)`;
+
+        return {
+          ...item,
+          name: this.appendBriefingChange(item.name, symbol, formattedChange),
+          headline: this.appendBriefingChange(item.headline, symbol, formattedChange),
+        };
+      }),
+    );
+  }
+
+  private appendBriefingChange(value: string, symbol: string, change: string): string {
+    if (!value) {
+      return `#${symbol} ${change}`;
+    }
+
+    const tickerPattern = new RegExp(`(#${this.escapeRegExp(symbol)})(?!\\s*\\()`, 'i');
+    if (tickerPattern.test(value)) {
+      return value.replace(tickerPattern, `$1 ${change}`);
+    }
+
+    return `${value} ${change}`;
+  }
+
+  private escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   private extractBriefingTicker(value: string): string {
