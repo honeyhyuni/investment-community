@@ -1502,104 +1502,368 @@ export class MarketsService {
       'JSON 필드명은 반드시 companyNews를 사용해라.',
     ].join('\n');
 
-    const response = await this.fetchOpenAiWithRetry('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        service_tier: 'flex',
-        input: [
-          {
-            role: 'system',
-            content:
-              'You are a market close report writer for Korean retail investors. Return only valid JSON matching the schema. Do not include markdown fences.',
-          },
-          {
-            role: 'user',
-            content: [
-              companyNewsPrompt,
-              `Market: ${market}`,
-              `Language: ${targetLanguage}`,
-              `Report scope: ${effectiveReportScope}`,
-              '아래 제공된 시장 데이터와 뉴스 데이터만 근거로 사용해라.',
-              '제공되지 않은 사실, 주가, 날짜, 기업 발언은 절대 추측하지 마라.',
+  type NewsSource = {
+  headline?: string;
+  source?: string;
+  summary?: string;
+  description?: string;
+  publishedAt?: string;
+  url?: string;
+};
+
+function normalizeText(value?: string): string {
+  return (value || '').toLowerCase();
+}
+
+function sourceToSearchText(item: NewsSource): string {
+  return [
+    item.headline,
+    item.summary,
+    item.description,
+    item.source,
+    item.publishedAt,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function hasAnyKeyword(text: string, keywords: string[]): boolean {
+  const lower = text.toLowerCase();
+  return keywords.some((keyword) => lower.includes(keyword.toLowerCase()));
+}
+
+/**
+ * CPI/PCE/FOMC/고용처럼 "발표된 날에는 매크로 상단에서 반드시 검토해야 하는 이벤트"만 추출.
+ * 발표 없는 날은 빈 배열이므로 CPI를 억지로 쓰지 않음.
+ */
+function buildHighPriorityMacroLines(sources: NewsSource[]): string[] {
+  const highPriorityKeywords = [
+    'cpi',
+    'core cpi',
+    'consumer price index',
+    'inflation data',
+    'pce',
+    'core pce',
+    'personal consumption expenditures',
+    'fomc',
+    'federal reserve',
+    'fed',
+    'powell',
+    'rate decision',
+    'interest rate',
+    'dot plot',
+    'nonfarm payrolls',
+    'payrolls',
+    'jobs report',
+    'employment',
+    'unemployment',
+    'jobless claims',
+    'wage growth',
+    'average hourly earnings',
+    'ppi',
+    'producer price index',
+  ];
+
+  const highPrioritySources = sources.filter((item) => {
+    const text = sourceToSearchText(item);
+    return hasAnyKeyword(text, highPriorityKeywords);
+  });
+
+  return highPrioritySources.slice(0, 5).map((item, index) => {
+    return [
+      `${index + 1}. ${item.headline || 'No headline'} (${item.source || 'Unknown source'})`,
+      item.summary ? `Summary: ${item.summary}` : '',
+      item.description ? `Description: ${item.description}` : '',
+      item.publishedAt ? `Published: ${item.publishedAt}` : '',
+      'Priority note: 이 항목은 제공된 데이터 안에서 확인된 핵심 매크로 이벤트이므로 일반 기업 뉴스보다 먼저 검토해야 합니다.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  });
+}
+
+/**
+ * 일반 매크로 뉴스 후보.
+ * 지정학, 유가, 금리, 달러, 원자재, 정책, 수급 등.
+ * 단, High priority와 겹칠 수 있으므로 모델에게 우선순위는 따로 지시함.
+ */
+function buildMacroEventLines(sources: NewsSource[]): string[] {
+  const macroKeywords = [
+    'oil',
+    'wti',
+    'brent',
+    'crude',
+    'treasury',
+    'yield',
+    'bond',
+    'dollar',
+    'currency',
+    'yen',
+    'won',
+    'gold',
+    'commodity',
+    'commodities',
+    'geopolitical',
+    'iran',
+    'israel',
+    'china',
+    'tariff',
+    'export control',
+    'sanction',
+    'opec',
+    'policy',
+    'central bank',
+    'liquidity',
+    'volatility',
+    'risk-off',
+    'risk on',
+    'credit',
+    'debt',
+    'fiscal',
+  ];
+
+  const macroSources = sources.filter((item) => {
+    const text = sourceToSearchText(item);
+    return hasAnyKeyword(text, macroKeywords);
+  });
+
+  return macroSources.slice(0, 8).map((item, index) => {
+    return [
+      `${index + 1}. ${item.headline || 'No headline'} (${item.source || 'Unknown source'})`,
+      item.summary ? `Summary: ${item.summary}` : '',
+      item.description ? `Description: ${item.description}` : '',
+      item.publishedAt ? `Published: ${item.publishedAt}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  });
+}
+
+function buildNewsText(sources: NewsSource[]): string {
+  if (!sources.length) return 'No news.';
+
+  return sources
+    .map((item, index) =>
+      [
+        `${index + 1}. ${item.headline || 'No headline'} (${item.source || 'Unknown source'})`,
+        item.summary ? `Summary: ${item.summary}` : '',
+        item.description ? `Description: ${item.description}` : '',
+        item.publishedAt ? `Published: ${item.publishedAt}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    )
+    .join('\n\n');
+}
+
+const typedSources = sources as NewsSource[];
+
+const highPriorityMacroLines = buildHighPriorityMacroLines(typedSources);
+const macroEventLines = buildMacroEventLines(typedSources);
+const newsText = buildNewsText(typedSources);
+
+const response = await this.fetchOpenAiWithRetry(
+  'https://api.openai.com/v1/responses',
+  {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      service_tier: 'flex',
+      input: [
+        {
+          role: 'system',
+          content: [
+            'You are a market close report writer for Korean retail investors.',
+            'Use only the Market indicators, High priority macro events, Macro events, and News provided by the user.',
+            'High priority macro events are not mandatory every day.',
+            'If High priority macro events are provided, they must be reviewed before ordinary News.',
+            'If CPI, Core CPI, PCE, FOMC, Fed, or employment data appears in High priority macro events, it must not be omitted from macroLines.',
+            'Market indicators are results, not causes. Do not treat index moves as macro causes.',
+            'Do not invent facts, prices, dates, quotes, company statements, or market moves.',
+            'If the market was closed, return exactly "휴장이었습니다." and nothing else.',
+            'Otherwise, return only valid JSON. Do not include markdown fences or extra commentary.',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: [
+            companyNewsPrompt,
+
+            `Market: ${market}`,
+            `Language: ${targetLanguage}`,
+            `Report scope: ${effectiveReportScope}`,
+
+            [
+              '기본 역할:',
+              '너는 한국 개인투자자를 위한 장 마감 리포트 작성자다.',
+              '아래 제공된 Market indicators, High priority macro events, Macro events, News만 근거로 사용해라.',
+              '제공되지 않은 사실, 주가, 날짜, 기업 발언, 시장 반응은 절대 추측하지 마라.',
               '투자 권유 표현은 피하고, 정보 전달 중심으로 작성해라.',
-              '모든 문장은 "~했습니다", "~보였습니다", "~영향을 줬습니다" 같은 종결형으로 작성해라.',
-              '제목은 본문 날짜 기준으로 [M월 D일] 형식을 반드시 붙여라.',
+              '모든 문장은 존댓말 문체로 작성해라.',
+              '"~했다", "~강조했다", "~전망했다"가 아니라 "~했습니다", "~강조했습니다", "~전망했습니다"처럼 끝내라.',
+              '제목은 본문 날짜 기준으로 [M월 D일] 제목 형식이어야 한다.',
               '종목 표기는 괄호 없이 "삼성전자 #005930", "Nvidia #NVDA" 형식으로 작성해라.',
-              '회사/종목 표기는 가능한 경우 종목명 뒤에 #티커와 숫자형 (%등락률)를 붙여라. 예: "Nvidia #NVDA (+2.15%)", "삼성전자 #005930 (-1.02%)".',
+              '등락률이 제공된 경우에만 종목명 뒤에 숫자형 등락률을 붙여라. 예: "Nvidia #NVDA (+2.15%)", "삼성전자 #005930 (-1.02%)".',
+              '등락률이 제공되지 않았으면 등락률을 절대 만들지 마라.',
               '미국장 리포트는 전일 미국장 요약이고, 한국장 리포트는 당일 한국장 요약이다.',
               '전일 미국장이 휴장이었거나 금일 한국장이 휴장이었으면 다른 JSON을 쓰지 말고 정확히 "휴장이었습니다."만 출력해라.',
-              '뉴스 제목뿐 아니라 Summary가 제공된 경우, Summary 안의 구체적 내용을 우선 활용해라.',
-              '단, Summary에 없는 세부 발언이나 사건 내용은 추측하지 마라.',
-              `Market indicators:\n${pulseLines.join('\n') || 'No indicator data.'}`,
-              `News:\n${sources
-                .map((item, index) =>
-                  [
-                    `${index + 1}. ${item.headline} (${item.source})`,
-                    item.summary ? `Summary: ${item.summary}` : '',
-                  ]
-                    .filter(Boolean)
-                    .join('\n'),
-                )
-                .join('\n') || 'No news.'}`,
-              [
-                '정상 출력 요구사항:',
-                'JSON만 출력해라. 마크다운 코드 블록은 쓰지 마라.',
-                '1. 게시글 제목 후보 3개 작성',
-                '2. 가장 좋은 제목 1개 선택',
-                '3. 시장 전체 요약 5줄 작성',
-                '4. 매크로 점검은 8~12줄로 작성하되, 근거가 부족하면 5~8줄로 작성해라.',
-                '전일 시장 방향성에 실제로 영향을 준 원인 이벤트와 매크로 배경만 선별해서 설명해라.',
-                'Market indicators는 결과값이다. 나스닥, S&P 500, 다우, 코스피, 코스닥 등 지수 등락률을 macroLines의 주요 소재로 쓰지 마라.',
-                '지수 등락률, 금 가격, 비트코인 가격, 이더리움 가격 등 단순 자산 가격 변화는 원인이 아니라 결과로 간주해라.',
-                '자산 가격 변화는 원인 설명을 보조할 때만 최대 2줄까지 사용할 수 있다.',
-                '탐색 범위는 지정학, 물가, CPI/PCE, 고용, 금리, 채권금리, 환율, 원자재, 유가, 정책, 중앙은행 발언, 재정 이슈, 수급, 신용위험, 변동성, 투자심리, 글로벌 주요국 증시 흐름, 업종 로테이션 등을 포함하되 이에 한정하지 마라.',
-                '단, 위 항목들은 예시 탐색 범위일 뿐이며 모든 항목을 반드시 언급하지 마라.',
-                '제공된 News 중 매크로, 정책, 금리, 물가, 고용, 지정학, 원자재, 환율, 중앙은행, 재정, 수급, 투자심리와 직접 관련된 뉴스에 근거가 있는 항목만 작성해라.',
-                '근거가 없거나 시장 영향이 확인되지 않은 항목은 언급하지 마라.',
-                'CPI, Core CPI, PCE, FOMC, 고용지표, 국채금리, 달러, 유가 관련 뉴스가 있으면 우선 검토해라.',
-                'CPI 또는 Core CPI가 제공되어 있고 시장 반응이 함께 제공되어 있으면 macroLines에 반드시 포함해라.',
-                'CPI/Core CPI의 실제치, 예상치, 이전치가 제공되지 않았으면 숫자를 추측하지 말고 제공된 문장만 사용해라.',
-                '전일 CPI 관련 데이터나 뉴스가 제공되지 않았으면 CPI를 쓰지 마라.',
-                '개별 기업 뉴스는 companyNews에서 따로 다루므로, 매크로 점검에서는 개별 기업 이슈를 중심 소재로 작성하지 마라.',
-                '다만 개별 기업 뉴스가 지수, 업종, 투자심리, 수급에 영향을 준 경우에는 반도체 업종, 대형 기술주, 2차전지주처럼 업종·시장 단위로만 연결해서 설명해라.',
-                '각 줄은 단순 나열이 아니라 "원인 이벤트 또는 원인 뉴스 -> 시장이 어떻게 해석했고 -> 어떤 지수·업종·자산에 영향을 줬는지"의 흐름으로 작성해라.',
-                '문장 비중은 원인 설명 70%, 시장 반응 설명 30%로 작성해라.',
-                '중요도 기준은 지수와 주요 업종 움직임을 설명하는 데 도움이 되는가로 판단해라.',
-                '금지 예시: "나스닥이 1.98% 하락하며 S&P 500과 다우보다 더 부진했습니다."',
-                '금지 예시: "비트코인은 0.55%, 이더리움은 0.44% 상승했습니다."',
-                '5. 주요 종목/기업 뉴스는 5~10개 작성해라.',
-                '제공된 News 안에서 실제로 중요한 기업/종목 이슈만 선별해라.',
-                '단순히 시가총액이 크거나 유명하다는 이유만으로 Nvidia #NVDA, Tesla #TSLA, Apple #AAPL, Microsoft #MSFT 같은 대형 기술주를 반복해서 선택하지 마라.',
-                '선정 기준은 다음 순서로 판단해라.',
-                '전일 주가지수 또는 업종 흐름에 영향을 준 기업 뉴스',
-                '실적, 가이던스, 규제, 인수합병, 공급계약, 제품 출시, 소송, 정책 영향처럼 구체적 이벤트가 있는 뉴스',
-                '특정 업종 전체의 투자심리나 수급에 영향을 준 대표 기업 뉴스',
-                '한국 개인투자자가 관심을 가질 만한 글로벌 주도 업종 뉴스',
-                '단순 주가 등락보다 원인과 파급효과가 명확한 뉴스',
-                '미국장 리포트에서는 대형 기술주, 반도체, 전기차, 금융, 헬스케어, 소비재, 에너지, 산업재, 방산, 중국 ADR 등 여러 업종이 함께 보이도록 균형 있게 선택해라.',
-                '한 업종에 뉴스가 몰려 있더라도 같은 업종 뉴스만 반복하지 말고, 시장 흐름을 설명하는 데 필요한 경우에만 집중해서 다뤄라.',
-                'Nvidia #NVDA, Tesla #TSLA 같은 종목은 제공된 News에 실제 관련 뉴스가 있고 전일 시장 영향도가 클 때만 포함해라.',
-                '제공된 News에 명확한 근거가 없으면 유명 종목이라도 넣지 마라.',
-                'ETF 뉴스는 개별 기업 뉴스보다 우선순위를 낮춰라.',
-                '다만 ETF 뉴스가 업종 수급이나 시장 전체 흐름을 설명하는 핵심 근거일 때만 제한적으로 활용해라.',
-                '각 종목 뉴스는 2~5줄로 작성해라.',
-                '각 뉴스는 "무슨 일이 있었고 -> 시장이 왜 주목했고 -> 관련 업종이나 투자심리에 어떤 의미가 있었는지"의 흐름으로 작성해라.',
-                '6. 오늘의 핵심 키워드 3~5개 작성',
-                '7. 마지막 단기 관전 포인트 2~3줄 작성',
-                '8. PNG 그림은 별도 이미지 생성 API에서 만들 예정이므로 JSON에는 넣지 마라.',
-                'JSON 필드는 titleCandidates, title, summaryLines, macroLines, companyNews, keywords, watchPoints 만 사용해라.',
-              ].join('\n'),
-            ].join('\n\n'),
-          },
-        ],
-        max_output_tokens: 5000,
-      }),
-    }, 120_000, 300_000);
+              '뉴스 제목뿐 아니라 Summary 또는 Description이 제공된 경우, 그 안의 구체적 내용을 우선 활용해라.',
+              '단, Summary 또는 Description에 없는 세부 발언이나 사건 내용은 추측하지 마라.',
+              '중요: 이 프롬프트 안에 깨진 한글(mojibake)이 보이면 모두 무시하고, 정상 한국어 지시문만 따라라.',
+            ].join('\n'),
+
+            `Market indicators:\n${pulseLines.join('\n') || 'No indicator data.'}`,
+
+            `High priority macro events:\n${
+              highPriorityMacroLines.length
+                ? highPriorityMacroLines.join('\n\n')
+                : 'No high priority macro event data.'
+            }`,
+
+            `Macro events:\n${
+              macroEventLines.length
+                ? macroEventLines.join('\n\n')
+                : 'No macro event data.'
+            }`,
+
+            `News:\n${newsText}`,
+
+            [
+              '출력 형식:',
+              '휴장이 아닌 경우에는 JSON만 출력해라.',
+              '마크다운 코드블록은 쓰지 마라.',
+              'JSON 필드는 반드시 다음 7개만 사용해라:',
+              'titleCandidates, title, summaryLines, macroLines, companyNews, keywords, watchPoints',
+              '',
+              '필드별 요구사항:',
+              '1. titleCandidates는 게시글 제목 후보 3개로 작성해라.',
+              '2. title은 titleCandidates 중 가장 좋은 제목 1개를 선택해라.',
+              '3. summaryLines는 시장 전체 요약을 정확히 5줄로 작성해라.',
+              '4. macroLines는 매크로 점검을 8~12줄로 작성하되, 근거가 부족하면 5~8줄로 작성해라.',
+              '5. companyNews는 전일 주요 종목/기업 뉴스 5~10개로 작성해라.',
+              '6. companyNews 각 항목의 lines는 2~5줄로 작성해라.',
+              '7. keywords는 오늘의 핵심 키워드 3~5개로 작성해라.',
+              '8. watchPoints는 마지막 단기 관전 포인트 2~3줄로 작성해라.',
+              '9. PNG 그림은 별도 이미지 생성 API에서 만들 예정이므로 JSON에는 넣지 마라.',
+              '10. 휴장일이면 JSON을 출력하지 말고 "휴장이었습니다."만 출력해라.',
+            ].join('\n'),
+
+            [
+              '매크로 점검 작성 규칙:',
+              '',
+              '핵심 원칙:',
+              'macroLines는 전일 시장을 움직인 원인 이벤트와 매크로 배경을 설명하는 구간이다.',
+              'Market indicators는 시장 결과값이며, 원인으로 해석하지 마라.',
+              '지수 등락률, 금 가격, 비트코인 가격, 이더리움 가격, 원자재 가격 변화는 원인이 아니라 결과로 간주해라.',
+              '자산 가격 변화는 원인 설명을 보조할 때만 제한적으로 언급해라.',
+              'summaryLines에서 이미 다룬 나스닥, S&P 500, 다우, 코스피, 코스닥 등의 단순 등락률을 macroLines에서 반복하지 마라.',
+              '',
+              '우선순위 규칙:',
+              'macroLines 작성 시 근거 검토 순서는 반드시 다음 순서를 따른다.',
+              '1. High priority macro events',
+              '2. Macro events',
+              '3. News 중 매크로 관련 뉴스',
+              '4. Market indicators는 결과 확인용',
+              '5. 개별 기업 뉴스는 원칙적으로 companyNews에서 처리',
+              '',
+              'High priority macro events 처리 규칙:',
+              'High priority macro events는 매일 반드시 존재하는 항목이 아니다.',
+              'High priority macro events가 "No high priority macro event data."이면 CPI, PCE, FOMC, 고용지표를 억지로 언급하지 마라.',
+              '반대로 High priority macro events에 CPI, Core CPI, PCE, Core PCE, FOMC, Fed, 고용지표, 실업률, 임금상승률, 실업수당청구건수 같은 항목이 제공되면 해당 항목을 일반 뉴스보다 먼저 검토해라.',
+              'High priority macro events에 CPI 또는 Core CPI가 제공되어 있으면, 해당 CPI/Core CPI가 전일 시장 해석에 어떤 의미였는지 macroLines 상단에서 반드시 다뤄라.',
+              'High priority macro events에 CPI가 제공되어 있는데 macroLines에서 CPI를 완전히 생략하지 마라.',
+              'High priority macro events에 있는 핵심 이벤트보다 지정학, AI, 개별 기업 뉴스, ETF 뉴스가 먼저 나오지 않도록 해라.',
+              '단, CPI/Core CPI의 실제치, 예상치, 이전치, 발표일, 시장 반응이 제공되지 않았다면 절대 숫자나 반응을 만들지 말고 제공된 내용만 사용해라.',
+              '',
+              '매크로 뉴스 선별 규칙:',
+              'News에 CPI, PCE, FOMC, Fed, 고용, 금리, 국채금리, 달러, 환율, 유가, 원자재, 지정학, 정책, 재정, 신용위험, 변동성, 투자심리 관련 뉴스가 있으면 매크로 후보로 검토해라.',
+              '단, News에 있는 키워드만 보고 추측하지 말고, headline, summary, description에 실제 근거가 있는 경우에만 작성해라.',
+              '근거가 없거나 시장 영향이 확인되지 않은 항목은 언급하지 마라.',
+              '전일 CPI 관련 데이터나 뉴스가 제공되지 않았으면 CPI를 쓰지 마라.',
+              '',
+              '개별 기업 뉴스 처리 규칙:',
+              '개별 기업 실적, 제품, 계약, 소송, 주가 반응은 원칙적으로 companyNews에서 다뤄라.',
+              '다만 개별 기업 뉴스가 업종 전체 투자심리나 지수 방향성에 영향을 준 경우에는 업종 단위로만 macroLines에 연결해라.',
+              '예: "반도체 업종", "대형 기술주", "AI 인프라", "전기차 업종", "은행주"처럼 시장 단위로 설명해라.',
+              '',
+              '작성 분량:',
+              'macroLines는 원칙적으로 8~12줄로 작성해라.',
+              '단, 제공된 High priority macro events, Macro events, 매크로 관련 News가 부족하면 5~8줄로 줄여라.',
+              '근거가 부족한데 줄 수를 채우기 위해 지수 등락률, 금, 코인, 개별 종목 뉴스를 반복하지 마라.',
+              '',
+              '작성 방식:',
+              '각 macroLines 문장은 "원인 이벤트 또는 원인 뉴스 -> 시장이 해석한 의미 -> 영향을 받은 자산군/업종" 순서로 작성해라.',
+              '문장 비중은 원인 설명 70%, 시장 반응 설명 30%로 작성해라.',
+              '',
+              '금지 예시:',
+              '"나스닥이 1.98% 하락하며 S&P 500과 다우보다 더 부진했습니다."',
+              '"S&P 500은 1.62% 하락해 기술주 약세가 지수 전반으로 확산됐습니다."',
+              '"다우존스는 1.87% 하락했습니다."',
+              '"비트코인은 0.55%, 이더리움은 0.44% 상승했습니다."',
+            ].join('\n'),
+
+            [
+              '주요 종목/기업 뉴스 선정 규칙:',
+              'companyNews는 제공된 News 안에서 실제로 중요한 기업/종목 이슈만 선별해서 작성해라.',
+              '단순히 시가총액이 크거나 유명하다는 이유만으로 Nvidia #NVDA, Tesla #TSLA, Apple #AAPL, Microsoft #MSFT 같은 대형 기술주를 반복해서 선택하지 마라.',
+              '',
+              '선정 기준은 다음 순서로 판단해라.',
+              '1. 전일 주가지수 또는 업종 흐름에 영향을 준 기업 뉴스',
+              '2. 실적, 가이던스, 규제, 인수합병, 공급계약, 제품 출시, 소송, 정책 영향처럼 구체적 이벤트가 있는 뉴스',
+              '3. 특정 업종 전체의 투자심리나 수급에 영향을 준 대표 기업 뉴스',
+              '4. 한국 개인투자자가 관심을 가질 만한 글로벌 주도 업종 뉴스',
+              '5. 단순 주가 등락보다 원인과 파급효과가 명확한 뉴스',
+              '',
+              '미국장 리포트에서는 대형 기술주, 반도체, 전기차, 금융, 헬스케어, 소비재, 에너지, 산업재, 방산, 중국 ADR 등 여러 업종이 함께 보이도록 균형 있게 선택해라.',
+              '한 업종에 뉴스가 몰려 있더라도 같은 업종 뉴스만 반복하지 말고, 시장 흐름을 설명하는 데 필요한 경우에만 집중해서 다뤄라.',
+              'Nvidia #NVDA, Tesla #TSLA 같은 종목은 제공된 News에 실제 관련 뉴스가 있고 전일 시장 영향도가 클 때만 포함해라.',
+              '제공된 News에 명확한 근거가 없으면 유명 종목이라도 넣지 마라.',
+              '동일 리포트 안에서 Magnificent 7 종목은 최대 3개까지만 포함해라. 단, 제공된 News 대부분이 Magnificent 7 관련 뉴스인 경우에만 예외로 해라.',
+              'ETF 뉴스는 개별 기업 뉴스보다 우선순위를 낮춰라.',
+              '다만 ETF 뉴스가 업종 수급이나 시장 전체 흐름을 설명하는 핵심 근거일 때만 제한적으로 활용해라.',
+              '근거 있는 기업 뉴스가 5개 미만이면 억지로 5개를 채우지 말고, 제공된 근거 안에서만 작성해라.',
+              '',
+              '각 companyNews 항목은 "무슨 일이 있었고 -> 시장이 왜 주목했고 -> 관련 업종이나 투자심리에 어떤 의미가 있었는지"의 흐름으로 작성해라.',
+              '각 companyNews.lines는 2~5줄로 작성해라.',
+            ].join('\n'),
+
+            [
+              'JSON Schema:',
+              '{',
+              '  "titleCandidates": ["string", "string", "string"],',
+              '  "title": "string",',
+              '  "summaryLines": ["string", "string", "string", "string", "string"],',
+              '  "macroLines": ["5~12 strings"],',
+              '  "companyNews": [',
+              '    {',
+              '      "symbol": "string",',
+              '      "name": "string",',
+              '      "headline": "string",',
+              '      "lines": ["2~5 strings"]',
+              '    }',
+              '  ],',
+              '  "keywords": ["3~5 strings"],',
+              '  "watchPoints": ["2~3 strings"]',
+              '}',
+              '',
+              'companyNews.symbol은 가능한 경우 "NVDA", "005930"처럼 #을 제외한 티커만 작성해라.',
+              '티커가 제공되지 않았거나 확실하지 않으면 symbol은 빈 문자열로 둬라.',
+              'companyNews.name은 종목명 또는 회사명만 작성해라.',
+              'companyNews.headline과 lines에서 종목명을 언급할 때는 가능한 경우 "Nvidia #NVDA" 형식을 사용해라.',
+            ].join('\n'),
+          ].join('\n\n'),
+        },
+      ],
+      max_output_tokens: 5000,
+    }),
+  },
+  120_000,
+  300_000,
+);
 
     if (!response.ok) {
       const message = await response.text().catch(() => '');
