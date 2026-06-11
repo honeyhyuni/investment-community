@@ -329,7 +329,7 @@ export function StocksPage() {
     <>
       {noticeMessage ? <Notice message={noticeMessage} error="" /> : null}
       {error ? <Notice message="" error={error} /> : null}
-      <div className="grid flex-1 gap-6 py-6 lg:grid-cols-[1fr]">
+      <div className="grid flex-1 gap-4 py-4 sm:gap-6 sm:py-6 lg:grid-cols-[1fr]">
               <StocksView
                 stockTab={stockTab}
                 setStockTab={setStockTab}
@@ -413,15 +413,15 @@ function StocksView({
   exchangeRate: number | null;
 }) {
   return (
-    <section className="rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
+    <section className="-mx-4 border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
       <div className="flex flex-col gap-3 border-b border-[#eef1f6] pb-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-xl font-semibold">{copy[language].stockList}</h2>
+          <h2 className="text-lg font-semibold sm:text-xl">{copy[language].stockList}</h2>
           <p className="mt-1 text-sm text-[#607086]">
             {copy[language].stockHint}
           </p>
         </div>
-        <div className="grid grid-cols-2 rounded-md border border-[#d4dae5] bg-[#f3f5f9] p-1">
+        <div className="grid grid-cols-2 rounded-md border border-[#d4dae5] bg-[#f3f5f9] p-1 md:min-w-[240px]">
           <button
             onClick={() => {
               setStockTab("KR");
@@ -452,7 +452,7 @@ function StocksView({
       </div>
 
       {stockTab === "KR" ? (
-        <div className="mt-5 grid gap-5 xl:grid-cols-[360px_1fr]">
+        <div className="mt-4 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[360px_1fr]">
           <div>
             <div className="relative">
               <Search
@@ -463,10 +463,10 @@ function StocksView({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder={copy[language].search}
-                className="h-10 w-full rounded-md border border-[#c7ceda] pl-9 pr-3 text-sm outline-none focus:border-[#1f6f8b]"
+                className="h-11 w-full rounded-md border border-[#c7ceda] pl-9 pr-3 text-base outline-none focus:border-[#1f6f8b] sm:h-10 sm:text-sm"
               />
             </div>
-            <div className="mt-3 max-h-[560px] overflow-auto rounded-md border border-[#d9dee8]">
+            <div className="mt-3 max-h-[42dvh] overflow-auto rounded-md border border-[#d9dee8] sm:max-h-[560px]">
               {visibleKrSymbols.map((item) => {
                   const quote = krStocks.find((stock) => stock.symbol === item.symbol);
                   return (
@@ -479,7 +479,7 @@ function StocksView({
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="font-semibold">{item.description}</p>
+                          <p className="truncate font-semibold">{item.description}</p>
                           <p className="truncate text-xs text-[#607086]">{item.symbol}</p>
                         </div>
                         <p className="shrink-0 text-sm font-semibold">
@@ -492,8 +492,10 @@ function StocksView({
                   );
                 })}
             </div>
-            <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
-            <RelatedNews news={stockNews} />
+            <div className="hidden xl:block">
+              <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
+              <RelatedNews news={stockNews} />
+            </div>
           </div>
           <StockDetailPanel
             detail={stockDetail}
@@ -508,9 +510,13 @@ function StocksView({
             setPriceCurrency={setPriceCurrency}
             exchangeRate={exchangeRate}
           />
+          <div className="xl:hidden">
+            <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
+            <RelatedNews news={stockNews} />
+          </div>
         </div>
       ) : (
-        <div className="mt-5 grid gap-5 xl:grid-cols-[360px_1fr]">
+        <div className="mt-4 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[360px_1fr]">
           <div>
             <div className="relative">
               <Search
@@ -521,10 +527,10 @@ function StocksView({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder={copy[language].search}
-                className="h-10 w-full rounded-md border border-[#c7ceda] pl-9 pr-3 text-sm outline-none focus:border-[#1f6f8b]"
+                className="h-11 w-full rounded-md border border-[#c7ceda] pl-9 pr-3 text-base outline-none focus:border-[#1f6f8b] sm:h-10 sm:text-sm"
               />
             </div>
-            <div className="mt-3 max-h-[560px] overflow-auto rounded-md border border-[#d9dee8]">
+            <div className="mt-3 max-h-[42dvh] overflow-auto rounded-md border border-[#d9dee8] sm:max-h-[560px]">
               {visibleSymbols.map((item) => {
                 const quote = usStocks.find((stock) => stock.symbol === item.symbol);
                 const live = livePrices[item.symbol];
@@ -538,7 +544,7 @@ function StocksView({
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="font-semibold">{item.symbol}</p>
+                        <p className="truncate font-semibold">{item.symbol}</p>
                         <p className="truncate text-xs text-[#607086]">
                           {item.description}
                         </p>
@@ -565,8 +571,10 @@ function StocksView({
                 );
               })}
             </div>
-            <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
-            <RelatedNews news={stockNews} />
+            <div className="hidden xl:block">
+              <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
+              <RelatedNews news={stockNews} />
+            </div>
           </div>
           <StockDetailPanel
             detail={stockDetail}
@@ -581,6 +589,10 @@ function StocksView({
             setPriceCurrency={setPriceCurrency}
             exchangeRate={exchangeRate}
           />
+          <div className="xl:hidden">
+            <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
+            <RelatedNews news={stockNews} />
+          </div>
         </div>
       )}
     </section>
@@ -614,7 +626,7 @@ function StockDetailPanel({
 }) {
   if (!detail) {
     return (
-      <div className="flex min-h-[320px] items-center justify-center rounded-md border border-[#d9dee8] text-sm text-[#607086]">
+      <div className="flex min-h-[240px] items-center justify-center rounded-md border border-[#d9dee8] text-sm text-[#607086] sm:min-h-[320px]">
         Select a stock.
       </div>
     );
@@ -653,18 +665,18 @@ function StockDetailPanel({
   ];
 
   return (
-    <div className="rounded-md border border-[#d9dee8] p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+    <div className="rounded-md border border-[#d9dee8] p-4 sm:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <p className="text-sm text-[#607086]">{detail.profile.exchange}</p>
-          <h3 className="mt-1 text-2xl font-semibold">
+          <h3 className="mt-1 break-words text-xl font-semibold sm:text-2xl">
             {detail.profile.name || detail.symbol}
           </h3>
           <p className="mt-1 text-sm text-[#607086]">
             {detail.symbol} · {detail.profile.finnhubIndustry || "Unknown sector"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
           {!isKoreanMarket ? (
             <button
               onClick={() =>
@@ -690,17 +702,17 @@ function StockDetailPanel({
           exchangeRate={exchangeRate}
         />
       </div>
-      <div className="mt-5 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-4">
+      <div className="mt-5 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3 sm:p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm font-semibold text-[#344052]">
             {translateDetailLabel(language, "realtimeChart")}
           </p>
-          <div className="flex flex-wrap gap-1">
+          <div className="grid grid-cols-6 gap-1 sm:flex sm:flex-wrap">
             {chartPeriods.map((period) => (
               <button
                 key={period}
                 onClick={() => setChartPeriod(period)}
-                className={`h-8 rounded-md px-2.5 text-xs font-semibold ${
+                className={`h-8 rounded-md px-1 text-xs font-semibold sm:px-2.5 ${
                   chartPeriod === period
                     ? "bg-[#1f6f8b] text-white"
                     : "border border-[#c7ceda] bg-white text-[#344052]"
@@ -725,7 +737,7 @@ function StockDetailPanel({
           </p>
         </>
       </div>
-      <div className="mt-5 rounded-md border border-[#d9dee8] p-4">
+       <div className="mt-5 rounded-md border border-[#d9dee8] p-3 sm:p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-[#344052]">
@@ -742,7 +754,7 @@ function StockDetailPanel({
         <p className="mt-4 text-sm leading-6 text-[#344052]">
           {language === "en" ? detail.overview.en : detail.overview.ko}
         </p>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
+         <div className="mt-3 grid gap-2 sm:gap-3 md:grid-cols-2">
           <InfoBox
             label={translateDetailLabel(language, "country")}
             value={detail.profile.country || "-"}
@@ -764,7 +776,7 @@ function StockDetailPanel({
             }
           />
         </div>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="mt-3 grid gap-2 sm:gap-3 md:grid-cols-2">
             <InfoBox
               label={translateDetailLabel(language, "open")}
               value={formatMoney(quote.open, priceCurrency, quote.currency, exchangeRate)}
@@ -780,11 +792,11 @@ function StockDetailPanel({
             />
         </div>
       </div>
-      <div className="mt-5 rounded-md border border-[#d9dee8] p-4">
+      <div className="mt-5 rounded-md border border-[#d9dee8] p-3 sm:p-4">
         <p className="text-sm font-semibold text-[#344052]">
           {translateDetailLabel(language, "metrics")}
         </p>
-        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-3 grid gap-2 sm:gap-3 md:grid-cols-2 xl:grid-cols-3">
           {valuationItems.map((item) => (
             <InfoBox key={item.label} label={item.label} value={item.value} />
           ))}
@@ -846,7 +858,10 @@ function RealtimeChart({
 
     const resize = () => {
       if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth });
+        chart.applyOptions({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight,
+        });
       }
     };
 
@@ -908,7 +923,7 @@ function RealtimeChart({
           Loading
         </div>
       ) : null}
-      <div ref={containerRef} className="h-[260px] w-full" />
+      <div ref={containerRef} className="h-[220px] w-full sm:h-[260px]" />
     </div>
   );
 }
@@ -959,7 +974,7 @@ function QuoteCard({
           <TrendingDown size={18} className="text-[#b64242]" />
         )}
       </div>
-      <p className={compact ? "mt-2 text-xl font-semibold" : "mt-3 text-3xl font-semibold"}>
+      <p className={compact ? "mt-2 text-xl font-semibold" : "mt-3 text-2xl font-semibold sm:text-3xl"}>
         {currentText}
       </p>
       <p
@@ -998,8 +1013,8 @@ function RelatedPosts({
                 onClick={() => onPostClick(post.id)}
                 className="block w-full cursor-pointer border-t border-[#eef1f6] pt-2 text-left first:border-0 first:pt-0"
               >
-                <div className="flex items-baseline gap-2">
-                  <p className="max-w-[45%] truncate text-sm font-semibold">
+                <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+                  <p className="truncate text-sm font-semibold sm:max-w-[45%]">
                     {post.title || post.content}
                   </p>
                   <p className="min-w-0 flex-1 truncate text-[11px] text-[#607086]">
@@ -1037,7 +1052,7 @@ function CompanyIcon({
       <img
         src={logoUrl}
         alt=""
-        className="h-12 w-12 rounded-md border border-[#d9dee8] bg-white object-contain"
+        className="h-10 w-10 rounded-md border border-[#d9dee8] bg-white object-contain sm:h-12 sm:w-12"
         onError={() => setLogoFailed(true)}
       />
     );
@@ -1048,7 +1063,7 @@ function CompanyIcon({
 
 function FallbackCompanyIcon({ initials }: { initials: string }) {
   return (
-    <div className="grid h-12 w-12 place-items-center rounded-md border border-[#d9dee8] bg-[#eef6f9] text-sm font-bold text-[#1f6f8b]">
+    <div className="grid h-10 w-10 place-items-center rounded-md border border-[#d9dee8] bg-[#eef6f9] text-sm font-bold text-[#1f6f8b] sm:h-12 sm:w-12">
       {initials}
     </div>
   );

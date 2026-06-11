@@ -3,7 +3,17 @@
 import { ReactNode, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Moon, Sun, UserPen } from "lucide-react";
+import {
+  BarChart3,
+  FileText,
+  LogOut,
+  MessageSquareText,
+  Moon,
+  Newspaper,
+  ShieldCheck,
+  Sun,
+  UserPen,
+} from "lucide-react";
 import { SessionLoading } from "@/common/components/SessionLoading";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
@@ -14,13 +24,14 @@ const NAV_ITEMS: Array<{
   id: "stocks" | "news" | "marketBriefing" | "community" | "admin";
   href: string;
   label: { en: string; ko: string };
+  icon: typeof BarChart3;
   adminOnly?: boolean;
 }> = [
-  { id: "marketBriefing", href: "/market-briefing", label: { en: "Market Briefing", ko: "마켓 브리핑" } },
-  { id: "stocks", href: "/", label: { en: "Stocks", ko: "종목" } },
-  { id: "news", href: "/news", label: { en: "News", ko: "뉴스" } },
-  { id: "community", href: "/community", label: { en: "Community", ko: "커뮤니티" } },
-  { id: "admin", href: "/admin", label: { en: "Admin", ko: "관리자" }, adminOnly: true },
+  { id: "marketBriefing", href: "/market-briefing", label: { en: "Briefing", ko: "마켓" }, icon: FileText },
+  { id: "stocks", href: "/", label: { en: "Stocks", ko: "종목" }, icon: BarChart3 },
+  { id: "news", href: "/news", label: { en: "News", ko: "뉴스" }, icon: Newspaper },
+  { id: "community", href: "/community", label: { en: "Community", ko: "피드" }, icon: MessageSquareText },
+  { id: "admin", href: "/admin", label: { en: "Admin", ko: "관리" }, icon: ShieldCheck, adminOnly: true },
 ];
 
 /** 승인 유저 전용 셸: 세션가드 + 헤더 + MarketPulse + nav. 라우트 간 유지된다. */
@@ -69,7 +80,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
     <main
       className={`min-h-dvh overflow-x-hidden bg-[#f6f7fb] text-[#161a22] ${darkMode ? "dark-app" : ""}`}
     >
-      <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:px-8 sm:py-6">
+      <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:px-8 sm:py-6">
         <header className="flex flex-col gap-4 border-b border-[#d9dee8] pb-4 sm:flex-row sm:items-center sm:justify-between sm:pb-5">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607086]">
@@ -129,7 +140,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           exchangeRate={exchangeRate}
         />
 
-        <nav className="-mx-4 mt-3 flex gap-2 overflow-x-auto border-b border-[#d9dee8] px-4 sm:mx-0 sm:mt-4 sm:px-0">
+        <nav className="mt-4 hidden gap-2 overflow-x-auto border-b border-[#d9dee8] sm:flex">
           {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
             const active =
               pathname === item.href ||
@@ -153,6 +164,31 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
         {children}
       </section>
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[#d9dee8] bg-white/95 px-2 pb-[calc(0.45rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(21,25,35,0.08)] backdrop-blur sm:hidden">
+        <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
+          {NAV_ITEMS.filter((item) => !item.adminOnly).map((item) => {
+            const active =
+              pathname === item.href ||
+              (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+            const Icon = item.icon;
+
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                className={`flex h-14 flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-colors ${
+                  active
+                    ? "bg-[#eef6f9] text-[#1f6f8b]"
+                    : "text-[#607086] hover:bg-[#f3f5f9] hover:text-[#1f6f8b]"
+                }`}
+              >
+                <Icon size={19} />
+                <span>{language === "ko" ? item.label.ko : item.label.en}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </main>
   );
 }
