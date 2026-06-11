@@ -899,16 +899,22 @@ export class MarketsService {
     language = 'ko',
   ): Promise<MarketBriefing> {
     const normalizedMarket = market.toUpperCase() === 'KR' ? 'KR' : 'US';
-    const [news, pulse] = await Promise.all([
+    const [news, macroNews, pulse] = await Promise.all([
       this.getMarketBriefingNews(normalizedMarket, language),
+      this.getMarketBriefingMacroNews(normalizedMarket, language),
       this.getMarketPulse().catch(() => [] as MarketQuote[]),
     ]);
-    if (news.length < 3 && !pulse.length) {
+    const briefingNews = this.mergeMarketNews([
+      ...macroNews.slice(0, 12),
+      ...news,
+    ]);
+
+    if (briefingNews.length < 3 && !pulse.length) {
       throw new ServiceUnavailableException('Not enough market news to create a briefing.');
     }
     const generated = await this.generateMarketBriefing(
       normalizedMarket,
-      news.slice(0, 20),
+      briefingNews.slice(0, 30),
       pulse,
       language,
     );
@@ -999,6 +1005,183 @@ export class MarketsService {
       [...byUrl.values()].sort((a, b) => b.datetime - a.datetime).slice(0, 60),
       language,
     );
+  }
+
+  private async getMarketBriefingMacroNews(
+    market: 'US' | 'KR',
+    language: string,
+  ): Promise<MarketNews[]> {
+    const queries =
+      market === 'KR'
+        ? [
+            '한국 증시 마감 금리 환율 유가',
+            '코스피 코스닥 마감 원달러 환율 외국인 기관',
+            '한국 물가 금리 채권 환율 증시 영향',
+            '한국 증시 지정학 유가 반도체 2차전지',
+          ]
+        : [
+            'CPI inflation market reaction stocks bonds',
+            'PPI inflation market reaction stocks bonds',
+            'PCE inflation Federal Reserve market reaction',
+            'FOMC Fed rate cut Treasury yields stocks',
+            'jobs report payrolls unemployment market reaction',
+            'Treasury yields dollar stocks market reaction',
+            'oil prices geopolitical risk stocks market reaction',
+            'tariff policy stocks market reaction',
+          ];
+
+    const groups = await Promise.all(
+      queries.map((query) =>
+        (market === 'KR'
+          ? this.getNaverSearchNews(query)
+          : this.getYahooSearchNews(query)
+        ).catch((error) => {
+          this.logger.warn(
+            `Market briefing macro news skipped for "${query}": ${
+              error instanceof Error ? error.message : 'unknown error'
+            }`,
+          );
+          return [] as MarketNews[];
+        }),
+      ),
+    );
+
+    const scored = this.mergeMarketNews(groups.flat())
+      .map((item) => ({
+        item,
+        score: this.scoreMacroBriefingNews(item, market),
+      }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => {
+        if (b.score !== a.score) {
+          return b.score - a.score;
+        }
+        return b.item.datetime - a.item.datetime;
+      })
+      .map(({ item }) => item)
+      .slice(0, 20);
+
+    return this.localizeNewsHeadlines(scored, language);
+  }
+
+  private mergeMarketNews(news: MarketNews[]): MarketNews[] {
+    const byKey = new Map<string, MarketNews>();
+
+    news.forEach((item) => {
+      const key = item.url || `${item.source}:${item.headline}`;
+      if (!item.headline || !key || byKey.has(key)) {
+        return;
+      }
+      byKey.set(key, item);
+    });
+
+    return [...byKey.values()].sort((a, b) => b.datetime - a.datetime);
+  }
+
+  private scoreMacroBriefingNews(news: MarketNews, market: 'US' | 'KR'): number {
+    const text = [
+      news.headline,
+      news.translatedHeadline,
+      news.summary,
+      news.source,
+      news.related,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+
+    const coreKeywords =
+      market === 'KR'
+        ? [
+            '물가',
+            '소비자물가',
+            '금리',
+            '기준금리',
+            '한국은행',
+            '환율',
+            '원달러',
+            '외국인',
+            '기관',
+            '채권',
+          ]
+        : [
+            'cpi',
+            'core cpi',
+            'consumer price index',
+            'ppi',
+            'producer price index',
+            'pce',
+            'core pce',
+            'fomc',
+            'federal reserve',
+            'nonfarm payrolls',
+            'payrolls',
+            'jobs report',
+            'unemployment',
+            'jobless claims',
+          ];
+    const macroKeywords =
+      market === 'KR'
+        ? [
+            '코스피',
+            '코스닥',
+            '증시',
+            '유가',
+            '원유',
+            '반도체',
+            '2차전지',
+            '수급',
+            '지정학',
+            '정책',
+            '중국',
+            '미국장',
+          ]
+        : [
+            'treasury',
+            'yield',
+            'bond',
+            'dollar',
+            'oil',
+            'wti',
+            'brent',
+            'geopolitical',
+            'iran',
+            'israel',
+            'tariff',
+            'policy',
+            'credit',
+            'volatility',
+            'risk-off',
+            'risk on',
+          ];
+    const lowValueKeywords = [
+      'best stocks',
+      'buy now',
+      'prediction',
+      'forecast',
+      'millionaire',
+      'dividend stocks',
+      'etf',
+    ];
+
+    let score = 0;
+    coreKeywords.forEach((keyword) => {
+      if (text.includes(keyword)) {
+        score += 5;
+      }
+    });
+    macroKeywords.forEach((keyword) => {
+      if (text.includes(keyword)) {
+        score += 2;
+      }
+    });
+    lowValueKeywords.forEach((keyword) => {
+      if (text.includes(keyword)) {
+        score -= 2;
+      }
+    });
+
+    return score;
   }
 
   async getStockNews(
@@ -1459,7 +1642,7 @@ export class MarketsService {
       throw new ServiceUnavailableException('OpenAI API key is not configured.');
     }
 
-    const sources = news.slice(0, 15).map((item) => ({
+    const sources = news.slice(0, 24).map((item) => ({
       headline: item.translatedHeadline || item.headline,
       source: item.source,
       summary: item.summary,
@@ -1684,6 +1867,7 @@ const response = await this.fetchOpenAiWithRetry(
             'If Core macro event candidates are provided, they must be reviewed before ordinary News.',
             'If CPI, Core CPI, PCE, FOMC, Fed, or labor-market data appears in Core macro event candidates, it must not be omitted from macroLines.',
             'Market indicators are results, not causes. Do not treat index moves as macro causes.',
+            'In macroLines, do not write absence statements such as "not included", "not provided", "not confirmed", or "no data"; silently omit unsupported topics instead.',
             'Do not invent facts, prices, dates, quotes, company statements, or market moves.',
             'Do not mention internal input section names such as Core macro event candidates, Macro events, High priority, or Priority note in the final Korean report.',
             'If the market was closed, return exactly "휴장이었습니다." and nothing else.',
@@ -1917,7 +2101,7 @@ const response = await this.fetchOpenAiWithRetry(
       title: parsed.title,
       summary: (parsed.summaryLines ?? []).join('\n\n'),
       summaryLines: parsed.summaryLines ?? [],
-      macroLines: parsed.macroLines ?? [],
+      macroLines: this.cleanBriefingMacroLines(parsed.macroLines ?? []),
       companyNews: this.normalizeBriefingCompanyNews(companyNewsInput),
       keywords: parsed.keywords ?? [],
       watchPoints: parsed.watchPoints ?? [],
@@ -1981,6 +2165,46 @@ const response = await this.fetchOpenAiWithRetry(
       .filter((line): line is string => typeof line === 'string')
       .map((line) => line.trim())
       .filter(Boolean);
+  }
+
+  private cleanBriefingMacroLines(value: unknown[]): string[] {
+    return this.cleanBriefingLines(value).filter(
+      (line) => !this.isBriefingAbsenceLine(line),
+    );
+  }
+
+  private isBriefingAbsenceLine(line: string): boolean {
+    const lower = line.toLowerCase();
+    const absencePatterns = [
+      'not included',
+      'not provided',
+      'not confirmed',
+      'no data',
+      'no core macro',
+      'core macro event candidates',
+      'macro events',
+      'high priority',
+      'priority note',
+    ];
+    const koreanAbsencePatterns = [
+      '제공 자료',
+      '제공된 자료',
+      '제공되지',
+      '포함되지',
+      '확인되지',
+      '근거는 없',
+      '근거가 없',
+      '자료에는',
+      '데이터는 없',
+      '데이터가 없',
+      '없었습니다',
+      '없었고',
+    ];
+
+    return (
+      absencePatterns.some((pattern) => lower.includes(pattern)) ||
+      koreanAbsencePatterns.some((pattern) => line.includes(pattern))
+    );
   }
 
   private async enrichBriefingCompanyNewsChanges(
