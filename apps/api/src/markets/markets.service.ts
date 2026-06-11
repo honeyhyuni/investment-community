@@ -2369,71 +2369,82 @@ const response = await this.fetchOpenAiWithRetry(
       this.configService.get<string>('OPENAI_MODEL')?.trim() ||
       'gpt-5.5';
     if (!apiKey) {
-      throw new ServiceUnavailableException('OpenAI API key is not configured.');
+      return this.toSvgDataUrl(this.buildMarketBriefingSvg(market));
     }
 
-    const response = await this.fetchOpenAiWithRetry('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        service_tier: 'flex',
-        input: [
-          {
-            role: 'system',
-            content: [
-              'You create clean SVG editorial cover art for financial market reports.',
-              'Return only valid standalone SVG markup. Do not wrap it in markdown fences.',
-              'Do not use external images, web fonts, scripts, animation, foreignObject, or embedded raster images.',
-            ].join('\n'),
-          },
-          {
-            role: 'user',
-            content: [
-              'Create a polished 16:9 SVG cover image for a Korean retail investor market close report.',
-              'Canvas must be viewBox="0 0 1440 810".',
-              'Style: premium financial PPT cover, clean dashboard composition, dark navy and white surfaces, subtle green/red market accents, professional layout.',
-              'Use only vector shapes: panels, abstract line charts, candlestick-like bars, arrows, soft grid lines, and simple finance icons.',
-              'Do not render Korean text, article titles, ticker labels, numbers, company names, logos, or readable words inside the SVG because generated text can break.',
-              'Keep important visual elements inside the central safe area so the image works as a web article banner without cropping.',
-              'Avoid clutter, tiny text, fake logos, overloaded numbers, comic style, neon cyberpunk, or sensational news graphics.',
-              `Market: ${market}`,
-              `Title context, do not render as text: ${title}`,
-              `Visual keywords, do not render as text: ${keywords.join(', ')}`,
-              `Facts only for visual mood, do not render as text: ${summaryLines.slice(0, 5).join(' / ')}`,
-            ].join('\n'),
-          },
-        ],
-        max_output_tokens: 3500,
-      }),
-    }, 120_000, 300_000);
+    try {
+      const response = await this.fetchOpenAiWithRetry('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          service_tier: 'flex',
+          input: [
+            {
+              role: 'system',
+              content: [
+                'You create clean SVG editorial cover art for financial market reports.',
+                'Return only valid standalone SVG markup. Do not wrap it in markdown fences.',
+                'Do not use external images, web fonts, scripts, animation, foreignObject, or embedded raster images.',
+              ].join('\n'),
+            },
+            {
+              role: 'user',
+              content: [
+                'Create a polished 16:9 SVG cover image for a Korean retail investor market close report.',
+                'Canvas must be viewBox="0 0 1440 810".',
+                'Style: premium financial PPT cover, clean dashboard composition, dark navy and white surfaces, subtle green/red market accents, professional layout.',
+                'Use only vector shapes: panels, abstract line charts, candlestick-like bars, arrows, soft grid lines, and simple finance icons.',
+                'Do not render Korean text, article titles, ticker labels, numbers, company names, logos, or readable words inside the SVG because generated text can break.',
+                'Keep important visual elements inside the central safe area so the image works as a web article banner without cropping.',
+                'Avoid clutter, tiny text, fake logos, overloaded numbers, comic style, neon cyberpunk, or sensational news graphics.',
+                `Market: ${market}`,
+                `Title context, do not render as text: ${title}`,
+                `Visual keywords, do not render as text: ${keywords.join(', ')}`,
+                `Facts only for visual mood, do not render as text: ${summaryLines.slice(0, 5).join(' / ')}`,
+              ].join('\n'),
+            },
+          ],
+          max_output_tokens: 3500,
+        }),
+      }, 120_000, 300_000);
 
-    if (!response.ok) {
-      const message = await response.text().catch(() => '');
-      throw new ServiceUnavailableException(
-        `OpenAI SVG request failed: ${message || response.status}`,
+      if (!response.ok) {
+        const message = await response.text().catch(() => '');
+        throw new ServiceUnavailableException(
+          `OpenAI SVG request failed: ${message || response.status}`,
+        );
+      }
+      const body = (await response.json()) as {
+        output_text?: string;
+        output?: Array<{ content?: Array<{ text?: string }> }>;
+      };
+      const outputText =
+        body.output_text ??
+        body.output
+          ?.flatMap((item) => item.content ?? [])
+          .map((item) => item.text)
+          .filter(Boolean)
+          .join('\n');
+      const svg = this.extractSvgMarkup(outputText ?? '');
+
+      if (svg) {
+        return this.toSvgDataUrl(svg);
+      }
+
+      this.logger.warn('OpenAI SVG response was not valid SVG; using local SVG fallback.');
+    } catch (error) {
+      this.logger.warn(
+        `OpenAI SVG generation failed; using local SVG fallback: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
       );
     }
-    const body = (await response.json()) as {
-      output_text?: string;
-      output?: Array<{ content?: Array<{ text?: string }> }>;
-    };
-    const outputText =
-      body.output_text ??
-      body.output
-        ?.flatMap((item) => item.content ?? [])
-        .map((item) => item.text)
-        .filter(Boolean)
-        .join('\n');
-    const svg = this.extractSvgMarkup(outputText ?? '');
 
-    if (!svg) {
-      throw new ServiceUnavailableException('OpenAI SVG response is empty.');
-    }
-    return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
+    return this.toSvgDataUrl(this.buildMarketBriefingSvg(market));
   }
 
   private extractSvgMarkup(value: string): string {
@@ -2447,6 +2458,62 @@ const response = await this.fetchOpenAiWithRetry(
 
     const svg = text.slice(start, end + '</svg>'.length).trim();
     return svg.includes('<script') || svg.includes('<foreignObject') ? '' : svg;
+  }
+
+  private toSvgDataUrl(svg: string): string {
+    return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
+  }
+
+  private buildMarketBriefingSvg(market: 'US' | 'KR'): string {
+    const accent = market === 'KR' ? '#22c55e' : '#38bdf8';
+    const secondary = market === 'KR' ? '#f97316' : '#22c55e';
+
+    return [
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 810" role="img">',
+      '<defs>',
+      '<linearGradient id="bg" x1="0" y1="0" x2="1440" y2="810" gradientUnits="userSpaceOnUse">',
+      '<stop stop-color="#07111f"/>',
+      '<stop offset="0.54" stop-color="#101827"/>',
+      '<stop offset="1" stop-color="#172033"/>',
+      '</linearGradient>',
+      '<linearGradient id="panel" x1="160" y1="120" x2="1280" y2="690" gradientUnits="userSpaceOnUse">',
+      '<stop stop-color="#f8fafc" stop-opacity="0.12"/>',
+      '<stop offset="1" stop-color="#f8fafc" stop-opacity="0.04"/>',
+      '</linearGradient>',
+      `<linearGradient id="line" x1="220" y1="610" x2="1180" y2="190" gradientUnits="userSpaceOnUse"><stop stop-color="${secondary}"/><stop offset="1" stop-color="${accent}"/></linearGradient>`,
+      '<filter id="glow"><feGaussianBlur stdDeviation="10" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
+      '</defs>',
+      '<rect width="1440" height="810" fill="url(#bg)"/>',
+      '<g opacity="0.18">',
+      '<path d="M120 170h1200M120 290h1200M120 410h1200M120 530h1200M120 650h1200" stroke="#94a3b8" stroke-width="1"/>',
+      '<path d="M220 110v590M420 110v590M620 110v590M820 110v590M1020 110v590M1220 110v590" stroke="#94a3b8" stroke-width="1"/>',
+      '</g>',
+      '<rect x="120" y="105" width="1200" height="600" rx="32" fill="url(#panel)" stroke="#334155" stroke-width="2"/>',
+      '<circle cx="1160" cy="190" r="150" fill="#38bdf8" opacity="0.08"/>',
+      '<circle cx="280" cy="625" r="190" fill="#22c55e" opacity="0.07"/>',
+      '<g opacity="0.95">',
+      '<rect x="210" y="470" width="34" height="100" rx="10" fill="#ef4444" opacity="0.82"/>',
+      '<rect x="285" y="425" width="34" height="145" rx="10" fill="#22c55e" opacity="0.88"/>',
+      '<rect x="360" y="390" width="34" height="180" rx="10" fill="#22c55e" opacity="0.72"/>',
+      '<rect x="435" y="445" width="34" height="125" rx="10" fill="#ef4444" opacity="0.74"/>',
+      '<rect x="510" y="330" width="34" height="240" rx="10" fill="#22c55e" opacity="0.9"/>',
+      '</g>',
+      '<path d="M200 590 C 310 520, 380 560, 480 445 S 650 310, 770 355 S 960 420, 1110 210" fill="none" stroke="url(#line)" stroke-width="18" stroke-linecap="round" filter="url(#glow)"/>',
+      '<path d="M1110 210 L1040 218 M1110 210 L1082 276" stroke="url(#line)" stroke-width="18" stroke-linecap="round"/>',
+      '<g opacity="0.92">',
+      '<rect x="820" y="455" width="360" height="72" rx="18" fill="#0f172a" stroke="#334155" stroke-width="2"/>',
+      '<rect x="820" y="550" width="280" height="72" rx="18" fill="#0f172a" stroke="#334155" stroke-width="2"/>',
+      '<circle cx="860" cy="491" r="14" fill="#22c55e"/>',
+      '<circle cx="860" cy="586" r="14" fill="#ef4444"/>',
+      '<path d="M900 492h230M900 586h160" stroke="#94a3b8" stroke-width="12" stroke-linecap="round" opacity="0.45"/>',
+      '</g>',
+      '<g transform="translate(150 150)">',
+      '<rect width="230" height="74" rx="22" fill="#0f172a" stroke="#475569" stroke-width="2"/>',
+      '<path d="M42 47h146" stroke="#64748b" stroke-width="12" stroke-linecap="round" opacity="0.5"/>',
+      '<path d="M42 28h86" stroke="#f8fafc" stroke-width="12" stroke-linecap="round" opacity="0.85"/>',
+      '</g>',
+      '</svg>',
+    ].join('');
   }
 
   private async runScheduledMarketBriefing(market: 'US' | 'KR'): Promise<void> {
