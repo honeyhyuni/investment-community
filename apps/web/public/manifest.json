@@ -1,11 +1,27 @@
 {
-  "name": "Private Investment Community",
-  "short_name": "Invest",
-  "description": "Private PWA investment community for approved members.",
+  "name": "15F Investment Community",
+  "short_name": "15F",
+  "description": "Private investment community for approved members.",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "orientation": "portrait-primary",
-  "icons": []
+  "categories": ["finance", "social", "news"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
 }

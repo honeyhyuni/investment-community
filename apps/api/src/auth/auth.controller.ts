@@ -143,10 +143,14 @@ export class AuthController {
 
   private getRefreshCookieOptions(): CookieOptions {
     const isProduction = process.env.NODE_ENV === 'production';
+    const secureCookie =
+      process.env.REFRESH_COOKIE_SECURE === undefined
+        ? isProduction
+        : process.env.REFRESH_COOKIE_SECURE === 'true';
 
     return {
       httpOnly: true,
-      secure: isProduction,
+      secure: secureCookie,
       sameSite: 'lax',
       path: '/',
       maxAge: 30 * 24 * 60 * 60 * 1000,

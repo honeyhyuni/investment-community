@@ -20,6 +20,9 @@ const popularPriority = new Map(
     "DIA",
     "GLD",
     "USO",
+    "TSM",
+    "NVO",
+    "ASML",
   ].map((symbol, index) => [symbol, index] as const),
 );
 

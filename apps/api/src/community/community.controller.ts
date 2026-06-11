@@ -87,6 +87,14 @@ export class CommunityController {
     return this.communityService.createPost(currentUser.sub, body);
   }
 
+  @Get('posts/:id')
+  getPost(
+    @CurrentUser() currentUser: AuthUser,
+    @Param('id') id: string,
+  ): Promise<CommunityPostDto> {
+    return this.communityService.getPost(currentUser.sub, id);
+  }
+
   @Patch('posts/:id')
   updatePost(
     @CurrentUser() currentUser: AuthUser,

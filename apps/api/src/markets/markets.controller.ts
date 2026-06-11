@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -6,6 +6,7 @@ import { UserRole } from '../users/user-role.enum';
 import {
   CandlePoint,
   MarketNews,
+  MarketBriefing,
   MarketQuote,
   StockDetail,
   StockSymbol,
@@ -77,12 +78,69 @@ export class MarketsController {
     return this.marketsService.getStockQuote(symbol, market);
   }
 
+  @Get('stocks/news')
+  getStockNews(
+    @Query('symbol') symbol: string,
+    @Query('market') market = 'US',
+    @Query('language') language = 'en',
+  ): Promise<MarketNews[]> {
+    return this.marketsService.getStockNews(symbol, market, language);
+  }
+
   @Get('news')
   getMarketNews(
     @Query('category') category = 'general',
     @Query('market') market = 'US',
+    @Query('language') language = 'en',
   ): Promise<MarketNews[]> {
-    return this.marketsService.getMarketNews(category, market);
+    return this.marketsService.getMarketNews(category, market, language);
+  }
+
+  @Get('briefing')
+  getMarketBriefing(
+    @Query('market') market = 'US',
+    @Query('language') language = 'ko',
+  ): Promise<MarketBriefing> {
+    return this.marketsService.getLatestMarketBriefing(market, language);
+  }
+
+  @Get('briefings')
+  getMarketBriefings(
+    @Query('market') market = 'US',
+  ): Promise<MarketBriefing[]> {
+    return this.marketsService.getMarketBriefings(market);
+  }
+
+  @Get('briefings/:id')
+  getMarketBriefingById(@Param('id') id: string): Promise<MarketBriefing> {
+    return this.marketsService.getMarketBriefingById(id);
+  }
+
+  @Patch('briefings/:id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  updateMarketBriefing(
+    @Param('id') id: string,
+    @Body() body: Partial<MarketBriefing>,
+  ): Promise<MarketBriefing> {
+    return this.marketsService.updateMarketBriefing(id, body);
+  }
+
+  @Delete('briefings/:id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  async deleteMarketBriefing(@Param('id') id: string): Promise<{ ok: true }> {
+    await this.marketsService.deleteMarketBriefing(id);
+    return { ok: true };
+  }
+
+  @Post('briefings/run')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  runMarketBriefing(
+    @Query('market') market = 'US',
+  ): Promise<MarketBriefing> {
+    return this.marketsService.runMarketBriefing(market);
   }
 
   @Get('candles')

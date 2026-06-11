@@ -22,6 +22,22 @@ type MasterInput = Pick<
   | 'source'
 >;
 
+const US_MASTER_OVERRIDES: MasterInput[] = [
+  {
+    id: 'US:ASML',
+    symbol: 'ASML',
+    name: 'ASML HOLDING NV-NY REG SHS',
+    market: 'US',
+    exchange: 'XNAS',
+    currency: 'USD',
+    country: 'US',
+    type: 'ADR',
+    standardCode: 'ASML',
+    dartCorpCode: null,
+    source: 'manual_us_master_override',
+  },
+];
+
 @Injectable()
 export class StockMasterBatchService {
   private readonly logger = new Logger(StockMasterBatchService.name);
@@ -106,13 +122,20 @@ export class StockMasterBatchService {
       mic?: string;
     }>;
     const majorMics = new Set(['XNAS', 'XNYS', 'ARCX', 'BATS']);
+    const supportedTypes = new Set([
+      'ADR',
+      'Common Stock',
+      'Depositary Receipt',
+      'ETF',
+      'ETP',
+    ]);
     const rows: MasterInput[] = body
       .filter(
         (item) =>
           !!item.symbol &&
           !!item.description &&
           item.currency === 'USD' &&
-          ['Common Stock', 'ETF', 'ETP'].includes(item.type ?? '') &&
+          supportedTypes.has(item.type ?? '') &&
           majorMics.has(item.mic ?? ''),
       )
       .map((item) => ({
@@ -128,6 +151,12 @@ export class StockMasterBatchService {
         dartCorpCode: null,
         source: 'finnhub_stock_symbol_batch',
       }));
+    const existingSymbols = new Set(rows.map((row) => row.symbol));
+    US_MASTER_OVERRIDES.forEach((row) => {
+      if (!existingSymbols.has(row.symbol)) {
+        rows.push(row);
+      }
+    });
 
     if (rows.length < 1_000) {
       throw new Error(

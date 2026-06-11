@@ -12,10 +12,30 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html {
+  min-height: 100%;
+  background: var(--background);
+}
+
 body {
+  min-height: 100%;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  -webkit-tap-highlight-color: transparent;
+  text-size-adjust: 100%;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  touch-action: manipulation;
 }
 
 .dark-app {
@@ -61,6 +81,9 @@ body {
 }
 
 /* TipTap 리치 콘텐츠 (에디터 + 렌더러 공유) */
+.tiptap-content {
+  white-space: break-spaces;
+}
 .tiptap-content :where(h1) {
   font-size: 1.5rem;
   font-weight: 600;
@@ -78,6 +101,13 @@ body {
 }
 .tiptap-content :where(p) {
   margin: 0.4em 0;
+  white-space: break-spaces;
+}
+.tiptap-content :where(p:empty, p:has(> br:only-child)) {
+  min-height: 1.75em;
+}
+.tiptap-content :where(p:empty)::before {
+  content: "\00a0";
 }
 .tiptap-content :where(ul) {
   list-style: disc;
@@ -91,12 +121,14 @@ body {
 }
 .tiptap-content :where(li) {
   margin: 0.15em 0;
+  white-space: break-spaces;
 }
 .tiptap-content :where(blockquote) {
   border-left: 3px solid #9ab8c5;
   padding-left: 0.9em;
   color: #607086;
   margin: 0.5em 0;
+  white-space: break-spaces;
 }
 .tiptap-content :where(a) {
   color: #1f6f8b;
@@ -138,6 +170,11 @@ body {
 .ProseMirror {
   outline: none;
   min-height: 480px;
+}
+@media (max-width: 640px) {
+  .ProseMirror {
+    min-height: 420px;
+  }
 }
 .tiptap-content p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);

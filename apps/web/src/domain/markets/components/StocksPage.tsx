@@ -28,6 +28,7 @@ import { useSessionStore } from "@/common/stores/session";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { formatMoney, formatNumber } from "@/common/utils/format";
+import { applyLiveTrade } from "@/common/utils/market";
 import {
   DisplayCurrency,
   Language,
@@ -36,6 +37,7 @@ import {
   TradeTick,
 } from "@/common/types";
 import { CommunityPost } from "@/domain/community/types";
+import { getPostHtml, htmlToPlainText } from "@/common/utils/community";
 import { useStockRouteSelection } from "@/domain/markets/hooks/useStockRouteSelection";
 import {
   buildMetricItems,
@@ -45,6 +47,7 @@ import {
 import {
   CandlePoint,
   ChartPeriod,
+  MarketNews,
   StockDetail,
   StockTab,
 } from "@/domain/markets/types";
@@ -92,6 +95,9 @@ const copy = {
 
 export function StocksPage() {
   const searchParams = useSearchParams();
+  const notice = searchParams.get("notice");
+  const noticeMessage =
+    notice === "profile-updated" ? "저장 완료되었습니다." : "";
   const initialMarket: StockTab =
     searchParams.get("market")?.toUpperCase() === "KR" ? "KR" : "US";
   const initialSymbol =
@@ -106,9 +112,11 @@ export function StocksPage() {
   const krSymbols = useMarketDataStore((s) => s.krSymbols);
   const livePrices = useMarketDataStore((s) => s.livePrices);
   const liveSeries = useMarketDataStore((s) => s.liveSeries);
+  const applyTrade = useMarketDataStore((s) => s.applyTrade);
   const exchangeRate = useMarketDataStore((s) => s.exchangeRate);
   const router = useRouter();
   const [relatedPosts, setRelatedPosts] = useState<CommunityPost[]>([]);
+  const [stockNews, setStockNews] = useState<MarketNews[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState(initialSymbol);
   const [stockDetail, setStockDetail] = useState<StockDetail | null>(null);
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>("1M");
@@ -160,6 +168,21 @@ export function StocksPage() {
       .slice(0, 120);
   }, [search, usStocks, usSymbols]);
 
+  const visibleKrSymbols = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) {
+      return krSymbols.slice(0, 80);
+    }
+
+    return krSymbols
+      .filter(
+        (item) =>
+          item.symbol.toLowerCase().includes(query) ||
+          item.description.toLowerCase().includes(query),
+      )
+      .slice(0, 120);
+  }, [krSymbols, search]);
+
   async function loadRelatedPosts(symbol: string, token = accessToken) {
     if (!token || !symbol) {
       return;
@@ -170,6 +193,18 @@ export function StocksPage() {
       { accessToken: token },
     ).catch(() => []);
     setRelatedPosts(posts);
+  }
+
+  async function loadStockNews(symbol: string, token = accessToken) {
+    if (!token || !symbol) {
+      return;
+    }
+    const news = await apiRequest<MarketNews[]>(
+      `/markets/stocks/news?symbol=${encodeURIComponent(symbol)}&market=${stockTab}&language=ko`,
+      "GET",
+      { accessToken: token },
+    ).catch(() => []);
+    setStockNews(news);
   }
 
   function openRelatedPost(postId: string) {
@@ -238,22 +273,70 @@ export function StocksPage() {
 
     queueMicrotask(() => {
       loadStockDetail(selectedSymbol, accessToken);
-      loadCandles(selectedSymbol, chartPeriod, accessToken);
       loadRelatedPosts(selectedSymbol, accessToken);
+      loadStockNews(selectedSymbol, accessToken);
+    });
+  }, [accessToken, selectedSymbol, stockTab]);
+
+  useEffect(() => {
+    if (!accessToken || !selectedSymbol) {
+      return;
+    }
+
+    queueMicrotask(() => {
+      loadCandles(selectedSymbol, chartPeriod, accessToken);
     });
   }, [accessToken, selectedSymbol, chartPeriod, stockTab]);
 
+  useEffect(() => {
+    if (stockTab === "US" && selectedSymbol) {
+      window.dispatchEvent(
+        new CustomEvent("market:subscribe", { detail: [selectedSymbol] }),
+      );
+    }
+  }, [selectedSymbol, stockTab]);
+
+  useEffect(() => {
+    if (!accessToken || stockTab !== "KR" || !selectedSymbol) {
+      return;
+    }
+    let active = true;
+    const refreshQuote = async () => {
+      const quote = await apiRequest<MarketQuote>(
+        `/markets/stocks/quote?symbol=${encodeURIComponent(selectedSymbol)}&market=KR`,
+        "GET",
+        { accessToken },
+      ).catch(() => null);
+      if (!active || !quote || quote.current <= 0) {
+        return;
+      }
+      applyTrade({
+        symbol: selectedSymbol,
+        price: quote.current,
+        timestamp: Date.now(),
+        volume: 0,
+      });
+    };
+    void refreshQuote();
+    const interval = window.setInterval(refreshQuote, 15_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [accessToken, applyTrade, selectedSymbol, stockTab]);
+
   return (
     <>
+      {noticeMessage ? <Notice message={noticeMessage} error="" /> : null}
       {error ? <Notice message="" error={error} /> : null}
-      <div className="grid flex-1 gap-6 py-6 lg:grid-cols-[1fr]">
+      <div className="grid flex-1 gap-4 py-4 sm:gap-6 sm:py-6 lg:grid-cols-[1fr]">
               <StocksView
                 stockTab={stockTab}
                 setStockTab={setStockTab}
                 visibleSymbols={visibleSymbols}
                 usStocks={usStocks}
                 krStocks={krStocks}
-                krSymbols={krSymbols}
+                visibleKrSymbols={visibleKrSymbols}
                 selectedSymbol={selectedSymbol}
                 setSelectedSymbol={setSelectedSymbol}
                 stockDetail={stockDetail}
@@ -269,6 +352,7 @@ export function StocksPage() {
                 priceCurrency={priceCurrency}
                 setPriceCurrency={setPriceCurrency}
                 relatedPosts={relatedPosts}
+                stockNews={stockNews}
                 onRelatedPostClick={openRelatedPost}
                 exchangeRate={exchangeRate}
               />
@@ -283,7 +367,7 @@ function StocksView({
   visibleSymbols,
   usStocks,
   krStocks,
-  krSymbols,
+  visibleKrSymbols,
   selectedSymbol,
   setSelectedSymbol,
   stockDetail,
@@ -299,6 +383,7 @@ function StocksView({
   priceCurrency,
   setPriceCurrency,
   relatedPosts,
+  stockNews,
   onRelatedPostClick,
   exchangeRate,
 }: {
@@ -307,7 +392,7 @@ function StocksView({
   visibleSymbols: StockSymbol[];
   usStocks: MarketQuote[];
   krStocks: MarketQuote[];
-  krSymbols: StockSymbol[];
+  visibleKrSymbols: StockSymbol[];
   selectedSymbol: string;
   setSelectedSymbol: (symbol: string) => void;
   stockDetail: StockDetail | null;
@@ -323,19 +408,20 @@ function StocksView({
   priceCurrency: DisplayCurrency;
   setPriceCurrency: (currency: DisplayCurrency) => void;
   relatedPosts: CommunityPost[];
+  stockNews: MarketNews[];
   onRelatedPostClick: (postId: string) => void;
   exchangeRate: number | null;
 }) {
   return (
-    <section className="rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
+    <section className="-mx-4 border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
       <div className="flex flex-col gap-3 border-b border-[#eef1f6] pb-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-xl font-semibold">{copy[language].stockList}</h2>
+          <h2 className="text-lg font-semibold sm:text-xl">{copy[language].stockList}</h2>
           <p className="mt-1 text-sm text-[#607086]">
             {copy[language].stockHint}
           </p>
         </div>
-        <div className="grid grid-cols-2 rounded-md border border-[#d4dae5] bg-[#f3f5f9] p-1">
+        <div className="grid grid-cols-2 rounded-md border border-[#d4dae5] bg-[#f3f5f9] p-1 md:min-w-[240px]">
           <button
             onClick={() => {
               setStockTab("KR");
@@ -366,7 +452,7 @@ function StocksView({
       </div>
 
       {stockTab === "KR" ? (
-        <div className="mt-5 grid gap-5 xl:grid-cols-[360px_1fr]">
+        <div className="mt-4 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[360px_1fr]">
           <div>
             <div className="relative">
               <Search
@@ -377,22 +463,11 @@ function StocksView({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder={copy[language].search}
-                className="h-10 w-full rounded-md border border-[#c7ceda] pl-9 pr-3 text-sm outline-none focus:border-[#1f6f8b]"
+                className="h-11 w-full rounded-md border border-[#c7ceda] pl-9 pr-3 text-base outline-none focus:border-[#1f6f8b] sm:h-10 sm:text-sm"
               />
             </div>
-            <div className="mt-3 max-h-[560px] overflow-auto rounded-md border border-[#d9dee8]">
-              {krSymbols
-                .filter((item) => {
-                  const query = search.trim().toLowerCase();
-                  if (!query) {
-                    return true;
-                  }
-                  return (
-                    item.symbol.toLowerCase().includes(query) ||
-                    item.description.toLowerCase().includes(query)
-                  );
-                })
-                .map((item) => {
+            <div className="mt-3 max-h-[42dvh] overflow-auto rounded-md border border-[#d9dee8] sm:max-h-[560px]">
+              {visibleKrSymbols.map((item) => {
                   const quote = krStocks.find((stock) => stock.symbol === item.symbol);
                   return (
                     <button
@@ -404,7 +479,7 @@ function StocksView({
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="font-semibold">{item.description}</p>
+                          <p className="truncate font-semibold">{item.description}</p>
                           <p className="truncate text-xs text-[#607086]">{item.symbol}</p>
                         </div>
                         <p className="shrink-0 text-sm font-semibold">
@@ -417,7 +492,10 @@ function StocksView({
                   );
                 })}
             </div>
-            <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
+            <div className="hidden xl:block">
+              <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
+              <RelatedNews news={stockNews} />
+            </div>
           </div>
           <StockDetailPanel
             detail={stockDetail}
@@ -432,9 +510,13 @@ function StocksView({
             setPriceCurrency={setPriceCurrency}
             exchangeRate={exchangeRate}
           />
+          <div className="xl:hidden">
+            <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
+            <RelatedNews news={stockNews} />
+          </div>
         </div>
       ) : (
-        <div className="mt-5 grid gap-5 xl:grid-cols-[360px_1fr]">
+        <div className="mt-4 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[360px_1fr]">
           <div>
             <div className="relative">
               <Search
@@ -445,10 +527,10 @@ function StocksView({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder={copy[language].search}
-                className="h-10 w-full rounded-md border border-[#c7ceda] pl-9 pr-3 text-sm outline-none focus:border-[#1f6f8b]"
+                className="h-11 w-full rounded-md border border-[#c7ceda] pl-9 pr-3 text-base outline-none focus:border-[#1f6f8b] sm:h-10 sm:text-sm"
               />
             </div>
-            <div className="mt-3 max-h-[560px] overflow-auto rounded-md border border-[#d9dee8]">
+            <div className="mt-3 max-h-[42dvh] overflow-auto rounded-md border border-[#d9dee8] sm:max-h-[560px]">
               {visibleSymbols.map((item) => {
                 const quote = usStocks.find((stock) => stock.symbol === item.symbol);
                 const live = livePrices[item.symbol];
@@ -462,7 +544,7 @@ function StocksView({
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="font-semibold">{item.symbol}</p>
+                        <p className="truncate font-semibold">{item.symbol}</p>
                         <p className="truncate text-xs text-[#607086]">
                           {item.description}
                         </p>
@@ -489,7 +571,10 @@ function StocksView({
                 );
               })}
             </div>
-            <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
+            <div className="hidden xl:block">
+              <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
+              <RelatedNews news={stockNews} />
+            </div>
           </div>
           <StockDetailPanel
             detail={stockDetail}
@@ -504,6 +589,10 @@ function StocksView({
             setPriceCurrency={setPriceCurrency}
             exchangeRate={exchangeRate}
           />
+          <div className="xl:hidden">
+            <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
+            <RelatedNews news={stockNews} />
+          </div>
         </div>
       )}
     </section>
@@ -537,15 +626,13 @@ function StockDetailPanel({
 }) {
   if (!detail) {
     return (
-      <div className="flex min-h-[320px] items-center justify-center rounded-md border border-[#d9dee8] text-sm text-[#607086]">
+      <div className="flex min-h-[240px] items-center justify-center rounded-md border border-[#d9dee8] text-sm text-[#607086] sm:min-h-[320px]">
         Select a stock.
       </div>
     );
   }
 
-  const quote = live
-    ? { ...detail.quote, current: live.price, timestamp: Math.floor(live.timestamp / 1000) }
-    : detail.quote;
+  const quote = applyLiveTrade(detail.quote, live);
     const detailSourceCurrency = detail.profile.currency === "KRW" ? "KRW" : (detail.quote.currency ?? "USD");
     const displayMarketCap = detail.profile.marketCapitalization
     ? formatMarketCap(
@@ -564,6 +651,11 @@ function StockDetailPanel({
     );
     const isKoreanMarket =
       detail.profile.currency === "KRW" && detail.profile.country === "대한민국";
+    const logoUrl =
+      detail.profile.logo ||
+      (isKoreanMarket
+        ? `https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${detail.symbol}.svg`
+        : getFallbackLogoUrl(detail.profile.weburl));
     const valuationItems = [
     {
       label: translateDetailLabel(language, "marketCap"),
@@ -573,18 +665,18 @@ function StockDetailPanel({
   ];
 
   return (
-    <div className="rounded-md border border-[#d9dee8] p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+    <div className="rounded-md border border-[#d9dee8] p-4 sm:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <p className="text-sm text-[#607086]">{detail.profile.exchange}</p>
-          <h3 className="mt-1 text-2xl font-semibold">
+          <h3 className="mt-1 break-words text-xl font-semibold sm:text-2xl">
             {detail.profile.name || detail.symbol}
           </h3>
           <p className="mt-1 text-sm text-[#607086]">
             {detail.symbol} · {detail.profile.finnhubIndustry || "Unknown sector"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
           {!isKoreanMarket ? (
             <button
               onClick={() =>
@@ -595,13 +687,11 @@ function StockDetailPanel({
               {priceCurrency === "USD" ? "원" : "$"}
             </button>
           ) : null}
-          {detail.profile.logo ? (
-            <img
-              src={detail.profile.logo}
-              alt=""
-              className="h-12 w-12 rounded-md border border-[#d9dee8] object-contain"
-            />
-          ) : null}
+          <CompanyIcon
+            logoUrl={logoUrl}
+            name={detail.profile.name || detail.symbol}
+            symbol={detail.symbol}
+          />
         </div>
       </div>
       <div className="mt-6">
@@ -612,17 +702,17 @@ function StockDetailPanel({
           exchangeRate={exchangeRate}
         />
       </div>
-      <div className="mt-5 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-4">
+      <div className="mt-5 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3 sm:p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm font-semibold text-[#344052]">
             {translateDetailLabel(language, "realtimeChart")}
           </p>
-          <div className="flex flex-wrap gap-1">
+          <div className="grid grid-cols-6 gap-1 sm:flex sm:flex-wrap">
             {chartPeriods.map((period) => (
               <button
                 key={period}
                 onClick={() => setChartPeriod(period)}
-                className={`h-8 rounded-md px-2.5 text-xs font-semibold ${
+                className={`h-8 rounded-md px-1 text-xs font-semibold sm:px-2.5 ${
                   chartPeriod === period
                     ? "bg-[#1f6f8b] text-white"
                     : "border border-[#c7ceda] bg-white text-[#344052]"
@@ -647,7 +737,7 @@ function StockDetailPanel({
           </p>
         </>
       </div>
-      <div className="mt-5 rounded-md border border-[#d9dee8] p-4">
+       <div className="mt-5 rounded-md border border-[#d9dee8] p-3 sm:p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-[#344052]">
@@ -664,7 +754,7 @@ function StockDetailPanel({
         <p className="mt-4 text-sm leading-6 text-[#344052]">
           {language === "en" ? detail.overview.en : detail.overview.ko}
         </p>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
+         <div className="mt-3 grid gap-2 sm:gap-3 md:grid-cols-2">
           <InfoBox
             label={translateDetailLabel(language, "country")}
             value={detail.profile.country || "-"}
@@ -686,7 +776,7 @@ function StockDetailPanel({
             }
           />
         </div>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="mt-3 grid gap-2 sm:gap-3 md:grid-cols-2">
             <InfoBox
               label={translateDetailLabel(language, "open")}
               value={formatMoney(quote.open, priceCurrency, quote.currency, exchangeRate)}
@@ -702,11 +792,11 @@ function StockDetailPanel({
             />
         </div>
       </div>
-      <div className="mt-5 rounded-md border border-[#d9dee8] p-4">
+      <div className="mt-5 rounded-md border border-[#d9dee8] p-3 sm:p-4">
         <p className="text-sm font-semibold text-[#344052]">
           {translateDetailLabel(language, "metrics")}
         </p>
-        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-3 grid gap-2 sm:gap-3 md:grid-cols-2 xl:grid-cols-3">
           {valuationItems.map((item) => (
             <InfoBox key={item.label} label={item.label} value={item.value} />
           ))}
@@ -768,7 +858,10 @@ function RealtimeChart({
 
     const resize = () => {
       if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth });
+        chart.applyOptions({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight,
+        });
       }
     };
 
@@ -830,7 +923,7 @@ function RealtimeChart({
           Loading
         </div>
       ) : null}
-      <div ref={containerRef} className="h-[260px] w-full" />
+      <div ref={containerRef} className="h-[220px] w-full sm:h-[260px]" />
     </div>
   );
 }
@@ -874,7 +967,6 @@ function QuoteCard({
       <div className="flex items-center justify-between">
         <div>
           <p className="font-semibold">{quote.name || quote.symbol}</p>
-          <p className="text-xs text-[#607086]">{quote.symbol}</p>
         </div>
         {positive ? (
           <TrendingUp size={18} className="text-[#2e7d4f]" />
@@ -882,7 +974,7 @@ function QuoteCard({
           <TrendingDown size={18} className="text-[#b64242]" />
         )}
       </div>
-      <p className={compact ? "mt-2 text-xl font-semibold" : "mt-3 text-3xl font-semibold"}>
+      <p className={compact ? "mt-2 text-xl font-semibold" : "mt-3 text-2xl font-semibold sm:text-3xl"}>
         {currentText}
       </p>
       <p
@@ -913,27 +1005,130 @@ function RelatedPosts({
       <p className="text-xs font-semibold text-[#344052]">이 종목과 관련된 피드</p>
       <div className="mt-2 space-y-2">
         {posts.length ? (
-          posts.slice(0, 3).map((post) => (
-            <button
-              key={post.id}
-              onClick={() => onPostClick(post.id)}
-              className="block w-full cursor-pointer border-t border-[#eef1f6] pt-2 text-left first:border-0 first:pt-0"
-            >
-              <div className="flex items-baseline gap-2">
-                <p className="max-w-[45%] truncate text-sm font-semibold">
-                  {post.title || post.content}
+          posts.slice(0, 3).map((post) => {
+            const preview = getRelatedPostPreview(post);
+            return (
+              <button
+                key={post.id}
+                onClick={() => onPostClick(post.id)}
+                className="block w-full cursor-pointer border-t border-[#eef1f6] pt-2 text-left first:border-0 first:pt-0"
+              >
+                <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+                  <p className="truncate text-sm font-semibold sm:max-w-[45%]">
+                    {post.title || post.content}
+                  </p>
+                  <p className="min-w-0 flex-1 truncate text-[11px] text-[#607086]">
+                    {preview}
+                  </p>
+                </div>
+                <p className="mt-0.5 text-xs text-[#607086]">
+                  {post.author.nickname} · {new Date(post.createdAt).toLocaleDateString()}
                 </p>
-                <p className="min-w-0 flex-1 truncate text-[11px] text-[#607086]">
-                  {post.contentBlocks.find((block) => block.type === "text")?.text || post.content}
-                </p>
-              </div>
-              <p className="mt-0.5 text-xs text-[#607086]">
-                {post.author.nickname} · {new Date(post.createdAt).toLocaleDateString()}
-              </p>
-            </button>
-          ))
+              </button>
+            );
+          })
         ) : (
           <p className="text-xs text-[#607086]">아직 관련 게시글이 없습니다.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CompanyIcon({
+  logoUrl,
+  name,
+  symbol,
+}: {
+  logoUrl?: string | null;
+  name: string;
+  symbol: string;
+}) {
+  const initials = getInitials(name || symbol);
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  if (logoUrl && !logoFailed) {
+    return (
+      <img
+        src={logoUrl}
+        alt=""
+        className="h-10 w-10 rounded-md border border-[#d9dee8] bg-white object-contain sm:h-12 sm:w-12"
+        onError={() => setLogoFailed(true)}
+      />
+    );
+  }
+
+  return <FallbackCompanyIcon initials={initials} />;
+}
+
+function FallbackCompanyIcon({ initials }: { initials: string }) {
+  return (
+    <div className="grid h-10 w-10 place-items-center rounded-md border border-[#d9dee8] bg-[#eef6f9] text-sm font-bold text-[#1f6f8b] sm:h-12 sm:w-12">
+      {initials}
+    </div>
+  );
+}
+
+function getFallbackLogoUrl(weburl?: string): string | null {
+  if (!weburl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(weburl.startsWith("http") ? weburl : `https://${weburl}`);
+    return `https://logo.clearbit.com/${url.hostname.replace(/^www\./, "")}`;
+  } catch {
+    return null;
+  }
+}
+
+function getInitials(value: string): string {
+  const words = value
+    .replace(/[^a-zA-Z0-9가-힣 ]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 0) {
+    return "-";
+  }
+
+  return words
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("")
+    .toUpperCase();
+}
+
+function getRelatedPostPreview(post: CommunityPost): string {
+  const text = htmlToPlainText(getPostHtml(post).replace(/<img\b[^>]*>/gi, " "));
+  return text || "본문 글 없음";
+}
+
+function RelatedNews({ news }: { news: MarketNews[] }) {
+  return (
+    <div className="mt-3 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3">
+      <p className="text-xs font-semibold text-[#344052]">이 종목의 최신 뉴스</p>
+      <div className="mt-2 space-y-2">
+        {news.length ? (
+          news.slice(0, 5).map((item) => (
+            <a
+              key={item.id}
+              href={item.url}
+              target="_blank"
+              rel="noreferrer"
+              className="block border-t border-[#eef1f6] pt-2 first:border-0 first:pt-0 hover:text-[#1f6f8b]"
+            >
+              <p className="line-clamp-2 text-sm font-semibold">
+                {item.translatedHeadline || item.headline}
+              </p>
+              <p className="mt-0.5 text-xs text-[#607086]">
+                {item.source} · {new Date(item.datetime * 1000).toLocaleDateString()}
+              </p>
+            </a>
+          ))
+        ) : (
+          <p className="text-xs text-[#607086]">관련 최신 뉴스가 없습니다.</p>
         )}
       </div>
     </div>

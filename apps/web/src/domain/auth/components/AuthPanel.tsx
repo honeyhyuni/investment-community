@@ -10,6 +10,8 @@ export function AuthPanel(props: {
   setMode: (mode: AuthMode) => void;
   email: string;
   setEmail: (value: string) => void;
+  rememberEmail: boolean;
+  setRememberEmail: (value: boolean) => void;
   password: string;
   setPassword: (value: string) => void;
   nickname: string;

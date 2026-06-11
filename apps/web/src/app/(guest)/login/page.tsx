@@ -8,6 +8,8 @@ import { AuthPanel } from "@/domain/auth/components/AuthPanel";
 import { PendingPanel } from "@/domain/auth/components/PendingPanel";
 import { AuthMode } from "@/domain/auth/types";
 
+const REMEMBER_EMAIL_KEY = "rememberedEmail";
+
 export default function LoginPage() {
   const router = useRouter();
   const user = useSessionStore((s) => s.user);
@@ -17,6 +19,7 @@ export default function LoginPage() {
 
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [password, setPassword] = useState("");
   const [nickname, setNickname] = useState("");
   const [message, setMessage] = useState("");
@@ -29,6 +32,14 @@ export default function LoginPage() {
       router.replace("/");
     }
   }, [user?.status, router]);
+
+  useEffect(() => {
+    const rememberedEmail = window.localStorage.getItem(REMEMBER_EMAIL_KEY);
+    if (rememberedEmail) {
+      setEmail(rememberedEmail);
+      setRememberEmail(true);
+    }
+  }, []);
 
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,6 +60,11 @@ export default function LoginPage() {
       }
 
       await login(email, password);
+      if (rememberEmail) {
+        window.localStorage.setItem(REMEMBER_EMAIL_KEY, email.trim());
+      } else {
+        window.localStorage.removeItem(REMEMBER_EMAIL_KEY);
+      }
       setMessage("");
     } catch (authError) {
       setError(
@@ -72,6 +88,8 @@ export default function LoginPage() {
         setMode={setMode}
         email={email}
         setEmail={setEmail}
+        rememberEmail={rememberEmail}
+        setRememberEmail={setRememberEmail}
         password={password}
         setPassword={setPassword}
         nickname={nickname}

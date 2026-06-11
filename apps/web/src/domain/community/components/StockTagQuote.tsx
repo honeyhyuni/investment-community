@@ -2,6 +2,7 @@
 
 import { MarketQuote, TradeTick } from "@/common/types";
 import { formatMoney, formatNumber } from "@/common/utils/format";
+import { applyLiveTrade } from "@/common/utils/market";
 import { StockTag } from "@/domain/community/types";
 
 type StockTagQuoteProps = {
@@ -22,9 +23,7 @@ export function StockTagQuote({
   exchangeRate,
 }: StockTagQuoteProps) {
   const displayCurrency = tag.market === "KR" ? "KRW" : "USD";
-  const currentQuote = quote
-    ? { ...quote, current: live?.price ?? quote.current }
-    : null;
+  const currentQuote = quote ? applyLiveTrade(quote, live) : null;
   const positive = (currentQuote?.change ?? 0) >= 0;
 
   return (

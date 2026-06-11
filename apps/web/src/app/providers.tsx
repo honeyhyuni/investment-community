@@ -3,7 +3,7 @@
 import { ReactNode, useEffect } from "react";
 import { io } from "socket.io-client";
 import { API_ORIGIN } from "@/common/lib/api";
-import { TradeTick } from "@/common/types";
+import { MarketQuote, TradeTick } from "@/common/types";
 import { useSessionStore } from "@/common/stores/session";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { usePreferencesStore } from "@/common/stores/preferences";
@@ -20,6 +20,7 @@ export function Providers({ children }: { children: ReactNode }) {
   const verify = useSessionStore((s) => s.verify);
   const loadMarketData = useMarketDataStore((s) => s.loadMarketData);
   const applyTrade = useMarketDataStore((s) => s.applyTrade);
+  const applyPulse = useMarketDataStore((s) => s.applyPulse);
   const hydratePreferences = usePreferencesStore((s) => s.hydrate);
 
   useEffect(() => {
@@ -29,6 +30,21 @@ export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
     hydratePreferences();
   }, [hydratePreferences]);
+
+  useEffect(() => {
+    if (
+      process.env.NODE_ENV !== "production" ||
+      !("serviceWorker" in navigator)
+    ) {
+      return;
+    }
+
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch(() => {
+        // PWA installability should never block the app shell.
+      });
+    });
+  }, []);
 
   useEffect(() => {
     if (!accessToken || status !== "APPROVED") {
@@ -47,26 +63,43 @@ export function Providers({ children }: { children: ReactNode }) {
       }
     });
     socket.on("market:trade", (tick: TradeTick) => applyTrade(tick));
+    socket.on("market:pulse", (pulse: MarketQuote[]) => applyPulse(pulse));
+    const subscribe = (event: Event) => {
+      const symbols = (event as CustomEvent<string[]>).detail;
+      if (symbols?.length) {
+        socket.emit("market:subscribe", { symbols });
+      }
+    };
+    window.addEventListener("market:subscribe", subscribe);
 
     return () => {
       active = false;
+      window.removeEventListener("market:subscribe", subscribe);
       socket.disconnect();
     };
-  }, [accessToken, status, loadMarketData, applyTrade]);
+  }, [accessToken, status, loadMarketData, applyTrade, applyPulse]);
 
   useEffect(() => {
     if (!accessToken) {
       return;
     }
 
-    const interval = window.setInterval(verify, 5000);
-    window.addEventListener("focus", verify);
-    document.addEventListener("visibilitychange", verify);
+    let lastVerifiedAt = 0;
+    const verifyIfNeeded = () => {
+      if (document.visibilityState !== "visible" || Date.now() - lastVerifiedAt < 5 * 60_000) {
+        return;
+      }
+      lastVerifiedAt = Date.now();
+      void verify();
+    };
+    const interval = window.setInterval(verifyIfNeeded, 5 * 60_000);
+    window.addEventListener("focus", verifyIfNeeded);
+    document.addEventListener("visibilitychange", verifyIfNeeded);
 
     return () => {
       window.clearInterval(interval);
-      window.removeEventListener("focus", verify);
-      document.removeEventListener("visibilitychange", verify);
+      window.removeEventListener("focus", verifyIfNeeded);
+      document.removeEventListener("visibilitychange", verifyIfNeeded);
     };
   }, [accessToken, verify]);
 

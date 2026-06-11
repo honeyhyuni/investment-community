@@ -26,7 +26,7 @@ import { PostEditor } from "@/domain/community/components/PostEditor";
 import { stockSearchScore } from "@/common/utils/stock-search";
 import { StockSymbol } from "@/common/types";
 
-export function CommunityPage() {
+export function CommunityPage({ postId, userId }: { postId?: string; userId?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const accessToken = useSessionStore((s) => s.accessToken);
@@ -57,14 +57,19 @@ export function CommunityPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const selectedPostId = searchParams.get("post");
+  const selectedPostId = postId ?? searchParams.get("post");
+  const detailMode = !!selectedPostId || !!userId;
   const stockSymbols = useMemo(() => [...krSymbols, ...usSymbols], [krSymbols, usSymbols]);
   useEffect(() => {
     if (!accessToken) {
       return;
     }
-    loadCommunity(accessToken, scope, sort);
-  }, [accessToken, scope, sort]);
+    if (selectedPostId) {
+      loadSinglePost(selectedPostId, accessToken);
+      return;
+    }
+    loadCommunity(accessToken, userId ? "user" : scope, sort, userId);
+  }, [accessToken, scope, sort, selectedPostId, userId]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -80,8 +85,9 @@ export function CommunityPage() {
 
   async function loadCommunity(
     token = accessToken,
-    nextScope: CommunityScope = scope,
+    nextScope: CommunityScope | "user" = scope,
     nextSort: FeedSort = sort,
+    nextUserId?: string,
   ) {
     if (!token) {
       return;
@@ -92,7 +98,9 @@ export function CommunityPage() {
     try {
       const [postsResult, usersResult] = await Promise.all([
         apiRequest<CommunityPost[]>(
-          `/community/feed?scope=${nextScope}&sort=${nextSort}`,
+          `/community/feed?scope=${nextScope}&sort=${nextSort}${
+            nextUserId ? `&userId=${encodeURIComponent(nextUserId)}` : ""
+          }`,
           "GET",
           { accessToken: token },
         ),
@@ -151,7 +159,7 @@ export function CommunityPage() {
       );
       resetEditor();
       setEditorOpen(false);
-      await loadCommunity(accessToken, scope, sort);
+      await loadCommunity(accessToken, userId ? "user" : scope, sort, userId);
     } catch (postError) {
       setError(postError instanceof Error ? postError.message : "Could not post.");
     } finally {
@@ -265,7 +273,7 @@ export function CommunityPage() {
         "POST",
         { accessToken },
       );
-      await loadCommunity(accessToken, scope, sort);
+      await loadCommunity(accessToken, userId ? "user" : scope, sort, userId);
     } catch (subscribeError) {
       setError(
         subscribeError instanceof Error
@@ -290,22 +298,156 @@ export function CommunityPage() {
     return null;
   }
 
+  async function loadSinglePost(nextPostId: string, token = accessToken) {
+    if (!token) {
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      const post = await apiRequest<CommunityPost>(
+        `/community/posts/${encodeURIComponent(nextPostId)}`,
+        "GET",
+        { accessToken: token },
+      );
+      setPosts([post]);
+    } catch (communityError) {
+      setPosts([]);
+      setError(
+        communityError instanceof Error
+          ? communityError.message
+          : "Could not load community post.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (editorOpen) {
+    return (
+      <>
+        {error ? <Notice message="" error={error} /> : null}
+
+        <div className="flex-1 py-4 sm:py-6">
+          <PostEditor
+            title={postTitle}
+            setTitle={setPostTitle}
+            blocks={postBlocks}
+            setBlocks={setPostBlocks}
+            tagQuery={postTagQuery}
+            setTagQuery={setPostTagQuery}
+            tags={postTags}
+            setTags={setPostTags}
+            stockSymbols={stockSymbols}
+            usStocks={usStocks}
+            krStocks={krStocks}
+            livePrices={livePrices}
+            extraQuotes={extraQuotes}
+            exchangeRate={exchangeRate}
+            editingPostId={editingPostId}
+            loading={loading}
+            onSubmit={savePost}
+            onCancel={() => {
+              resetEditor();
+              setEditorOpen(false);
+            }}
+          />
+        </div>
+      </>
+    );
+  }
+
+  if (detailMode) {
+    return (
+      <>
+        {error ? <Notice message="" error={error} /> : null}
+
+        <div className="flex-1 py-4 sm:py-6">
+          <div className="mb-4 grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-between">
+            <button
+              onClick={() => router.push("/community")}
+              className="h-10 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#344052] transition-colors hover:border-[#1f6f8b] hover:bg-[#eef1f6] hover:text-[#1f6f8b] sm:px-4"
+            >
+              피드 목록으로
+            </button>
+            <button
+              onClick={() => {
+                resetEditor();
+                setEditorOpen(true);
+              }}
+              className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md bg-[#1f6f8b] px-3 text-sm font-semibold text-white transition-colors hover:bg-[#195c74] sm:px-4"
+            >
+              <Plus size={17} />
+              피드 글 쓰기
+            </button>
+          </div>
+
+          <div className="grid gap-4">
+            {loading && posts.length === 0 ? (
+              <p className="rounded-lg border border-[#d9dee8] bg-white p-8 text-center text-sm text-[#607086]">
+                불러오는 중입니다.
+              </p>
+            ) : null}
+            {!loading && visiblePosts.length === 0 ? (
+              <p className="rounded-lg border border-[#d9dee8] bg-white p-8 text-center text-sm text-[#607086]">
+                표시할 피드가 없습니다.
+              </p>
+            ) : null}
+            {visiblePosts.map((post) => (
+              <PostCard
+                key={post.id}
+                post={{
+                  ...post,
+                  stockTags: post.stockTags.map((tag) =>
+                    resolveCommunityStockTag(tag, stockSymbols),
+                  ),
+                }}
+                currentUserId={user.id}
+                commentDrafts={commentDrafts}
+                setCommentDrafts={setCommentDrafts}
+                replyDrafts={replyDrafts}
+                setReplyDrafts={setReplyDrafts}
+                onLike={toggleLike}
+                onComment={createComment}
+                onEditPost={editPost}
+                onDeletePost={deletePost}
+                onEditComment={editComment}
+                onDeleteComment={deleteComment}
+                onStockTagClick={openStock}
+                usStocks={usStocks}
+                krStocks={krStocks}
+                livePrices={livePrices}
+                extraQuotes={extraQuotes}
+                exchangeRate={exchangeRate}
+                forceExpanded
+                enableImagePreview
+                canModerate={user.role === "ADMIN"}
+                onAuthorClick={(nextUserId) => router.push(`/community/users/${nextUserId}`)}
+              />
+            ))}
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       {error ? <Notice message="" error={error} /> : null}
 
-      <div className="grid flex-1 gap-5 py-6 lg:grid-cols-[1fr_320px]">
+      <div className="grid flex-1 gap-4 py-4 sm:gap-5 sm:py-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="-mx-4 border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border">
               <div className="flex flex-wrap gap-2">
                 {(["all", "subscribed", "mine"] as CommunityScope[]).map((item) => (
                   <button
                     key={item}
                     onClick={() => setScope(item)}
-                    className={`h-9 rounded-md px-3 text-sm font-semibold ${
+                    className={`h-10 flex-1 cursor-pointer rounded-md px-3 text-sm font-semibold transition-colors sm:h-9 sm:flex-none ${
                       scope === item
                         ? "bg-[#1f6f8b] text-white"
-                        : "border border-[#c7ceda] bg-white text-[#344052]"
+                        : "border border-[#c7ceda] bg-white text-[#344052] hover:bg-[#eef1f6]"
                     }`}
                   >
                     {item === "all" ? "전체 피드" : item === "subscribed" ? "구독 피드" : "내 피드"}
@@ -315,10 +457,10 @@ export function CommunityPage() {
                   <button
                     key={item}
                     onClick={() => setSort(item)}
-                    className={`h-9 rounded-md px-3 text-sm font-semibold ${
+                    className={`h-10 flex-1 cursor-pointer rounded-md px-3 text-sm font-semibold transition-colors sm:h-9 sm:flex-none ${
                       sort === item
                         ? "bg-[#344052] text-white"
-                        : "border border-[#c7ceda] bg-white text-[#344052]"
+                        : "border border-[#c7ceda] bg-white text-[#344052] hover:bg-[#eef1f6]"
                     }`}
                   >
                     {item === "latest" ? "최신순" : "인기순"}
@@ -330,7 +472,7 @@ export function CommunityPage() {
                   resetEditor();
                   setEditorOpen(true);
                 }}
-                className="inline-flex h-10 items-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white"
+                className="mt-3 inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195c74] sm:h-10"
               >
                 <Plus size={17} />
                 피드 글 쓰기
@@ -401,6 +543,10 @@ export function CommunityPage() {
                   extraQuotes={extraQuotes}
                   exchangeRate={exchangeRate}
                   forceExpanded={post.id === selectedPostId}
+                  enableImagePreview={false}
+                  onOpenPost={(nextPostId) => router.push(`/community/${nextPostId}`)}
+                  canModerate={user.role === "ADMIN"}
+                  onAuthorClick={(nextUserId) => router.push(`/community/users/${nextUserId}`)}
                 />
               ))}
             </div>
@@ -412,14 +558,18 @@ export function CommunityPage() {
               <Users size={16} className="text-[#607086]" />
             </div>
             <div className="mt-3 space-y-2">
-              {users.slice(0, 6).map((communityUser) => (
+              {users.slice(0, 3).map((communityUser) => (
                 <div key={communityUser.id} className="rounded-md border border-[#eef1f6] p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/community/users/${communityUser.id}`)}
+                        className="block max-w-full cursor-pointer truncate text-sm font-semibold hover:text-[#1f6f8b] hover:underline"
+                      >
                         {communityUser.nickname}
                         {communityUser.isMe ? " · 나" : ""}
-                      </p>
+                      </button>
                       <p className="truncate text-xs text-[#607086]">
                         구독자 {communityUser.subscriberCount} · 구독중 {communityUser.followingCount}
                       </p>
@@ -427,10 +577,10 @@ export function CommunityPage() {
                     {!communityUser.isMe ? (
                       <button
                         onClick={() => toggleSubscription(communityUser.id)}
-                        className={`h-8 rounded-md px-2.5 text-xs font-semibold ${
+                        className={`h-8 cursor-pointer rounded-md px-2.5 text-xs font-semibold transition-colors ${
                           communityUser.isSubscribed
-                            ? "border border-[#c7ceda] text-[#344052]"
-                            : "bg-[#1f6f8b] text-white"
+                            ? "border border-[#c7ceda] text-[#344052] hover:bg-[#eef1f6]"
+                            : "bg-[#1f6f8b] text-white hover:bg-[#195c74]"
                         }`}
                       >
                         {communityUser.isSubscribed ? "구독중" : "구독"}
