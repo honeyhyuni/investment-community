@@ -1,13 +1,93 @@
 @import "tailwindcss";
 
+/* ============================================================
+   디자인 토큰 — 로고(#22c55e green → #38bdf8 sky / #0f172a navy) 기반
+   1) primitive : 로고에서 추출한 브랜드 스케일 (정적)
+   2) semantic  : 의미 토큰 (라이트=:root / 다크=.dark-app·.dark에서 스왑)
+   3) @theme inline : Tailwind 유틸 노출 (bg-surface, text-muted, text-primary …)
+   ============================================================ */
+
+/* 1) primitive ----------------------------------------------- */
+@theme {
+  --color-navy-900: #0f172a;
+  --color-navy-800: #13233d;
+  --color-navy-700: #1b2840;
+  --color-navy-600: #334155;
+  --color-brand-green: #22c55e;
+  --color-brand-sky: #38bdf8;
+}
+
+/* 2) semantic — 라이트 --------------------------------------- */
 :root {
   --background: #f7f8fb;
   --foreground: #151923;
+
+  --surface: #ffffff;
+  --surface-muted: #f6f7fb;
+  --surface-subtle: #eef1f6;
+  --border: #d9dee8;
+  --border-strong: #c7ceda;
+  --muted: #607086; /* 보조 텍스트 */
+
+  --primary: #0ea5e9; /* 로고 sky를 라이트 배경 대비용으로 한 단계 진하게 */
+  --primary-hover: #0284c7;
+  --on-primary: #ffffff;
+
+  --positive: #16a34a; /* 상승 (로고 그린 계열) */
+  --positive-surface: #ecfdf3;
+  --negative: #b64242; /* 하락 */
+  --negative-surface: #fff1f1;
+
+  --accent-sky: #38bdf8;
+  --accent-green: #22c55e;
+  --brand-gradient: linear-gradient(90deg, #22c55e, #38bdf8); /* 로고 시그니처 */
 }
 
+/* 2') semantic — 다크 (기존 .dark-app 토글 재사용) ----------- */
+.dark-app,
+.dark {
+  --foreground: #edf1f7;
+
+  --surface: #11151b;
+  --surface-muted: #151b23;
+  --surface-subtle: #1b222c;
+  --border: #374151;
+  --border-strong: #4b5563;
+  --muted: #aeb8c7;
+
+  --primary: #38bdf8; /* 다크에선 로고 sky 원본 */
+  --primary-hover: #7dd3fc;
+
+  --positive: #22c55e;
+  --positive-surface: #10271b;
+  --negative: #d74848;
+  --negative-surface: #2a1414;
+}
+
+/* 3) Tailwind 유틸 노출 -------------------------------------- */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-muted: var(--muted);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--on-primary);
+
+  --color-positive: var(--positive);
+  --color-positive-surface: var(--positive-surface);
+  --color-negative: var(--negative);
+  --color-negative-surface: var(--negative-surface);
+
+  --color-accent-sky: var(--accent-sky);
+  --color-accent-green: var(--accent-green);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
