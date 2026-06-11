@@ -97,7 +97,7 @@ export function PostEditor({
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: "tiptap-content min-h-[620px] px-6 py-5 outline-none",
+        class: "tiptap-content min-h-[420px] px-3 py-4 outline-none sm:min-h-[620px] sm:px-6 sm:py-5",
       },
     },
     onUpdate: ({ editor }) => {
@@ -167,7 +167,7 @@ export function PostEditor({
   }
 
   return (
-    <div className="w-full rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
+    <div className="-mx-4 w-auto border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:w-full sm:rounded-lg sm:border sm:p-5">
       <div className="flex items-center justify-between border-b border-[#eef1f6] pb-4">
         <p className="text-sm font-semibold text-[#344052]">
           {editingPostId ? "피드 수정" : "투자 글쓰기"}
@@ -184,10 +184,10 @@ export function PostEditor({
         value={title}
         onChange={(event) => setTitle(event.target.value)}
         placeholder="제목: 예) 엔비디아 실적 이후 반도체 사이클 점검"
-        className="mt-4 h-12 w-full rounded-md border border-[#c7ceda] px-3 text-lg font-semibold outline-none focus:border-[#1f6f8b]"
+        className="mt-4 h-12 w-full rounded-md border border-[#c7ceda] px-3 text-base font-semibold outline-none focus:border-[#1f6f8b] sm:text-lg"
       />
       <div className="mt-4 overflow-hidden rounded-md border border-[#d9dee8] bg-white">
-        <div className="flex flex-wrap items-center gap-1 border-b border-[#d9dee8] bg-[#f9fafc] p-2">
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-[#d9dee8] bg-[#f9fafc] p-2">
           {editor ? (
             <>
               <ToolbarButton
@@ -263,7 +263,7 @@ export function PostEditor({
                     editor.chain().focus().unsetMark("styledText").run();
                   }
                 }}
-                className="h-9 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-2 text-sm font-semibold text-[#344052]"
+                className="h-9 shrink-0 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-2 text-sm font-semibold text-[#344052]"
               >
                 <option value="">기본 크기</option>
                 <option value="13px">작게</option>
@@ -273,7 +273,7 @@ export function PostEditor({
               </select>
               <label
                 title="글자 색상"
-                className="grid h-9 w-9 cursor-pointer place-items-center rounded-md border border-[#c7ceda] bg-white"
+                className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md border border-[#c7ceda] bg-white"
               >
                 <span className="h-4 w-4 rounded-sm border border-[#c7ceda] bg-[linear-gradient(135deg,#b64242_0_33%,#1f6f8b_33%_66%,#344052_66%)]" />
                 <input
@@ -286,7 +286,7 @@ export function PostEditor({
               </label>
             </>
           ) : null}
-          <label className="ml-auto inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold">
+          <label className="ml-auto inline-flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold">
             <ImageIcon size={15} />
             사진 삽입
             <input
@@ -316,7 +316,7 @@ export function PostEditor({
           value={tagQuery}
           onChange={(event) => setTagQuery(event.target.value.replace(/^#/, ""))}
           placeholder="태그할 종목 검색"
-          className="h-10 w-full rounded-md border border-[#c7ceda] px-3 text-sm outline-none focus:border-[#1f6f8b]"
+          className="h-11 w-full rounded-md border border-[#c7ceda] px-3 text-base outline-none focus:border-[#1f6f8b] sm:h-10 sm:text-sm"
         />
         {suggestions.length ? (
           <div className="mt-2 grid gap-2 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-2">
@@ -337,7 +337,7 @@ export function PostEditor({
                     );
                     setTagQuery("");
                   }}
-                  className="flex cursor-pointer items-center justify-between rounded-md bg-white px-3 py-2 text-left text-sm"
+                  className="flex cursor-pointer items-center justify-between gap-3 rounded-md bg-white px-3 py-2 text-left text-sm"
                 >
                   <span className="font-semibold">{item.symbol}</span>
                   <span className="truncate text-[#607086]">{item.description}</span>
@@ -363,17 +363,17 @@ export function PostEditor({
           </div>
         ) : null}
       </div>
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
         <button
           onClick={onCancel}
-          className="h-10 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-sm font-semibold transition-colors hover:bg-[#eef1f6]"
+          className="h-11 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-sm font-semibold transition-colors hover:bg-[#eef1f6] sm:h-10"
         >
           취소
         </button>
         <button
           disabled={loading}
           onClick={onSubmit}
-          className="h-10 cursor-pointer rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195c74] disabled:opacity-60"
+          className="h-11 cursor-pointer rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195c74] disabled:opacity-60 sm:h-10"
         >
           {editingPostId ? "수정 완료" : "게시"}
         </button>
@@ -400,7 +400,7 @@ function ToolbarButton({
       type="button"
       title={title}
       onClick={onClick}
-      className={`h-9 min-w-9 cursor-pointer rounded-md border px-2.5 text-sm font-semibold transition-colors ${
+      className={`h-9 min-w-9 shrink-0 cursor-pointer rounded-md border px-2.5 text-sm font-semibold transition-colors ${
         active
           ? "border-[#1f6f8b] bg-[#eef6f9] text-[#1f6f8b]"
           : "border-[#c7ceda] bg-white text-[#344052] hover:bg-[#eef1f6]"

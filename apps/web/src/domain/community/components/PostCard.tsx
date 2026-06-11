@@ -74,13 +74,13 @@ export function PostCard({
   return (
     <article
       onDoubleClick={() => onOpenPost?.(post.id)}
-      className={`rounded-lg border border-[#d9dee8] bg-white p-4 shadow-sm ${
+      className={`-mx-4 rounded-none border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border ${
         onOpenPost ? "cursor-pointer transition-shadow hover:shadow-md" : ""
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-[#607086]">
+          <p className="text-[11px] font-semibold text-[#607086] sm:text-xs">
             <button
               type="button"
               onClick={(event) => {
@@ -93,7 +93,7 @@ export function PostCard({
             </button>{" "}
             · {new Date(post.createdAt).toLocaleString()}
           </p>
-          <h3 className="mt-1 truncate text-lg font-semibold">
+          <h3 className="mt-1 line-clamp-2 text-base font-semibold leading-6 sm:truncate sm:text-lg">
             {post.title || post.content || "제목 없음"}
           </h3>
         </div>
@@ -119,7 +119,7 @@ export function PostCard({
         ) : null}
       </div>
 
-      <div className={`mt-4 ${showFull ? "" : "max-h-72 overflow-hidden"}`}>
+      <div className={`mt-4 ${showFull ? "" : "max-h-64 overflow-hidden sm:max-h-72"}`}>
         <RichContent
           html={html}
           onImageClick={
@@ -159,7 +159,7 @@ export function PostCard({
         <button
           onClick={() => onLike(post.id)}
           onDoubleClick={(event) => event.stopPropagation()}
-          className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-semibold transition-colors ${
+          className={`inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-semibold transition-colors sm:h-9 ${
             post.likedByMe
               ? "border-[#b64242] bg-[#fff1f1] text-[#b64242] hover:bg-[#ffe6e6]"
               : "border-[#c7ceda] text-[#344052] hover:bg-[#eef1f6]"
@@ -168,7 +168,7 @@ export function PostCard({
           <Heart size={16} fill={post.likedByMe ? "currentColor" : "none"} />
           {post.likeCount}
         </button>
-        <span className="inline-flex h-9 items-center gap-2 rounded-md border border-[#c7ceda] px-3 text-sm font-semibold text-[#344052]">
+        <span className="inline-flex h-10 items-center gap-2 rounded-md border border-[#c7ceda] px-3 text-sm font-semibold text-[#344052] sm:h-9">
           <MessageCircle size={16} />
           {post.commentCount}
         </span>
@@ -201,12 +201,12 @@ export function PostCard({
                 }))
               }
               placeholder="댓글 작성"
-              className="h-10 flex-1 rounded-md border border-[#c7ceda] px-3 text-sm outline-none focus:border-[#1f6f8b]"
+              className="h-11 flex-1 rounded-md border border-[#c7ceda] px-3 text-base outline-none focus:border-[#1f6f8b] sm:h-10 sm:text-sm"
             />
             <button
               onClick={() => onComment(post.id)}
               onDoubleClick={(event) => event.stopPropagation()}
-              className="grid h-10 w-10 cursor-pointer place-items-center rounded-md bg-[#1f6f8b] text-white transition-colors hover:bg-[#195c74]"
+              className="grid h-11 w-11 cursor-pointer place-items-center rounded-md bg-[#1f6f8b] text-white transition-colors hover:bg-[#195c74] sm:h-10 sm:w-10"
             >
               <Send size={16} />
             </button>
@@ -217,7 +217,7 @@ export function PostCard({
       {imagePreview ? (
         <div
           onClick={() => setImagePreview(null)}
-          className="fixed inset-0 z-50 grid cursor-zoom-out place-items-center bg-black/85 p-4"
+          className="fixed inset-0 z-50 grid cursor-zoom-out place-items-center bg-black/85 p-3 sm:p-4"
         >
           <img src={imagePreview} alt="" className="max-h-[94vh] max-w-[96vw] object-contain" />
         </div>

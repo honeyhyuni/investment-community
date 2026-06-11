@@ -329,7 +329,7 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
       <>
         {error ? <Notice message="" error={error} /> : null}
 
-        <div className="flex-1 py-6">
+        <div className="flex-1 py-4 sm:py-6">
           <PostEditor
             title={postTitle}
             setTitle={setPostTitle}
@@ -363,11 +363,11 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
       <>
         {error ? <Notice message="" error={error} /> : null}
 
-        <div className="flex-1 py-6">
-          <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex-1 py-4 sm:py-6">
+          <div className="mb-4 grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-between">
             <button
               onClick={() => router.push("/community")}
-              className="h-10 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-4 text-sm font-semibold text-[#344052] transition-colors hover:border-[#1f6f8b] hover:bg-[#eef1f6] hover:text-[#1f6f8b]"
+              className="h-10 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#344052] transition-colors hover:border-[#1f6f8b] hover:bg-[#eef1f6] hover:text-[#1f6f8b] sm:px-4"
             >
               피드 목록으로
             </button>
@@ -376,7 +376,7 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
                 resetEditor();
                 setEditorOpen(true);
               }}
-              className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195c74]"
+              className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md bg-[#1f6f8b] px-3 text-sm font-semibold text-white transition-colors hover:bg-[#195c74] sm:px-4"
             >
               <Plus size={17} />
               피드 글 쓰기
@@ -436,15 +436,15 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
     <>
       {error ? <Notice message="" error={error} /> : null}
 
-      <div className="grid flex-1 gap-5 py-6 lg:grid-cols-[1fr_320px]">
+      <div className="grid flex-1 gap-4 py-4 sm:gap-5 sm:py-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="-mx-4 border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border">
               <div className="flex flex-wrap gap-2">
                 {(["all", "subscribed", "mine"] as CommunityScope[]).map((item) => (
                   <button
                     key={item}
                     onClick={() => setScope(item)}
-                    className={`h-9 cursor-pointer rounded-md px-3 text-sm font-semibold transition-colors ${
+                    className={`h-10 flex-1 cursor-pointer rounded-md px-3 text-sm font-semibold transition-colors sm:h-9 sm:flex-none ${
                       scope === item
                         ? "bg-[#1f6f8b] text-white"
                         : "border border-[#c7ceda] bg-white text-[#344052] hover:bg-[#eef1f6]"
@@ -457,7 +457,7 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
                   <button
                     key={item}
                     onClick={() => setSort(item)}
-                    className={`h-9 cursor-pointer rounded-md px-3 text-sm font-semibold transition-colors ${
+                    className={`h-10 flex-1 cursor-pointer rounded-md px-3 text-sm font-semibold transition-colors sm:h-9 sm:flex-none ${
                       sort === item
                         ? "bg-[#344052] text-white"
                         : "border border-[#c7ceda] bg-white text-[#344052] hover:bg-[#eef1f6]"
@@ -472,7 +472,7 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
                   resetEditor();
                   setEditorOpen(true);
                 }}
-                className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195c74]"
+                className="mt-3 inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195c74] sm:h-10"
               >
                 <Plus size={17} />
                 피드 글 쓰기
@@ -558,7 +558,7 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
               <Users size={16} className="text-[#607086]" />
             </div>
             <div className="mt-3 space-y-2">
-              {users.slice(0, 6).map((communityUser) => (
+              {users.slice(0, 3).map((communityUser) => (
                 <div key={communityUser.id} className="rounded-md border border-[#eef1f6] p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">

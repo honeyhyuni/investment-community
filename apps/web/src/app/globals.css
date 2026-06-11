@@ -171,6 +171,11 @@ select {
   outline: none;
   min-height: 480px;
 }
+@media (max-width: 640px) {
+  .ProseMirror {
+    min-height: 420px;
+  }
+}
 .tiptap-content p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: #9aa6b6;

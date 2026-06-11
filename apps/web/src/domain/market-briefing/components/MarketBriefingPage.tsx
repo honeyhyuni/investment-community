@@ -145,14 +145,14 @@ export function MarketBriefingPage({
     <>
       {error ? <Notice message="" error={error} /> : null}
 
-      <div className="grid flex-1 gap-6 py-6 lg:grid-cols-[1fr]">
-        <section className="rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
+      <div className="grid flex-1 gap-4 py-4 sm:gap-6 sm:py-6 lg:grid-cols-[1fr]">
+        <section className="-mx-4 border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607086]">
                 AI Market Briefing
               </p>
-              <h2 className="mt-1 text-2xl font-semibold text-[#17202e]">
+              <h2 className="mt-1 text-xl font-semibold text-[#17202e] sm:text-2xl">
                 마켓 브리핑
               </h2>
             </div>
@@ -161,19 +161,19 @@ export function MarketBriefingPage({
             </span>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {briefingTabs.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setMarket(item.id)}
-                className={`cursor-pointer rounded-md px-3 py-2 text-base font-semibold transition-colors ${
+                className={`cursor-pointer rounded-md px-3 py-2 text-sm font-semibold transition-colors sm:text-base ${
                   market === item.id
                     ? "bg-[#1f6f8b] text-white"
                     : "border border-[#c7ceda] bg-white text-[#344052] hover:bg-[#eef1f6]"
                 }`}
               >
                 {item.label}
-                <span className="ml-2 text-xs font-medium opacity-80">
+                <span className="mt-0.5 block text-[11px] font-medium opacity-80 sm:ml-2 sm:mt-0 sm:inline sm:text-xs">
                   {item.caption}
                 </span>
               </button>
@@ -254,13 +254,13 @@ function BriefingList({
           <button
             key={briefing.id}
             onClick={() => onSelect(briefing.id)}
-            className="block cursor-pointer rounded-md border border-[#d9dee8] p-4 text-left transition-colors hover:bg-[#f6f8fb]"
+            className="block cursor-pointer rounded-md border border-[#d9dee8] p-3 text-left transition-colors hover:bg-[#f6f8fb] sm:p-4"
           >
-            <p className="text-sm font-semibold text-[#607086]">
+            <p className="text-xs font-semibold text-[#607086] sm:text-sm">
               {briefing.market === "KR" ? "한국시황" : "미국시황"} ·{" "}
               {new Date(briefing.generatedAt * 1000).toLocaleString("ko-KR")}
             </p>
-            <h3 className="mt-1 flex flex-wrap items-center gap-2 text-lg font-semibold text-[#17202e]">
+            <h3 className="mt-1 flex flex-wrap items-center gap-2 text-base font-semibold leading-6 text-[#17202e] sm:text-lg">
               <span>{briefing.title}</span>
               {isNewBriefing(briefing) ? (
                 <span className="rounded bg-[#e73843] px-1.5 py-0.5 text-xs font-bold text-white">
@@ -268,7 +268,7 @@ function BriefingList({
                 </span>
               ) : null}
             </h3>
-            <p className="mt-2 line-clamp-1 text-base leading-7 text-[#607086]">
+            <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#607086] sm:line-clamp-1 sm:text-base sm:leading-7">
               {briefing.summaryLines[0] ?? briefing.summary}
             </p>
           </button>
@@ -276,21 +276,21 @@ function BriefingList({
       </div>
 
       {totalPages > 1 ? (
-        <div className="mt-4 flex items-center justify-between border-t border-[#eef1f6] pt-4">
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-[#eef1f6] pt-4">
           <button
             disabled={page === 1}
             onClick={() => onPageChange(Math.max(1, page - 1))}
-            className="h-10 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-base font-semibold disabled:cursor-default disabled:opacity-50"
+            className="h-10 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-sm font-semibold disabled:cursor-default disabled:opacity-50 sm:text-base"
           >
             이전
           </button>
-          <span className="text-base font-medium text-[#607086]">
+          <span className="text-sm font-medium text-[#607086] sm:text-base">
             {page} / {totalPages}
           </span>
           <button
             disabled={page === totalPages}
             onClick={() => onPageChange(Math.min(totalPages, page + 1))}
-            className="h-10 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-base font-semibold disabled:cursor-default disabled:opacity-50"
+            className="h-10 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-sm font-semibold disabled:cursor-default disabled:opacity-50 sm:text-base"
           >
             다음
           </button>
@@ -343,29 +343,29 @@ function BriefingDetail({
   };
 
   return (
-    <article className="rounded-md border border-[#d9dee8] bg-[#f9fafc] p-5">
+    <article className="rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3 sm:p-5">
       <button
         onClick={onBack}
-        className="mb-4 h-10 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-4 text-base font-semibold text-[#344052] hover:bg-[#eef1f6]"
+        className="mb-4 h-10 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-4 text-sm font-semibold text-[#344052] hover:bg-[#eef1f6] sm:text-base"
       >
         목록으로
       </button>
 
       {isAdmin ? (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
           <button
             onClick={() => {
               setEditing((value) => !value);
               setFormError("");
             }}
-            className="h-10 cursor-pointer rounded-md border border-[#1f6f8b] bg-white px-4 text-base font-semibold text-[#1f6f8b] hover:bg-[#eef6f9]"
+            className="h-10 cursor-pointer rounded-md border border-[#1f6f8b] bg-white px-4 text-sm font-semibold text-[#1f6f8b] hover:bg-[#eef6f9] sm:text-base"
           >
             {editing ? "수정 취소" : "수정"}
           </button>
           <button
             disabled={deletePending}
             onClick={handleDelete}
-            className="h-10 cursor-pointer rounded-md border border-[#d74848] bg-white px-4 text-base font-semibold text-[#c43232] hover:bg-[#fff1f1] disabled:cursor-default disabled:opacity-50"
+            className="h-10 cursor-pointer rounded-md border border-[#d74848] bg-white px-4 text-sm font-semibold text-[#c43232] hover:bg-[#fff1f1] disabled:cursor-default disabled:opacity-50 sm:text-base"
           >
             {deletePending ? "삭제 중" : "삭제"}
           </button>
@@ -390,11 +390,11 @@ function BriefingDetail({
       ) : null}
 
       {briefing.imageUrl ? (
-        <div className="mb-6 overflow-hidden rounded-md border border-[#d9dee8] bg-[#101722]">
+        <div className="mb-5 overflow-hidden rounded-md border border-[#d9dee8] bg-[#101722] sm:mb-6">
           <img
             src={briefing.imageUrl}
             alt=""
-            className="mx-auto max-h-[460px] w-full object-contain"
+            className="mx-auto max-h-[280px] w-full object-contain sm:max-h-[460px]"
           />
         </div>
       ) : null}
@@ -404,7 +404,7 @@ function BriefingDetail({
           {briefing.market === "KR" ? "한국시황" : "미국시황"} ·{" "}
           {briefing.market === "KR" ? "오늘장 주식 요약" : "전날 미국장 요약"}
         </p>
-        <h3 className="mt-2 text-3xl font-semibold leading-tight text-[#17202e]">
+        <h3 className="mt-2 text-2xl font-semibold leading-tight text-[#17202e] sm:text-3xl">
           {briefing.title}
         </h3>
         <p className="mt-2 text-sm font-medium text-[#607086]">
@@ -412,9 +412,9 @@ function BriefingDetail({
         </p>
       </div>
 
-      <section className="mt-6 space-y-4 rounded-md border border-[#d9dee8] bg-white p-5">
-        <h4 className="text-lg font-semibold text-[#17202e]">시장 전체 요약</h4>
-        <div className="space-y-5 text-base leading-8 text-[#344052]">
+      <section className="mt-5 space-y-4 rounded-md border border-[#d9dee8] bg-white p-4 sm:mt-6 sm:p-5">
+        <h4 className="text-base font-semibold text-[#17202e] sm:text-lg">시장 전체 요약</h4>
+        <div className="space-y-4 text-[15px] leading-7 text-[#344052] sm:space-y-5 sm:text-base sm:leading-8">
           {(briefing.summaryLines ?? []).map((line) => (
             <p key={line}>{line}</p>
           ))}
@@ -422,9 +422,9 @@ function BriefingDetail({
       </section>
 
       {(briefing.macroLines ?? []).length ? (
-        <section className="mt-5 space-y-4 rounded-md border border-[#d9dee8] bg-white p-5">
-          <h4 className="text-lg font-semibold text-[#17202e]">매크로 점검</h4>
-          <div className="space-y-5 text-base leading-8 text-[#344052]">
+        <section className="mt-5 space-y-4 rounded-md border border-[#d9dee8] bg-white p-4 sm:p-5">
+          <h4 className="text-base font-semibold text-[#17202e] sm:text-lg">매크로 점검</h4>
+          <div className="space-y-4 text-[15px] leading-7 text-[#344052] sm:space-y-5 sm:text-base sm:leading-8">
             {(briefing.macroLines ?? []).map((line, index) => (
               <p key={`${index}-${line}`}>{line}</p>
             ))}
@@ -432,8 +432,8 @@ function BriefingDetail({
         </section>
       ) : null}
 
-      <section className="mt-5 space-y-4 rounded-md border border-[#d9dee8] bg-white p-5">
-        <h4 className="text-lg font-semibold text-[#17202e]">
+      <section className="mt-5 space-y-4 rounded-md border border-[#d9dee8] bg-white p-4 sm:p-5">
+        <h4 className="text-base font-semibold text-[#17202e] sm:text-lg">
           주요 종목/기업 뉴스
         </h4>
         <div className="grid gap-4">
@@ -453,7 +453,7 @@ function BriefingDetail({
                 key={`${ticker || item.symbol || "symbol"}-${item.headline ?? "headline"}-${index}`}
                 className="border-b border-[#eef1f6] pb-4 last:border-0 last:pb-0"
               >
-                <h5 className="text-base font-semibold text-[#17202e]">
+                <h5 className="text-[15px] font-semibold text-[#17202e] sm:text-base">
                   {companyName || item.symbol || "종목/기업"}{" "}
                   {ticker ? (
                     <a
@@ -474,11 +474,11 @@ function BriefingDetail({
                   ) : null}
                 </h5>
                 {headline && lines[0] !== item.headline ? (
-                  <p className="mt-1 text-base font-medium text-[#344052]">
+                  <p className="mt-1 text-[15px] font-medium text-[#344052] sm:text-base">
                     {headline}
                   </p>
                 ) : null}
-                <div className="mt-3 space-y-4 text-base leading-8 text-[#607086]">
+                <div className="mt-3 space-y-3 text-[15px] leading-7 text-[#607086] sm:space-y-4 sm:text-base sm:leading-8">
                   {lines.map((line, lineIndex) => (
                     <p key={`${lineIndex}-${line}`}>{line}</p>
                   ))}
@@ -495,8 +495,8 @@ function BriefingDetail({
       </section>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <section className="rounded-md border border-[#d9dee8] bg-white p-5">
-          <h4 className="text-lg font-semibold text-[#17202e]">
+        <section className="rounded-md border border-[#d9dee8] bg-white p-4 sm:p-5">
+          <h4 className="text-base font-semibold text-[#17202e] sm:text-lg">
             오늘의 핵심 키워드
           </h4>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -511,11 +511,11 @@ function BriefingDetail({
           </div>
         </section>
 
-        <section className="rounded-md border border-[#d9dee8] bg-white p-5">
-          <h4 className="text-lg font-semibold text-[#17202e]">
+        <section className="rounded-md border border-[#d9dee8] bg-white p-4 sm:p-5">
+          <h4 className="text-base font-semibold text-[#17202e] sm:text-lg">
             단기 관전 포인트
           </h4>
-          <div className="mt-3 space-y-4 text-base leading-8 text-[#344052]">
+          <div className="mt-3 space-y-3 text-[15px] leading-7 text-[#344052] sm:space-y-4 sm:text-base sm:leading-8">
             {(briefing.watchPoints ?? []).map((point) => (
               <p key={point}>{point}</p>
             ))}
@@ -524,8 +524,8 @@ function BriefingDetail({
       </div>
 
       {briefing.sources?.length ? (
-        <section className="mt-5 rounded-md border border-[#d9dee8] bg-white p-5">
-          <h4 className="text-lg font-semibold text-[#17202e]">참고 뉴스</h4>
+        <section className="mt-5 rounded-md border border-[#d9dee8] bg-white p-4 sm:p-5">
+          <h4 className="text-base font-semibold text-[#17202e] sm:text-lg">참고 뉴스</h4>
           <div className="mt-3 grid gap-2">
             {briefing.sources.map((item) => (
               <a
@@ -533,7 +533,7 @@ function BriefingDetail({
                 href={item.url}
                 target="_blank"
                 rel="noreferrer"
-                className="block cursor-pointer rounded-md border border-[#eef1f6] px-3 py-2 text-base hover:bg-[#f6f8fb]"
+                className="block cursor-pointer rounded-md border border-[#eef1f6] px-3 py-2 text-sm hover:bg-[#f6f8fb] sm:text-base"
               >
                 <span className="font-semibold text-[#344052]">
                   {item.headline}
