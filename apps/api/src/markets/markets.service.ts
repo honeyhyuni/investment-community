@@ -955,8 +955,9 @@ export class MarketsService {
         source: 'openai',
         model: generated.model,
         imageModel: imageUrl
-          ? this.configService.get<string>('OPENAI_IMAGE_MODEL')?.trim() ||
-            'gpt-image-1'
+          ? this.configService.get<string>('OPENAI_SVG_MODEL')?.trim() ||
+            this.configService.get<string>('OPENAI_MODEL')?.trim() ||
+            'gpt-5.5'
           : null,
         generatedAt: new Date(),
       }),
@@ -2364,13 +2365,14 @@ const response = await this.fetchOpenAiWithRetry(
   ): Promise<string> {
     const apiKey = this.configService.get<string>('OPENAI_API_KEY');
     const model =
-      this.configService.get<string>('OPENAI_IMAGE_MODEL')?.trim() ||
-      'gpt-image-1';
+      this.configService.get<string>('OPENAI_SVG_MODEL')?.trim() ||
+      this.configService.get<string>('OPENAI_MODEL')?.trim() ||
+      'gpt-5.5';
     if (!apiKey) {
       throw new ServiceUnavailableException('OpenAI API key is not configured.');
     }
 
-    const response = await fetch('https://api.openai.com/v1/images/generations', {
+    const response = await this.fetchOpenAiWithRetry('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -2378,37 +2380,73 @@ const response = await this.fetchOpenAiWithRetry(
       },
       body: JSON.stringify({
         model,
-        size: '1536x1024',
-        prompt: [
-          'Create a polished 16:9 PNG editorial cover image for a Korean retail investor market close report.',
-          'Style: premium financial PPT cover, clean dashboard composition, restrained dark navy and white background, subtle green/red market accents, professional typography feel.',
-          'Use 3 to 5 simple visual blocks at most. Avoid clutter, tiny text, fake logos, overloaded numbers, comic style, neon cyberpunk, or sensational news graphics.',
-          'Do not render Korean text, article titles, ticker labels, numbers, or readable words inside the image because generated text can break. Use abstract charts, icons, panels, and clean visual hierarchy instead.',
-          'The image should work as a top banner inside a web article without cropping important content.',
-          `Market: ${market}`,
-          `Title: ${title}`,
-          `Keywords: ${keywords.join(', ')}`,
-          `Facts only from summary: ${summaryLines.slice(0, 5).join(' / ')}`,
-          'No fake logos, no specific unprovided prices, no investment advice text.',
-        ].join('\n'),
+        service_tier: 'flex',
+        input: [
+          {
+            role: 'system',
+            content: [
+              'You create clean SVG editorial cover art for financial market reports.',
+              'Return only valid standalone SVG markup. Do not wrap it in markdown fences.',
+              'Do not use external images, web fonts, scripts, animation, foreignObject, or embedded raster images.',
+            ].join('\n'),
+          },
+          {
+            role: 'user',
+            content: [
+              'Create a polished 16:9 SVG cover image for a Korean retail investor market close report.',
+              'Canvas must be viewBox="0 0 1440 810".',
+              'Style: premium financial PPT cover, clean dashboard composition, dark navy and white surfaces, subtle green/red market accents, professional layout.',
+              'Use only vector shapes: panels, abstract line charts, candlestick-like bars, arrows, soft grid lines, and simple finance icons.',
+              'Do not render Korean text, article titles, ticker labels, numbers, company names, logos, or readable words inside the SVG because generated text can break.',
+              'Keep important visual elements inside the central safe area so the image works as a web article banner without cropping.',
+              'Avoid clutter, tiny text, fake logos, overloaded numbers, comic style, neon cyberpunk, or sensational news graphics.',
+              `Market: ${market}`,
+              `Title context, do not render as text: ${title}`,
+              `Visual keywords, do not render as text: ${keywords.join(', ')}`,
+              `Facts only for visual mood, do not render as text: ${summaryLines.slice(0, 5).join(' / ')}`,
+            ].join('\n'),
+          },
+        ],
+        max_output_tokens: 3500,
       }),
-      signal: AbortSignal.timeout(60_000),
-    });
+    }, 120_000, 300_000);
 
     if (!response.ok) {
       const message = await response.text().catch(() => '');
       throw new ServiceUnavailableException(
-        `OpenAI image request failed: ${message || response.status}`,
+        `OpenAI SVG request failed: ${message || response.status}`,
       );
     }
     const body = (await response.json()) as {
-      data?: Array<{ b64_json?: string }>;
+      output_text?: string;
+      output?: Array<{ content?: Array<{ text?: string }> }>;
     };
-    const image = body.data?.[0]?.b64_json;
-    if (!image) {
-      throw new ServiceUnavailableException('OpenAI image response is empty.');
+    const outputText =
+      body.output_text ??
+      body.output
+        ?.flatMap((item) => item.content ?? [])
+        .map((item) => item.text)
+        .filter(Boolean)
+        .join('\n');
+    const svg = this.extractSvgMarkup(outputText ?? '');
+
+    if (!svg) {
+      throw new ServiceUnavailableException('OpenAI SVG response is empty.');
     }
-    return `data:image/png;base64,${image}`;
+    return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
+  }
+
+  private extractSvgMarkup(value: string): string {
+    const text = value.trim();
+    const start = text.indexOf('<svg');
+    const end = text.lastIndexOf('</svg>');
+
+    if (start < 0 || end < start) {
+      return '';
+    }
+
+    const svg = text.slice(start, end + '</svg>'.length).trim();
+    return svg.includes('<script') || svg.includes('<foreignObject') ? '' : svg;
   }
 
   private async runScheduledMarketBriefing(market: 'US' | 'KR'): Promise<void> {
