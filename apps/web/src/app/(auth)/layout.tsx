@@ -56,9 +56,9 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   if (authChecking || user?.status !== "APPROVED") {
     return (
       <main
-        className={`min-h-screen bg-[#f6f7fb] text-[#161a22] ${darkMode ? "dark-app" : ""}`}
+        className={`min-h-dvh overflow-x-hidden bg-[#f6f7fb] text-[#161a22] ${darkMode ? "dark-app" : ""}`}
       >
-        <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-6 sm:px-8">
+        <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:px-8 sm:py-6">
           <SessionLoading />
         </section>
       </main>
@@ -67,22 +67,22 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
   return (
     <main
-      className={`min-h-screen bg-[#f6f7fb] text-[#161a22] ${darkMode ? "dark-app" : ""}`}
+      className={`min-h-dvh overflow-x-hidden bg-[#f6f7fb] text-[#161a22] ${darkMode ? "dark-app" : ""}`}
     >
-      <section className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-6 sm:px-8">
-        <header className="flex items-center justify-between border-b border-[#d9dee8] pb-5">
-          <div>
+      <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:px-8 sm:py-6">
+        <header className="flex flex-col gap-4 border-b border-[#d9dee8] pb-4 sm:flex-row sm:items-center sm:justify-between sm:pb-5">
+          <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607086]">
               Private
             </p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal">
+            <h1 className="mt-1 text-xl font-semibold tracking-normal sm:text-2xl">
               Investment Community
             </h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             <button
               onClick={toggleLanguage}
-              className="h-10 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#1f6f8b] shadow-sm transition-colors hover:border-[#1f6f8b] hover:bg-[#eef1f6]"
+              className="h-10 min-w-0 flex-1 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#1f6f8b] shadow-sm transition-colors hover:border-[#1f6f8b] hover:bg-[#eef1f6] sm:flex-none"
             >
               {language === "en" ? "한국어" : "English"}
             </button>
@@ -96,7 +96,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             </button>
             <button
               onClick={() => router.push("/profile")}
-              className={`inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-semibold shadow-sm transition-colors hover:bg-[#eef1f6] ${
+              className={`inline-flex h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold shadow-sm transition-colors hover:bg-[#eef1f6] sm:flex-none ${
                 isProfile
                   ? "border-[#1f6f8b] bg-[#eef6f9] text-[#1f6f8b]"
                   : "border-[#c7ceda] bg-white text-[#344052] hover:border-[#1f6f8b] hover:text-[#1f6f8b]"
@@ -107,7 +107,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             </button>
             <button
               onClick={logout}
-              className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-medium shadow-sm transition-colors hover:border-[#9a2f2f] hover:bg-[#fff1f1] hover:text-[#9a2f2f]"
+              className="inline-flex h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-medium shadow-sm transition-colors hover:border-[#9a2f2f] hover:bg-[#fff1f1] hover:text-[#9a2f2f] sm:flex-none"
             >
               <LogOut size={16} />
               {language === "ko" ? "로그아웃" : "Logout"}
@@ -129,7 +129,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           exchangeRate={exchangeRate}
         />
 
-        <nav className="mt-4 flex gap-2 border-b border-[#d9dee8]">
+        <nav className="-mx-4 mt-3 flex gap-2 overflow-x-auto border-b border-[#d9dee8] px-4 sm:mx-0 sm:mt-4 sm:px-0">
           {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
             const active =
               pathname === item.href ||
@@ -139,7 +139,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
               <Link
                 key={item.id}
                 href={item.href}
-                className={`h-11 cursor-pointer border-b-2 px-3 text-sm font-semibold transition-colors ${
+                className={`flex h-11 shrink-0 cursor-pointer items-center whitespace-nowrap border-b-2 px-3 text-sm font-semibold transition-colors ${
                   active
                     ? "border-[#1f6f8b] text-[#1f6f8b]"
                     : "border-transparent text-[#607086] hover:border-[#c7ceda] hover:text-[#1f6f8b]"
