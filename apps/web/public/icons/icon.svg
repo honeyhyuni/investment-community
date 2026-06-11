@@ -11,9 +11,9 @@
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <path d="M116 352h280" stroke="#334155" stroke-width="18" stroke-linecap="round"/>
-  <path d="M136 326l66-58 58 44 106-142" fill="none" stroke="url(#line)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M366 170h-68" stroke="#38bdf8" stroke-width="24" stroke-linecap="round"/>
-  <path d="M366 170v68" stroke="#38bdf8" stroke-width="24" stroke-linecap="round"/>
-  <text x="256" y="430" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="74" font-weight="800" fill="#f8fafc" letter-spacing="3">15F</text>
+  <path d="M116 367h280" stroke="#334155" stroke-width="18" stroke-linecap="round"/>
+  <path d="M136 326l66-58 46 32 113-113" fill="none" stroke="url(#line)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M372 176h-68" stroke="#38bdf8" stroke-width="24" stroke-linecap="round"/>
+  <path d="M372 176v68" stroke="#38bdf8" stroke-width="24" stroke-linecap="round"/>
+  <text x="256" y="445" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="74" font-weight="800" fill="#f8fafc" letter-spacing="3">15F</text>
 </svg>
