@@ -1529,7 +1529,13 @@ function sourceToSearchText(item: NewsSource): string {
 
 function hasAnyKeyword(text: string, keywords: string[]): boolean {
   const lower = text.toLowerCase();
-  return keywords.some((keyword) => lower.includes(keyword.toLowerCase()));
+  return keywords.some((keyword) => {
+    const escaped = keyword
+      .toLowerCase()
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/\\ /g, '\\s+');
+    return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(lower);
+  });
 }
 
 /**
@@ -1547,15 +1553,11 @@ function buildHighPriorityMacroLines(sources: NewsSource[]): string[] {
     'personal consumption expenditures',
     'fomc',
     'federal reserve',
-    'fed',
-    'powell',
     'rate decision',
-    'interest rate',
     'dot plot',
     'nonfarm payrolls',
     'payrolls',
     'jobs report',
-    'employment',
     'unemployment',
     'jobless claims',
     'wage growth',
@@ -1575,7 +1577,6 @@ function buildHighPriorityMacroLines(sources: NewsSource[]): string[] {
       item.summary ? `Summary: ${item.summary}` : '',
       item.description ? `Description: ${item.description}` : '',
       item.publishedAt ? `Published: ${item.publishedAt}` : '',
-      'Priority note: 이 항목은 제공된 데이터 안에서 확인된 핵심 매크로 이벤트이므로 일반 기업 뉴스보다 먼저 검토해야 합니다.',
     ]
       .filter(Boolean)
       .join('\n');
@@ -1678,12 +1679,13 @@ const response = await this.fetchOpenAiWithRetry(
           role: 'system',
           content: [
             'You are a market close report writer for Korean retail investors.',
-            'Use only the Market indicators, High priority macro events, Macro events, and News provided by the user.',
-            'High priority macro events are not mandatory every day.',
-            'If High priority macro events are provided, they must be reviewed before ordinary News.',
-            'If CPI, Core CPI, PCE, FOMC, Fed, or employment data appears in High priority macro events, it must not be omitted from macroLines.',
+            'Use only the Market indicators, Core macro event candidates, Macro events, and News provided by the user.',
+            'Core macro event candidates are not mandatory every day.',
+            'If Core macro event candidates are provided, they must be reviewed before ordinary News.',
+            'If CPI, Core CPI, PCE, FOMC, Fed, or labor-market data appears in Core macro event candidates, it must not be omitted from macroLines.',
             'Market indicators are results, not causes. Do not treat index moves as macro causes.',
             'Do not invent facts, prices, dates, quotes, company statements, or market moves.',
+            'Do not mention internal input section names such as Core macro event candidates, Macro events, High priority, or Priority note in the final Korean report.',
             'If the market was closed, return exactly "휴장이었습니다." and nothing else.',
             'Otherwise, return only valid JSON. Do not include markdown fences or extra commentary.',
           ].join('\n'),
@@ -1700,7 +1702,7 @@ const response = await this.fetchOpenAiWithRetry(
             [
               '기본 역할:',
               '너는 한국 개인투자자를 위한 장 마감 리포트 작성자다.',
-              '아래 제공된 Market indicators, High priority macro events, Macro events, News만 근거로 사용해라.',
+              '아래 제공된 Market indicators, Core macro event candidates, Macro events, News만 근거로 사용해라.',
               '제공되지 않은 사실, 주가, 날짜, 기업 발언, 시장 반응은 절대 추측하지 마라.',
               '투자 권유 표현은 피하고, 정보 전달 중심으로 작성해라.',
               '모든 문장은 존댓말 문체로 작성해라.',
@@ -1718,10 +1720,10 @@ const response = await this.fetchOpenAiWithRetry(
 
             `Market indicators:\n${pulseLines.join('\n') || 'No indicator data.'}`,
 
-            `High priority macro events:\n${
+            `Core macro event candidates:\n${
               highPriorityMacroLines.length
                 ? highPriorityMacroLines.join('\n\n')
-                : 'No high priority macro event data.'
+                : 'No core macro event candidate data.'
             }`,
 
             `Macro events:\n${
@@ -1764,19 +1766,20 @@ const response = await this.fetchOpenAiWithRetry(
               '',
               '우선순위 규칙:',
               'macroLines 작성 시 근거 검토 순서는 반드시 다음 순서를 따른다.',
-              '1. High priority macro events',
+              '1. Core macro event candidates',
               '2. Macro events',
               '3. News 중 매크로 관련 뉴스',
               '4. Market indicators는 결과 확인용',
               '5. 개별 기업 뉴스는 원칙적으로 companyNews에서 처리',
               '',
-              'High priority macro events 처리 규칙:',
-              'High priority macro events는 매일 반드시 존재하는 항목이 아니다.',
-              'High priority macro events가 "No high priority macro event data."이면 CPI, PCE, FOMC, 고용지표를 억지로 언급하지 마라.',
-              '반대로 High priority macro events에 CPI, Core CPI, PCE, Core PCE, FOMC, Fed, 고용지표, 실업률, 임금상승률, 실업수당청구건수 같은 항목이 제공되면 해당 항목을 일반 뉴스보다 먼저 검토해라.',
-              'High priority macro events에 CPI 또는 Core CPI가 제공되어 있으면, 해당 CPI/Core CPI가 전일 시장 해석에 어떤 의미였는지 macroLines 상단에서 반드시 다뤄라.',
-              'High priority macro events에 CPI가 제공되어 있는데 macroLines에서 CPI를 완전히 생략하지 마라.',
-              'High priority macro events에 있는 핵심 이벤트보다 지정학, AI, 개별 기업 뉴스, ETF 뉴스가 먼저 나오지 않도록 해라.',
+              'Core macro event candidates 처리 규칙:',
+              'Core macro event candidates는 매일 반드시 존재하는 항목이 아니다.',
+              'Core macro event candidates가 "No core macro event candidate data."이면 CPI, PCE, FOMC, 고용지표를 억지로 언급하지 마라.',
+              '반대로 Core macro event candidates에 CPI, Core CPI, PCE, Core PCE, FOMC, Fed, 고용지표, 실업률, 임금상승률, 실업수당청구건수 같은 항목이 제공되면 해당 항목을 일반 뉴스보다 먼저 검토해라.',
+              'Core macro event candidates에 CPI 또는 Core CPI가 제공되어 있으면, 해당 CPI/Core CPI가 전일 시장 해석에 어떤 의미였는지 macroLines 상단에서 반드시 다뤄라.',
+              'Core macro event candidates에 CPI가 제공되어 있는데 macroLines에서 CPI를 완전히 생략하지 마라.',
+              'Core macro event candidates에 있는 핵심 이벤트보다 지정학, AI, 개별 기업 뉴스, ETF 뉴스가 먼저 나오지 않도록 해라.',
+              '최종 문장에는 "Core macro event candidates", "Macro events", "High priority", "Priority note" 같은 내부 분류명을 절대 쓰지 마라.',
               '단, CPI/Core CPI의 실제치, 예상치, 이전치, 발표일, 시장 반응이 제공되지 않았다면 절대 숫자나 반응을 만들지 말고 제공된 내용만 사용해라.',
               '',
               '매크로 뉴스 선별 규칙:',
@@ -1792,7 +1795,7 @@ const response = await this.fetchOpenAiWithRetry(
               '',
               '작성 분량:',
               'macroLines는 원칙적으로 8~12줄로 작성해라.',
-              '단, 제공된 High priority macro events, Macro events, 매크로 관련 News가 부족하면 5~8줄로 줄여라.',
+              '단, 제공된 Core macro event candidates, Macro events, 매크로 관련 News가 부족하면 5~8줄로 줄여라.',
               '근거가 부족한데 줄 수를 채우기 위해 지수 등락률, 금, 코인, 개별 종목 뉴스를 반복하지 마라.',
               '',
               '작성 방식:',
