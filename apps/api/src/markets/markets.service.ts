@@ -1908,8 +1908,12 @@ export class MarketsService {
       });
       if (
         latest &&
-        new Date(latest.generatedAt).toDateString() === new Date().toDateString()
+        this.toKoreanDateKey(new Date(latest.generatedAt)) ===
+          this.toKoreanDateKey(new Date())
       ) {
+        this.logger.log(
+          `Scheduled ${market} market briefing skipped: already generated today (${latest.id})`,
+        );
         return;
       }
       const briefing = await this.runMarketBriefing(market);
@@ -1923,6 +1927,15 @@ export class MarketsService {
         }`,
       );
     }
+  }
+
+  private toKoreanDateKey(date: Date): string {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Seoul',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
   }
 
   private toMarketBriefingDto(entity: MarketBriefingEntity): MarketBriefing {
