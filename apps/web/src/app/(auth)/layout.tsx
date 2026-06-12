@@ -15,6 +15,7 @@ import {
   UserPen,
 } from "lucide-react";
 import { SessionLoading } from "@/common/components/SessionLoading";
+import { Button } from "@/common/components/Button";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { useMarketDataStore } from "@/common/stores/market-data";
@@ -82,47 +83,47 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
     >
       <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:px-8 sm:py-6">
         <header className="flex flex-col gap-4 border-b border-[#d9dee8] pb-4 sm:flex-row sm:items-center sm:justify-between sm:pb-5">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607086]">
-              Private
-            </p>
-            <h1 className="mt-1 text-xl font-semibold tracking-normal sm:text-2xl">
-              Investment Community
-            </h1>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-[image:var(--primary-gradient)] text-sm font-extrabold tracking-tight text-white shadow-sm">
+              15F
+            </span>
+            <div className="min-w-0 leading-tight">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
+                Private
+              </p>
+              <h1 className="truncate text-lg font-semibold tracking-tight sm:text-xl">
+                Investment Community
+              </h1>
+            </div>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-            <button
-              onClick={toggleLanguage}
-              className="h-10 min-w-0 flex-1 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#1f6f8b] shadow-sm transition-colors hover:border-[#1f6f8b] hover:bg-[#eef1f6] sm:flex-none"
-            >
+            <Button variant="outline" onClick={toggleLanguage} className="flex-1 sm:flex-none">
               {language === "en" ? "한국어" : "English"}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
               onClick={toggleDarkMode}
               title={darkMode ? "Light mode" : "Dark mode"}
               aria-label={darkMode ? "Light mode" : "Dark mode"}
-              className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-md border border-[#c7ceda] bg-white text-[#344052] shadow-sm transition-colors hover:border-[#1f6f8b] hover:bg-[#eef1f6] hover:text-[#1f6f8b]"
-            >
-              {darkMode ? <Sun size={17} /> : <Moon size={17} />}
-            </button>
-            <button
+              leftIcon={darkMode ? <Sun /> : <Moon />}
+            />
+            <Button
+              variant={isProfile ? "primary" : "outline"}
               onClick={() => router.push("/profile")}
-              className={`inline-flex h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border px-3 text-sm font-semibold shadow-sm transition-colors hover:bg-[#eef1f6] sm:flex-none ${
-                isProfile
-                  ? "border-[#1f6f8b] bg-[#eef6f9] text-[#1f6f8b]"
-                  : "border-[#c7ceda] bg-white text-[#344052] hover:border-[#1f6f8b] hover:text-[#1f6f8b]"
-              }`}
+              leftIcon={<UserPen />}
+              className="flex-1 sm:flex-none"
             >
-              <UserPen size={16} />
               {language === "ko" ? "프로필 수정" : "Profile"}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
               onClick={logout}
-              className="inline-flex h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-medium shadow-sm transition-colors hover:border-[#9a2f2f] hover:bg-[#fff1f1] hover:text-[#9a2f2f] sm:flex-none"
+              leftIcon={<LogOut />}
+              className="flex-1 sm:flex-none"
             >
-              <LogOut size={16} />
               {language === "ko" ? "로그아웃" : "Logout"}
-            </button>
+            </Button>
           </div>
         </header>
 

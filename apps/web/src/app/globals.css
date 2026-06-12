@@ -40,7 +40,8 @@
 
   --accent-sky: #38bdf8;
   --accent-green: #22c55e;
-  --brand-gradient: linear-gradient(90deg, #22c55e, #38bdf8); /* 로고 시그니처 */
+  --brand-gradient: linear-gradient(90deg, #22c55e, #38bdf8); /* 로고 시그니처 (앱 아이콘/파비콘) */
+  --primary-gradient: linear-gradient(135deg, var(--accent-sky), var(--primary-hover)); /* UI 브랜드 마크 (sky, 버튼과 동일 계열) */
 }
 
 /* 2') semantic — 다크 (기존 .dark-app 토글 재사용) ----------- */
