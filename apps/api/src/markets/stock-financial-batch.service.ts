@@ -118,19 +118,24 @@ export class StockFinancialBatchService {
   ): Promise<Partial<StockFinancialEntity>[]> {
     const items: Partial<StockFinancialEntity>[] = [];
     const latestYear = years[0];
+    const latestShares = await this.fetchDartListedShares(
+      apiKey,
+      stock.dartCorpCode!,
+      latestYear,
+    ).catch(() => null);
 
     for (const fiscalYear of years) {
-      const [financial, shares] = await Promise.all([
-        this.fetchDartFinancial(apiKey, stock.dartCorpCode!, fiscalYear),
-        this.fetchDartListedShares(apiKey, stock.dartCorpCode!, fiscalYear).catch(
-          () => null,
-        ),
-      ]);
+      const financial = await this.fetchDartFinancial(
+        apiKey,
+        stock.dartCorpCode!,
+        fiscalYear,
+      );
       if (!financial) {
         continue;
       }
 
       const isLatestYear = fiscalYear === latestYear;
+      const shares = isLatestYear ? latestShares : null;
       const marketCap = isLatestYear && currentPrice && shares ? currentPrice * shares : null;
       items.push({
         id: `${stock.symbol}:${fiscalYear}`,
