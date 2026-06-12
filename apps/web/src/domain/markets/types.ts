@@ -19,6 +19,21 @@ export type StockDetail = {
     shareOutstanding?: number;
   };
   metrics: Record<string, number | string | null | undefined> | null;
+  financials?: Array<{
+    fiscalYear: number;
+    revenue: number | null;
+    operatingProfit: number | null;
+    netIncome: number | null;
+    equity: number | null;
+    eps: number | null;
+    marketCap: number | null;
+    per: number | null;
+    pbr: number | null;
+    psr: number | null;
+    roe: number | null;
+    source: string;
+    fetchedAt: string | null;
+  }>;
   overview: {
     en: string;
     ko: string;

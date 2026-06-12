@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
       {
         source: "/api/:path*",
         destination:
-          process.env.DEV_API_PROXY_TARGET ?? "https://15f.kro.kr/api/:path*",
+          process.env.DEV_API_PROXY_TARGET ?? "http://localhost:4000/api/:path*",
       },
     ];
   },

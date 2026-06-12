@@ -13,6 +13,7 @@ import {
 } from './finnhub-quote.dto';
 import type { ChartPeriod } from './finnhub-quote.dto';
 import { MarketsService } from './markets.service';
+import { StockFinancialBatchService } from './stock-financial-batch.service';
 import { StockMasterBatchService } from './stock-master-batch.service';
 
 @Controller('markets')
@@ -21,6 +22,7 @@ export class MarketsController {
   constructor(
     private readonly marketsService: MarketsService,
     private readonly stockMasterBatchService: StockMasterBatchService,
+    private readonly stockFinancialBatchService: StockFinancialBatchService,
   ) {}
 
   @Get('quotes')
@@ -164,5 +166,16 @@ export class MarketsController {
   @Roles(UserRole.Admin)
   refreshStockMaster(): Promise<{ kr: number; us: number; dart: number }> {
     return this.stockMasterBatchService.refreshAll();
+  }
+
+  @Post('financials/batch')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  refreshStockFinancials(
+    @Query('limit') limit?: string,
+  ): Promise<{ stocks: number; rows: number; failed: number }> {
+    return this.stockFinancialBatchService.refreshRecentFinancials(
+      limit ? Number(limit) : undefined,
+    );
   }
 }
