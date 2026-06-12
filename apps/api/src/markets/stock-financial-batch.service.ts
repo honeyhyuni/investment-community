@@ -7,6 +7,8 @@ import { StockFinancialEntity } from './stock-financial.entity';
 import { StockMasterEntity } from './stock-master.entity';
 
 type DartFinancialRow = {
+  corp_code?: string;
+  fs_div?: string;
   account_nm?: string;
   thstrm_amount?: string;
 };
@@ -17,14 +19,12 @@ type DartFinancialResponse = {
   list?: DartFinancialRow[];
 };
 
-type DartStockQuantityResponse = {
-  status?: string;
-  message?: string;
-  list?: Array<{
-    se?: string;
-    istc_totqy?: string;
-    distb_stock_co?: string;
-  }>;
+type ParsedFinancial = {
+  revenue: number | null;
+  operatingProfit: number | null;
+  netIncome: number | null;
+  equity: number | null;
+  assets: number | null;
 };
 
 type KisTokenResponse = {
@@ -36,9 +36,15 @@ type KisPriceResponse = {
   output?: Record<string, string | undefined>;
 };
 
+type KisPrice = {
+  currentPrice: number | null;
+  marketCap: number | null;
+};
+
 @Injectable()
 export class StockFinancialBatchService {
   private readonly logger = new Logger(StockFinancialBatchService.name);
+  private readonly dartChunkSize = 100;
   private kisTokenCache: { token: string; expiresAt: number } | null = null;
   private lastKisRequestAt = 0;
 
@@ -65,125 +71,157 @@ export class StockFinancialBatchService {
   }> {
     const apiKey = this.configService.get<string>('DART_API_KEY');
     if (!apiKey) {
-      this.logger.warn('DART financial batch skipped: DART_API_KEY is missing.');
-      return { stocks: 0, rows: 0, failed: 0 };
-    }
-    if (!(await this.isDartFinancialApiAvailable(apiKey))) {
       this.logger.warn(
-        'DART financial batch skipped: DART financial API is unavailable from this server.',
+        'DART financial batch skipped: DART_API_KEY is missing.',
       );
       return { stocks: 0, rows: 0, failed: 0 };
     }
 
-    const stocks = await this.masterRepository.find({
-      where: {
-        active: true,
-        market: In(['KR:KOSPI', 'KR:KOSDAQ']),
-      },
-      order: { symbol: 'ASC' },
-    });
-    const rows = stocks
+    const stocks = (
+      await this.masterRepository.find({
+        where: {
+          active: true,
+          market: In(['KR:KOSPI', 'KR:KOSDAQ']),
+        },
+        order: { symbol: 'ASC' },
+      })
+    )
       .filter((stock) => !!stock.dartCorpCode)
       .slice(0, limit && limit > 0 ? limit : undefined);
-    const years = this.getRecentFiscalYears(5);
-    let savedRows = 0;
-    let failed = 0;
 
-    for (const stock of rows) {
-      try {
-        const currentPrice = await this.getKisCurrentPrice(stock).catch(() => null);
-        const financials = await this.fetchStockFinancials(
-          apiKey,
-          stock,
-          years,
-          currentPrice,
-        );
-        for (const item of financials) {
-          await this.financialRepository.upsert(item, ['id']);
-          savedRows += 1;
-        }
-      } catch (error) {
-        failed += 1;
-        this.logger.warn(
-          `DART financial refresh failed for ${stock.symbol}: ${
-            error instanceof Error ? error.message : 'unknown error'
-          }`,
-        );
-      }
-      await this.sleep(120);
+    if (!stocks.length) {
+      return { stocks: 0, rows: 0, failed: 0 };
     }
 
-    return { stocks: rows.length, rows: savedRows, failed };
-  }
+    const years = this.getRecentFiscalYears(5);
+    if (!(await this.isDartFinancialApiAvailable(apiKey, years[0]))) {
+      this.logger.warn(
+        'DART financial batch skipped: DART multi-company API is unavailable from this server.',
+      );
+      return { stocks: 0, rows: 0, failed: 0 };
+    }
 
-  private async fetchStockFinancials(
-    apiKey: string,
-    stock: StockMasterEntity,
-    years: number[],
-    currentPrice: number | null,
-  ): Promise<Partial<StockFinancialEntity>[]> {
-    const items: Partial<StockFinancialEntity>[] = [];
-    const latestYear = years[0];
-    const latestShares = await this.fetchDartListedShares(
-      apiKey,
-      stock.dartCorpCode!,
-      latestYear,
-    ).catch(() => null);
+    const stockByCorpCode = new Map(
+      stocks.map((stock) => [stock.dartCorpCode!, stock]),
+    );
+    const financialByKey = new Map<string, ParsedFinancial>();
+    const failedCorpCodes = new Set<string>();
+    const corpCodeChunks = this.chunk(
+      [...stockByCorpCode.keys()],
+      this.dartChunkSize,
+    );
 
     for (const fiscalYear of years) {
-      const financial = await this.fetchDartFinancial(
-        apiKey,
-        stock.dartCorpCode!,
-        fiscalYear,
-      );
-      if (!financial) {
+      for (const corpCodes of corpCodeChunks) {
+        try {
+          const rows = await this.fetchDartFinancialsBulk(
+            apiKey,
+            corpCodes,
+            fiscalYear,
+          );
+          this.parseFinancialRows(rows).forEach((financial, corpCode) => {
+            financialByKey.set(`${corpCode}:${fiscalYear}`, financial);
+          });
+        } catch (error) {
+          corpCodes.forEach((corpCode) => failedCorpCodes.add(corpCode));
+          this.logger.warn(
+            `DART bulk financial refresh failed for ${corpCodes.length} companies in ${fiscalYear}: ${
+              error instanceof Error ? error.message : 'unknown error'
+            }`,
+          );
+        }
+        await this.sleep(1_000);
+      }
+    }
+
+    const entities: Partial<StockFinancialEntity>[] = [];
+    for (const stock of stocks) {
+      const available = years
+        .map((fiscalYear) => ({
+          fiscalYear,
+          financial: financialByKey.get(`${stock.dartCorpCode}:${fiscalYear}`),
+        }))
+        .filter(
+          (item): item is { fiscalYear: number; financial: ParsedFinancial } =>
+            !!item.financial,
+        );
+      if (!available.length) {
         continue;
       }
 
-      const isLatestYear = fiscalYear === latestYear;
-      const shares = isLatestYear ? latestShares : null;
-      const marketCap = isLatestYear && currentPrice && shares ? currentPrice * shares : null;
-      items.push({
-        id: `${stock.symbol}:${fiscalYear}`,
-        symbol: stock.symbol,
-        corpCode: stock.dartCorpCode,
-        fiscalYear,
-        revenue: financial.revenue,
-        operatingProfit: financial.operatingProfit,
-        netIncome: financial.netIncome,
-        equity: financial.equity,
-        assets: financial.assets,
-        eps: financial.eps,
-        listedShares: shares,
-        closePrice: isLatestYear ? currentPrice : null,
-        marketCap,
-        per: isLatestYear ? this.safeDivide(currentPrice, financial.eps) : null,
-        pbr: isLatestYear ? this.safeDivide(marketCap, financial.equity) : null,
-        psr: isLatestYear ? this.safeDivide(marketCap, financial.revenue) : null,
-        roe:
-          isLatestYear &&
-          financial.netIncome !== null &&
-          financial.equity &&
-          financial.equity > 0
-            ? (financial.netIncome / financial.equity) * 100
+      const latestAvailableYear = available[0].fiscalYear;
+      const quote = await this.getKisCurrentPrice(stock).catch(() => ({
+        currentPrice: null,
+        marketCap: null,
+      }));
+      for (const { fiscalYear, financial } of available) {
+        const isLatestYear = fiscalYear === latestAvailableYear;
+        const marketCap = isLatestYear ? quote.marketCap : null;
+        entities.push({
+          id: `${stock.symbol}:${fiscalYear}`,
+          symbol: stock.symbol,
+          corpCode: stock.dartCorpCode,
+          fiscalYear,
+          revenue: financial.revenue,
+          operatingProfit: financial.operatingProfit,
+          netIncome: financial.netIncome,
+          equity: financial.equity,
+          assets: financial.assets,
+          eps: null,
+          listedShares: null,
+          closePrice: isLatestYear ? quote.currentPrice : null,
+          marketCap,
+          per: isLatestYear
+            ? this.safeDivide(marketCap, financial.netIncome)
             : null,
-        reportCode: '11011',
-        source: 'dart_financial_batch',
-        fetchedAt: new Date(),
-      });
-      await this.sleep(60);
+          pbr: isLatestYear
+            ? this.safeDivide(marketCap, financial.equity)
+            : null,
+          psr: isLatestYear
+            ? this.safeDivide(marketCap, financial.revenue)
+            : null,
+          roe:
+            isLatestYear &&
+            financial.netIncome !== null &&
+            financial.equity !== null &&
+            financial.equity > 0
+              ? (financial.netIncome / financial.equity) * 100
+              : null,
+          reportCode: '11011',
+          source: 'dart_multi_financial_batch',
+          fetchedAt: new Date(),
+        });
+      }
     }
 
-    return items;
+    for (const items of this.chunk(entities, 500)) {
+      await this.financialRepository.upsert(items, ['id']);
+    }
+
+    return {
+      stocks: stocks.length,
+      rows: entities.length,
+      failed: failedCorpCodes.size,
+    };
   }
 
-  private async isDartFinancialApiAvailable(apiKey: string): Promise<boolean> {
+  private async isDartFinancialApiAvailable(
+    apiKey: string,
+    fiscalYear: number,
+  ): Promise<boolean> {
     try {
-      const financial = await this.fetchDartFinancial(apiKey, '00126380', 2025);
-      return !!financial;
+      const rows = await this.fetchDartFinancialsBulk(
+        apiKey,
+        ['00126380'],
+        fiscalYear,
+      );
+      this.logger.debug(
+        `DART multi-company financial API preflight succeeded with ${rows.length} rows.`,
+      );
+      return true;
     } catch (error) {
       this.logger.warn(
-        `DART financial API preflight failed: ${
+        `DART multi-company financial API preflight failed: ${
           error instanceof Error ? error.message : 'unknown error'
         }`,
       );
@@ -191,82 +229,106 @@ export class StockFinancialBatchService {
     }
   }
 
-  private async fetchDartFinancial(
+  private async fetchDartFinancialsBulk(
     apiKey: string,
-    corpCode: string,
+    corpCodes: string[],
     fiscalYear: number,
-  ): Promise<{
-    revenue: number | null;
-    operatingProfit: number | null;
-    netIncome: number | null;
-    equity: number | null;
-    assets: number | null;
-    eps: number | null;
-  } | null> {
-    const url = new URL('https://opendart.fss.or.kr/api/fnlttSinglAcnt.json');
+  ): Promise<DartFinancialRow[]> {
+    const url = new URL('https://opendart.fss.or.kr/api/fnlttMultiAcnt.json');
     url.searchParams.set('crtfc_key', apiKey);
-    url.searchParams.set('corp_code', corpCode);
+    url.searchParams.set('corp_code', corpCodes.join(','));
     url.searchParams.set('bsns_year', String(fiscalYear));
     url.searchParams.set('reprt_code', '11011');
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`DART financial request failed: ${response.status}`);
-    }
-    const body = (await response.json()) as DartFinancialResponse;
-    if (body.status !== '000' || !body.list?.length) {
-      return null;
+    let lastError: Error | null = null;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (!response.ok) {
+          throw new Error(`DART financial request failed: ${response.status}`);
+        }
+
+        const body = (await response.json()) as DartFinancialResponse;
+        if (body.status === '000') {
+          return body.list ?? [];
+        }
+        if (body.status === '013') {
+          return [];
+        }
+        throw new Error(
+          `DART financial response failed: ${body.status ?? 'unknown'} ${
+            body.message ?? ''
+          }`.trim(),
+        );
+      } catch (error) {
+        lastError =
+          error instanceof Error
+            ? error
+            : new Error('Unknown DART request error');
+        if (attempt < 3) {
+          await this.sleep(attempt * 5_000);
+        }
+      }
     }
 
-    return {
-      revenue: this.pickAccount(body.list, ['매출액', '영업수익']),
-      operatingProfit: this.pickAccount(body.list, ['영업이익']),
-      netIncome: this.pickAccount(body.list, [
-        '당기순이익(손실)',
-        '당기순이익',
-      ]),
-      equity: this.pickAccount(body.list, ['자본총계']),
-      assets: this.pickAccount(body.list, ['자산총계']),
-      eps: this.pickAccount(body.list, [
-        '기본주당이익(손실)',
-        '기본주당이익',
-        '희석주당이익(손실)',
-      ]),
-    };
+    throw lastError ?? new Error('DART financial request failed.');
   }
 
-  private async fetchDartListedShares(
-    apiKey: string,
-    corpCode: string,
-    fiscalYear: number,
-  ): Promise<number | null> {
-    const url = new URL('https://opendart.fss.or.kr/api/stockTotqySttus.json');
-    url.searchParams.set('crtfc_key', apiKey);
-    url.searchParams.set('corp_code', corpCode);
-    url.searchParams.set('bsns_year', String(fiscalYear));
-    url.searchParams.set('reprt_code', '11011');
-
-    const response = await fetch(url);
-    if (!response.ok) {
-      return null;
-    }
-    const body = (await response.json()) as DartStockQuantityResponse;
-    if (body.status !== '000' || !body.list?.length) {
-      return null;
+  private parseFinancialRows(
+    rows: DartFinancialRow[],
+  ): Map<string, ParsedFinancial> {
+    const grouped = new Map<string, DartFinancialRow[]>();
+    for (const row of rows) {
+      if (!row.corp_code) {
+        continue;
+      }
+      const current = grouped.get(row.corp_code) ?? [];
+      current.push(row);
+      grouped.set(row.corp_code, current);
     }
 
-    const normal = body.list.find((item) => item.se === '보통주');
-    const total = body.list.find((item) => item.se === '합계');
-    return this.toNumber(normal?.istc_totqy ?? normal?.distb_stock_co) ??
-      this.toNumber(total?.istc_totqy ?? total?.distb_stock_co);
+    const parsed = new Map<string, ParsedFinancial>();
+    grouped.forEach((companyRows, corpCode) => {
+      const financial = {
+        revenue: this.pickAccount(companyRows, [
+          '\uB9E4\uCD9C\uC561',
+          '\uC601\uC5C5\uC218\uC775',
+          '\uC218\uC775(\uB9E4\uCD9C\uC561)',
+        ]),
+        operatingProfit: this.pickAccount(companyRows, [
+          '\uC601\uC5C5\uC774\uC775',
+          '\uC601\uC5C5\uC774\uC775(\uC190\uC2E4)',
+        ]),
+        netIncome: this.pickAccount(companyRows, [
+          '\uB2F9\uAE30\uC21C\uC774\uC775',
+          '\uB2F9\uAE30\uC21C\uC774\uC775(\uC190\uC2E4)',
+          '\uC5F0\uACB0\uB2F9\uAE30\uC21C\uC774\uC775',
+        ]),
+        equity: this.pickAccount(companyRows, ['\uC790\uBCF8\uCD1D\uACC4']),
+        assets: this.pickAccount(companyRows, ['\uC790\uC0B0\uCD1D\uACC4']),
+      };
+      if (Object.values(financial).some((value) => value !== null)) {
+        parsed.set(corpCode, financial);
+      }
+    });
+    return parsed;
   }
 
-  private pickAccount(rows: DartFinancialRow[], names: string[]): number | null {
-    for (const name of names) {
-      const row = rows.find((item) => item.account_nm === name);
-      const value = this.toNumber(row?.thstrm_amount);
-      if (value !== null) {
-        return value;
+  private pickAccount(
+    rows: DartFinancialRow[],
+    names: string[],
+  ): number | null {
+    for (const fsDiv of ['CFS', 'OFS']) {
+      for (const name of names) {
+        const row = rows.find(
+          (item) => item.fs_div === fsDiv && item.account_nm === name,
+        );
+        const value = this.toNumber(row?.thstrm_amount);
+        if (value !== null) {
+          return value;
+        }
       }
     }
     return null;
@@ -277,12 +339,30 @@ export class StockFinancialBatchService {
     return Array.from({ length: count }, (_, index) => latest - index);
   }
 
-  private async getKisCurrentPrice(stock: StockMasterEntity): Promise<number | null> {
-    const response = await this.kisGet('/uapi/domestic-stock/v1/quotations/inquire-price', {
-      FID_COND_MRKT_DIV_CODE: stock.market === 'KR:KOSDAQ' ? 'Q' : 'J',
-      FID_INPUT_ISCD: stock.symbol,
-    });
-    return this.toNumber(response.output?.stck_prpr ?? response.output?.prdy_clpr);
+  private async getKisCurrentPrice(
+    stock: StockMasterEntity,
+  ): Promise<KisPrice> {
+    const response = await this.kisGet(
+      '/uapi/domestic-stock/v1/quotations/inquire-price',
+      {
+        FID_COND_MRKT_DIV_CODE: stock.market === 'KR:KOSDAQ' ? 'Q' : 'J',
+        FID_INPUT_ISCD: stock.symbol,
+      },
+    );
+    const currentPrice = this.toNumber(
+      response.output?.stck_prpr ?? response.output?.prdy_clpr,
+    );
+    const marketCapInHundredMillionWon = this.toNumber(
+      response.output?.hts_avls,
+    );
+    return {
+      currentPrice,
+      marketCap:
+        marketCapInHundredMillionWon !== null &&
+        marketCapInHundredMillionWon > 0
+          ? marketCapInHundredMillionWon * 100_000_000
+          : null,
+    };
   }
 
   private async kisGet(
@@ -301,7 +381,9 @@ export class StockFinancialBatchService {
       this.configService.get<string>('KIS_BASE_URL')?.trim() ||
       'https://openapi.koreainvestment.com:9443';
     const url = new URL(`${baseUrl}${path}`);
-    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+    Object.entries(params).forEach(([key, value]) =>
+      url.searchParams.set(key, value),
+    );
 
     const response = await fetch(url, {
       headers: {
@@ -382,12 +464,27 @@ export class StockFinancialBatchService {
   }
 
   private toNumber(value: string | number | null | undefined): number | null {
-    if (value === null || value === undefined || value === '-' || value === '') {
+    if (
+      value === null ||
+      value === undefined ||
+      value === '-' ||
+      value === ''
+    ) {
       return null;
     }
     const parsed =
-      typeof value === 'number' ? value : Number(String(value).replace(/,/g, ''));
+      typeof value === 'number'
+        ? value
+        : Number(String(value).replace(/,/g, ''));
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private chunk<T>(items: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let index = 0; index < items.length; index += size) {
+      chunks.push(items.slice(index, index + size));
+    }
+    return chunks;
   }
 
   private sleep(ms: number): Promise<void> {
