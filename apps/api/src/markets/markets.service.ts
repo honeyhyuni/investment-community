@@ -2369,7 +2369,9 @@ const response = await this.fetchOpenAiWithRetry(
       this.configService.get<string>('OPENAI_MODEL')?.trim() ||
       'gpt-5.5';
     if (!apiKey) {
-      return this.toSvgDataUrl(this.buildMarketBriefingSvg(market));
+      return this.toSvgDataUrl(
+        this.buildMarketBriefingSvg(market, title, keywords, summaryLines),
+      );
     }
 
     try {
@@ -2446,7 +2448,9 @@ const response = await this.fetchOpenAiWithRetry(
       );
     }
 
-    return this.toSvgDataUrl(this.buildMarketBriefingSvg(market));
+    return this.toSvgDataUrl(
+      this.buildMarketBriefingSvg(market, title, keywords, summaryLines),
+    );
   }
 
   private extractSvgMarkup(value: string): string {
@@ -2466,9 +2470,65 @@ const response = await this.fetchOpenAiWithRetry(
     return `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`;
   }
 
-  private buildMarketBriefingSvg(market: 'US' | 'KR'): string {
-    const accent = market === 'KR' ? '#22c55e' : '#38bdf8';
-    const secondary = market === 'KR' ? '#f97316' : '#22c55e';
+  private buildMarketBriefingSvg(
+    market: 'US' | 'KR',
+    title = '',
+    keywords: string[] = [],
+    summaryLines: string[] = [],
+  ): string {
+    const seed = this.hashString(
+      [market, title, ...keywords, ...summaryLines.slice(0, 3)].join('|'),
+    );
+    const palette =
+      market === 'KR'
+        ? [
+            ['#22c55e', '#f97316', '#ef4444'],
+            ['#14b8a6', '#84cc16', '#f59e0b'],
+            ['#16a34a', '#38bdf8', '#fb7185'],
+          ]
+        : [
+            ['#38bdf8', '#22c55e', '#ef4444'],
+            ['#60a5fa', '#a78bfa', '#f97316'],
+            ['#2dd4bf', '#818cf8', '#f43f5e'],
+          ];
+    const [accent, secondary, danger] = palette[seed % palette.length];
+    const variant = seed % 4;
+    const label = market === 'KR' ? 'KOREA CLOSE' : 'US CLOSE';
+    const panelLabel = market === 'KR' ? 'SEOUL FLOW' : 'WALL ST FLOW';
+    const keywordLabels = (keywords.length ? keywords : ['MACRO', 'RISK', 'WATCH'])
+      .map((keyword) => keyword.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase())
+      .filter(Boolean)
+      .slice(0, 3);
+    const bars = Array.from({ length: 9 }, (_, index) => {
+      const x = 210 + index * 62;
+      const height = 70 + ((seed >> (index % 12)) % 190);
+      const y = 610 - height;
+      const color = (index + variant) % 3 === 0 ? danger : (index + variant) % 2 === 0 ? accent : secondary;
+      return `<rect x="${x}" y="${y}" width="30" height="${height}" rx="9" fill="${color}" opacity="${0.58 + (index % 3) * 0.12}"/>`;
+    }).join('');
+    const chartPath =
+      variant === 0
+        ? 'M190 585 C300 500,380 555,470 430 S650 310,760 350 S950 420,1130 220'
+        : variant === 1
+          ? 'M190 520 C310 610,400 470,520 500 S710 310,850 365 S1010 245,1145 295'
+          : variant === 2
+            ? 'M190 610 C310 560,405 470,520 515 S710 570,830 430 S1010 255,1140 210'
+            : 'M190 560 C320 435,420 455,540 355 S725 425,835 300 S1015 380,1140 230';
+    const rightCards =
+      variant % 2 === 0
+        ? [
+            '<rect x="845" y="440" width="360" height="78" rx="18" fill="#0f172a" stroke="#334155" stroke-width="2"/>',
+            '<rect x="845" y="542" width="300" height="78" rx="18" fill="#0f172a" stroke="#334155" stroke-width="2"/>',
+            `<circle cx="885" cy="479" r="15" fill="${accent}"/>`,
+            `<circle cx="885" cy="581" r="15" fill="${danger}"/>`,
+            '<path d="M925 480h230M925 582h170" stroke="#94a3b8" stroke-width="12" stroke-linecap="round" opacity="0.45"/>',
+          ]
+        : [
+            '<rect x="835" y="198" width="370" height="92" rx="22" fill="#f8fafc" opacity="0.08" stroke="#475569" stroke-width="2"/>',
+            '<rect x="895" y="332" width="300" height="92" rx="22" fill="#f8fafc" opacity="0.06" stroke="#475569" stroke-width="2"/>',
+            `<path d="M875 246h72M875 266h180" stroke="${accent}" stroke-width="12" stroke-linecap="round" opacity="0.85"/>`,
+            `<path d="M935 380h72M935 400h140" stroke="${secondary}" stroke-width="12" stroke-linecap="round" opacity="0.85"/>`,
+          ];
 
     return [
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 810" role="img">',
@@ -2483,39 +2543,52 @@ const response = await this.fetchOpenAiWithRetry(
       '<stop offset="1" stop-color="#f8fafc" stop-opacity="0.04"/>',
       '</linearGradient>',
       `<linearGradient id="line" x1="220" y1="610" x2="1180" y2="190" gradientUnits="userSpaceOnUse"><stop stop-color="${secondary}"/><stop offset="1" stop-color="${accent}"/></linearGradient>`,
+      `<radialGradient id="halo" cx="${variant % 2 ? '35%' : '78%'}" cy="${variant > 1 ? '28%' : '72%'}" r="55%"><stop stop-color="${accent}" stop-opacity="0.24"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient>`,
       '<filter id="glow"><feGaussianBlur stdDeviation="10" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
       '</defs>',
       '<rect width="1440" height="810" fill="url(#bg)"/>',
+      '<rect width="1440" height="810" fill="url(#halo)"/>',
       '<g opacity="0.18">',
       '<path d="M120 170h1200M120 290h1200M120 410h1200M120 530h1200M120 650h1200" stroke="#94a3b8" stroke-width="1"/>',
       '<path d="M220 110v590M420 110v590M620 110v590M820 110v590M1020 110v590M1220 110v590" stroke="#94a3b8" stroke-width="1"/>',
       '</g>',
       '<rect x="120" y="105" width="1200" height="600" rx="32" fill="url(#panel)" stroke="#334155" stroke-width="2"/>',
-      '<circle cx="1160" cy="190" r="150" fill="#38bdf8" opacity="0.08"/>',
-      '<circle cx="280" cy="625" r="190" fill="#22c55e" opacity="0.07"/>',
+      `<circle cx="${variant % 2 ? 310 : 1160}" cy="${variant > 1 ? 210 : 625}" r="170" fill="${accent}" opacity="0.08"/>`,
+      `<circle cx="${variant % 2 ? 1130 : 280}" cy="${variant > 1 ? 630 : 190}" r="190" fill="${secondary}" opacity="0.07"/>`,
+      `<text x="160" y="176" fill="#f8fafc" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="800" letter-spacing="4">${label}</text>`,
+      `<text x="164" y="218" fill="${accent}" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="3">${panelLabel}</text>`,
       '<g opacity="0.95">',
-      '<rect x="210" y="470" width="34" height="100" rx="10" fill="#ef4444" opacity="0.82"/>',
-      '<rect x="285" y="425" width="34" height="145" rx="10" fill="#22c55e" opacity="0.88"/>',
-      '<rect x="360" y="390" width="34" height="180" rx="10" fill="#22c55e" opacity="0.72"/>',
-      '<rect x="435" y="445" width="34" height="125" rx="10" fill="#ef4444" opacity="0.74"/>',
-      '<rect x="510" y="330" width="34" height="240" rx="10" fill="#22c55e" opacity="0.9"/>',
+      bars,
       '</g>',
-      '<path d="M200 590 C 310 520, 380 560, 480 445 S 650 310, 770 355 S 960 420, 1110 210" fill="none" stroke="url(#line)" stroke-width="18" stroke-linecap="round" filter="url(#glow)"/>',
-      '<path d="M1110 210 L1040 218 M1110 210 L1082 276" stroke="url(#line)" stroke-width="18" stroke-linecap="round"/>',
+      `<path d="${chartPath}" fill="none" stroke="url(#line)" stroke-width="18" stroke-linecap="round" filter="url(#glow)"/>`,
+      variant % 2 === 0
+        ? '<path d="M1130 220 L1060 228 M1130 220 L1102 286" stroke="url(#line)" stroke-width="18" stroke-linecap="round"/>'
+        : '<circle cx="1145" cy="295" r="20" fill="url(#line)" filter="url(#glow)"/>',
       '<g opacity="0.92">',
-      '<rect x="820" y="455" width="360" height="72" rx="18" fill="#0f172a" stroke="#334155" stroke-width="2"/>',
-      '<rect x="820" y="550" width="280" height="72" rx="18" fill="#0f172a" stroke="#334155" stroke-width="2"/>',
-      '<circle cx="860" cy="491" r="14" fill="#22c55e"/>',
-      '<circle cx="860" cy="586" r="14" fill="#ef4444"/>',
-      '<path d="M900 492h230M900 586h160" stroke="#94a3b8" stroke-width="12" stroke-linecap="round" opacity="0.45"/>',
+      ...rightCards,
       '</g>',
       '<g transform="translate(150 150)">',
-      '<rect width="230" height="74" rx="22" fill="#0f172a" stroke="#475569" stroke-width="2"/>',
+      `<rect width="250" height="74" rx="22" fill="#0f172a" stroke="${accent}" stroke-width="2" opacity="0.96"/>`,
       '<path d="M42 47h146" stroke="#64748b" stroke-width="12" stroke-linecap="round" opacity="0.5"/>',
       '<path d="M42 28h86" stroke="#f8fafc" stroke-width="12" stroke-linecap="round" opacity="0.85"/>',
       '</g>',
+      '<g transform="translate(160 675)">',
+      ...keywordLabels.map((keyword, index) => {
+        const x = index * 176;
+        return `<g transform="translate(${x} 0)"><rect width="150" height="42" rx="14" fill="#0f172a" stroke="#475569" stroke-width="1.5"/><text x="75" y="27" text-anchor="middle" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="800" letter-spacing="1.6">${keyword.slice(0, 12)}</text></g>`;
+      }),
+      '</g>',
       '</svg>',
     ].join('');
+  }
+
+  private hashString(value: string): number {
+    let hash = 2166136261;
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
   }
 
   private async runScheduledMarketBriefing(market: 'US' | 'KR'): Promise<void> {
