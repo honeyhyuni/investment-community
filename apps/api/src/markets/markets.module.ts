@@ -5,6 +5,8 @@ import { MarketsGateway } from './markets.gateway';
 import { MarketsProfileBatchService } from './markets-profile-batch.service';
 import { MarketsService } from './markets.service';
 import { MarketBriefingEntity } from './market-briefing.entity';
+import { StockFinancialBatchService } from './stock-financial-batch.service';
+import { StockFinancialEntity } from './stock-financial.entity';
 import { StockMasterBatchService } from './stock-master-batch.service';
 import { StockMasterEntity } from './stock-master.entity';
 import { StockProfileEntity } from './stock-profile.entity';
@@ -14,6 +16,7 @@ import { StockProfileEntity } from './stock-profile.entity';
     TypeOrmModule.forFeature([
       StockProfileEntity,
       StockMasterEntity,
+      StockFinancialEntity,
       MarketBriefingEntity,
     ]),
   ],
@@ -23,6 +26,7 @@ import { StockProfileEntity } from './stock-profile.entity';
     MarketsGateway,
     MarketsProfileBatchService,
     StockMasterBatchService,
+    StockFinancialBatchService,
   ],
 })
 export class MarketsModule {}

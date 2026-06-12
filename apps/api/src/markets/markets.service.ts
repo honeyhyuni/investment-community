@@ -20,10 +20,12 @@ import {
   StockSymbol,
   MarketNews,
   MarketBriefing,
+  StockFinancial,
 } from './finnhub-quote.dto';
 import { StockProfileEntity } from './stock-profile.entity';
 import { StockMasterEntity } from './stock-master.entity';
 import { MarketBriefingEntity } from './market-briefing.entity';
+import { StockFinancialEntity } from './stock-financial.entity';
 
 const MARKET_PULSE = [
   { symbol: '^IXIC', name: 'Nasdaq Composite' },
@@ -186,6 +188,8 @@ export class MarketsService {
     private readonly stockProfilesRepository: Repository<StockProfileEntity>,
     @InjectRepository(StockMasterEntity)
     private readonly stockMasterRepository: Repository<StockMasterEntity>,
+    @InjectRepository(StockFinancialEntity)
+    private readonly stockFinancialRepository: Repository<StockFinancialEntity>,
     @InjectRepository(MarketBriefingEntity)
     private readonly marketBriefingsRepository: Repository<MarketBriefingEntity>,
   ) {
@@ -676,16 +680,18 @@ export class MarketsService {
         where: { symbol: normalizedSymbol, active: true },
       }),
     ]);
+    const financials = await this.getKoreanFinancials(normalizedSymbol);
     const fallbackStock: KisStock = {
       symbol: normalizedSymbol,
       name: masterStock?.name ?? normalizedSymbol,
       marketDiv: masterStock?.market === 'KR:KOSDAQ' ? 'Q' : 'J',
     };
     const selectedStock = stock ?? fallbackStock;
-    const [output, metrics] = await Promise.all([
-      this.getKoreanPriceOutputCached(selectedStock),
-      this.getKoreanMetricsCached(selectedStock),
-    ]);
+    const output = await this.getKoreanPriceOutputCached(selectedStock);
+    const metrics = this.buildKoreanMetricsFromFinancials(
+      financials[0] ?? null,
+      output,
+    );
     const stockName = masterStock?.name ?? cachedProfile?.name ?? selectedStock.name;
     const quote: MarketQuote = {
       symbol: normalizedSymbol,
@@ -724,6 +730,7 @@ export class MarketsService {
       symbol: normalizedSymbol,
       profile,
       metrics,
+      financials,
       ...(false ? { overview: {
         en: `${profile.name} is a Korean listed company traded on the KRX.`,
         ko: `${profile.name}은(는) 한국거래소에 상장된 국내 기업입니다.`,
@@ -3120,6 +3127,63 @@ const response = await this.fetchOpenAiWithRetry(
       );
       return null;
     }
+  }
+
+  private async getKoreanFinancials(symbol: string): Promise<StockFinancial[]> {
+    const rows = await this.stockFinancialRepository.find({
+      where: { symbol },
+      order: { fiscalYear: 'DESC' },
+      take: 5,
+    });
+
+    return rows.map((row) => ({
+      fiscalYear: row.fiscalYear,
+      revenue: row.revenue,
+      operatingProfit: row.operatingProfit,
+      netIncome: row.netIncome,
+      equity: row.equity,
+      eps: row.eps,
+      marketCap: row.marketCap,
+      per: row.per,
+      pbr: row.pbr,
+      psr: row.psr,
+      roe: row.roe,
+      source: row.source,
+      fetchedAt: row.fetchedAt,
+    }));
+  }
+
+  private buildKoreanMetricsFromFinancials(
+    financial: StockFinancial | null,
+    output: Record<string, string | undefined>,
+  ): CompanyMetrics | null {
+    if (!financial) {
+      return {
+        '52WeekHigh': this.toOptionalNumber(
+          output.w52_hgpr ?? output.stck_hgpr_52w,
+        ),
+        '52WeekLow': this.toOptionalNumber(
+          output.w52_lwpr ?? output.stck_lwpr_52w,
+        ),
+        currentPrice: this.toOptionalNumber(output.stck_prpr),
+      };
+    }
+
+    return {
+      peTTM: financial.per,
+      pbAnnual: financial.pbr,
+      epsTTM: financial.eps,
+      psTTM: financial.psr,
+      roeTTM: financial.roe,
+      dividendYieldTTM: null,
+      '52WeekHigh': this.toOptionalNumber(
+        output.w52_hgpr ?? output.stck_hgpr_52w,
+      ),
+      '52WeekLow': this.toOptionalNumber(
+        output.w52_lwpr ?? output.stck_lwpr_52w,
+      ),
+      currentPrice: this.toOptionalNumber(output.stck_prpr),
+    };
   }
 
   private async getKoreanMetricsCached(
