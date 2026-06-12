@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { StockFinancialEntity } from './stock-financial.entity';
 import { StockMasterEntity } from './stock-master.entity';
 
@@ -56,14 +55,6 @@ export class StockFinancialBatchService {
     private readonly financialRepository: Repository<StockFinancialEntity>,
   ) {}
 
-  @Cron('0 0 0 * * *', { timeZone: 'Asia/Seoul' })
-  async refreshDailyFinancials(): Promise<void> {
-    const result = await this.refreshRecentFinancials();
-    this.logger.log(
-      `Daily Korean financial batch completed: stocks=${result.stocks}, rows=${result.rows}, failed=${result.failed}.`,
-    );
-  }
-
   async refreshRecentFinancials(limit?: number): Promise<{
     stocks: number;
     rows: number;
@@ -77,15 +68,17 @@ export class StockFinancialBatchService {
       return { stocks: 0, rows: 0, failed: 0 };
     }
 
+    const kospi200Symbols = await this.fetchKospi200Symbols();
     const stocks = (
       await this.masterRepository.find({
         where: {
           active: true,
-          market: In(['KR:KOSPI', 'KR:KOSDAQ']),
+          market: 'KR:KOSPI',
         },
         order: { symbol: 'ASC' },
       })
     )
+      .filter((stock) => kospi200Symbols.has(stock.symbol))
       .filter((stock) => !!stock.dartCorpCode)
       .slice(0, limit && limit > 0 ? limit : undefined);
 
@@ -203,6 +196,41 @@ export class StockFinancialBatchService {
       rows: entities.length,
       failed: failedCorpCodes.size,
     };
+  }
+
+  private async fetchKospi200Symbols(): Promise<Set<string>> {
+    const symbols = new Set<string>();
+    for (let page = 1; page <= 20; page += 1) {
+      const response = await fetch(
+        `https://finance.naver.com/sise/entryJongmok.naver?page=${page}`,
+        {
+          headers: {
+            'user-agent': 'Mozilla/5.0 (compatible; investment-community/1.0)',
+          },
+          signal: AbortSignal.timeout(15_000),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(
+          `KOSPI 200 constituent request failed: ${response.status}`,
+        );
+      }
+
+      const html = await response.text();
+      const pattern = /\/item\/main\.naver\?code=(\d{6})/g;
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(html)) !== null) {
+        symbols.add(match[1]);
+      }
+    }
+
+    if (symbols.size < 180 || symbols.size > 210) {
+      throw new Error(
+        `KOSPI 200 constituent count is invalid: ${symbols.size}`,
+      );
+    }
+    this.logger.log(`KOSPI 200 constituents selected: ${symbols.size}.`);
+    return symbols;
   }
 
   private async isDartFinancialApiAvailable(
