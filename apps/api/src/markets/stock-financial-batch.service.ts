@@ -68,6 +68,12 @@ export class StockFinancialBatchService {
       this.logger.warn('DART financial batch skipped: DART_API_KEY is missing.');
       return { stocks: 0, rows: 0, failed: 0 };
     }
+    if (!(await this.isDartFinancialApiAvailable(apiKey))) {
+      this.logger.warn(
+        'DART financial batch skipped: DART financial API is unavailable from this server.',
+      );
+      return { stocks: 0, rows: 0, failed: 0 };
+    }
 
     const stocks = await this.masterRepository.find({
       where: {
@@ -169,6 +175,20 @@ export class StockFinancialBatchService {
     }
 
     return items;
+  }
+
+  private async isDartFinancialApiAvailable(apiKey: string): Promise<boolean> {
+    try {
+      const financial = await this.fetchDartFinancial(apiKey, '00126380', 2025);
+      return !!financial;
+    } catch (error) {
+      this.logger.warn(
+        `DART financial API preflight failed: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+      return false;
+    }
   }
 
   private async fetchDartFinancial(
