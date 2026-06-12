@@ -3,6 +3,8 @@
 import { Dispatch, SetStateAction, useState } from "react";
 import { Heart, MessageCircle, Pencil, Send, Trash2 } from "lucide-react";
 import { RichContent } from "@/common/components/RichContent";
+import { Button } from "@/common/components/Button";
+import { cn } from "@/common/utils/cn";
 import { MarketQuote, TradeTick } from "@/common/types";
 import { CommunityPost, StockTag } from "@/domain/community/types";
 import { getPostHtml } from "@/common/utils/community";
@@ -81,16 +83,15 @@ export function PostCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold text-[#607086] sm:text-xs">
-            <button
-              type="button"
+            <Button
+              variant="link"
               onClick={(event) => {
                 event.stopPropagation();
                 onAuthorClick?.(post.author.id);
               }}
-              className="cursor-pointer hover:text-[#1f6f8b] hover:underline"
             >
               {post.author.nickname}
-            </button>{" "}
+            </Button>{" "}
             · {new Date(post.createdAt).toLocaleString()}
           </p>
           <h3 className="mt-1 line-clamp-2 text-base font-semibold leading-6 sm:truncate sm:text-lg">
@@ -100,21 +101,23 @@ export function PostCard({
         {post.author.id === currentUserId || canModerate ? (
           <div className="flex gap-1">
             {post.author.id === currentUserId ? (
-            <button
-              onClick={() => onEditPost(post)}
-              title="수정"
-              className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-[#344052] transition-colors hover:bg-[#eef1f6]"
-            >
-              <Pencil size={15} />
-            </button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onEditPost(post)}
+                title="수정"
+                aria-label="수정"
+                leftIcon={<Pencil />}
+              />
             ) : null}
-            <button
+            <Button
+              variant="ghost-danger"
+              size="icon-sm"
               onClick={() => onDeletePost(post.id)}
               title="삭제"
-              className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-[#9a2f2f] transition-colors hover:bg-[#fff1f1]"
-            >
-              <Trash2 size={15} />
-            </button>
+              aria-label="삭제"
+              leftIcon={<Trash2 />}
+            />
           </div>
         ) : null}
       </div>
@@ -128,13 +131,14 @@ export function PostCard({
         />
       </div>
       {!showFull ? (
-        <button
+        <Button
+          variant="link"
           onClick={() => setExpanded(true)}
           onDoubleClick={(event) => event.stopPropagation()}
-          className="mt-3 cursor-pointer text-sm font-semibold text-[#1f6f8b] hover:underline"
+          className="mt-3 text-sm"
         >
           전체 글 보기
-        </button>
+        </Button>
       ) : null}
 
       {post.stockTags.length ? (
@@ -155,21 +159,23 @@ export function PostCard({
         </div>
       ) : null}
 
-      <div className="mt-4 flex items-center gap-2 border-t border-[#eef1f6] pt-3">
-        <button
+      <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => onLike(post.id)}
           onDoubleClick={(event) => event.stopPropagation()}
-          className={`inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-semibold transition-colors sm:h-9 ${
-            post.likedByMe
-              ? "border-[#b64242] bg-[#fff1f1] text-[#b64242] hover:bg-[#ffe6e6]"
-              : "border-[#c7ceda] text-[#344052] hover:bg-[#eef1f6]"
-          }`}
+          leftIcon={<Heart fill={post.likedByMe ? "currentColor" : "none"} />}
+          className={cn(
+            "text-sm",
+            post.likedByMe &&
+              "border-negative bg-negative-surface text-negative hover:bg-negative-surface hover:text-negative",
+          )}
         >
-          <Heart size={16} fill={post.likedByMe ? "currentColor" : "none"} />
           {post.likeCount}
-        </button>
-        <span className="inline-flex h-10 items-center gap-2 rounded-md border border-[#c7ceda] px-3 text-sm font-semibold text-[#344052] sm:h-9">
-          <MessageCircle size={16} />
+        </Button>
+        <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-semibold text-foreground [&_svg]:size-[1.15em]">
+          <MessageCircle />
           {post.commentCount}
         </span>
       </div>
@@ -203,13 +209,14 @@ export function PostCard({
               placeholder="댓글 작성"
               className="h-11 flex-1 rounded-md border border-[#c7ceda] px-3 text-base outline-none focus:border-[#1f6f8b] sm:h-10 sm:text-sm"
             />
-            <button
+            <Button
+              variant="primary"
+              size="icon"
               onClick={() => onComment(post.id)}
               onDoubleClick={(event) => event.stopPropagation()}
-              className="grid h-11 w-11 cursor-pointer place-items-center rounded-md bg-[#1f6f8b] text-white transition-colors hover:bg-[#195c74] sm:h-10 sm:w-10"
-            >
-              <Send size={16} />
-            </button>
+              aria-label="댓글 작성"
+              leftIcon={<Send />}
+            />
           </div>
         </div>
       ) : null}

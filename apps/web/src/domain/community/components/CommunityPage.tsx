@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Users } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
+import { Button } from "@/common/components/Button";
 import { apiRequest } from "@/common/lib/api";
 import {
   NEW_POST_TEMPLATE,
@@ -365,22 +366,19 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
 
         <div className="flex-1 py-4 sm:py-6">
           <div className="mb-4 grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-between">
-            <button
-              onClick={() => router.push("/community")}
-              className="h-10 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#344052] transition-colors hover:border-[#1f6f8b] hover:bg-[#eef1f6] hover:text-[#1f6f8b] sm:px-4"
-            >
+            <Button variant="secondary" onClick={() => router.push("/community")}>
               피드 목록으로
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
+              leftIcon={<Plus />}
               onClick={() => {
                 resetEditor();
                 setEditorOpen(true);
               }}
-              className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md bg-[#1f6f8b] px-3 text-sm font-semibold text-white transition-colors hover:bg-[#195c74] sm:px-4"
             >
-              <Plus size={17} />
               피드 글 쓰기
-            </button>
+            </Button>
           </div>
 
           <div className="grid gap-4">
@@ -441,42 +439,40 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
             <div className="-mx-4 border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border">
               <div className="flex flex-wrap gap-2">
                 {(["all", "subscribed", "mine"] as CommunityScope[]).map((item) => (
-                  <button
+                  <Button
                     key={item}
+                    variant={scope === item ? "primary" : "secondary"}
+                    size="sm"
                     onClick={() => setScope(item)}
-                    className={`h-10 flex-1 cursor-pointer rounded-md px-3 text-sm font-semibold transition-colors sm:h-9 sm:flex-none ${
-                      scope === item
-                        ? "bg-[#1f6f8b] text-white"
-                        : "border border-[#c7ceda] bg-white text-[#344052] hover:bg-[#eef1f6]"
-                    }`}
+                    className="flex-1 text-sm sm:flex-none"
                   >
                     {item === "all" ? "전체 피드" : item === "subscribed" ? "구독 피드" : "내 피드"}
-                  </button>
+                  </Button>
                 ))}
                 {(["latest", "popular"] as FeedSort[]).map((item) => (
-                  <button
+                  <Button
                     key={item}
+                    variant={sort === item ? "primary" : "secondary"}
+                    size="sm"
                     onClick={() => setSort(item)}
-                    className={`h-10 flex-1 cursor-pointer rounded-md px-3 text-sm font-semibold transition-colors sm:h-9 sm:flex-none ${
-                      sort === item
-                        ? "bg-[#344052] text-white"
-                        : "border border-[#c7ceda] bg-white text-[#344052] hover:bg-[#eef1f6]"
-                    }`}
+                    className="flex-1 text-sm sm:flex-none"
                   >
                     {item === "latest" ? "최신순" : "인기순"}
-                  </button>
+                  </Button>
                 ))}
               </div>
-              <button
+              <Button
+                variant="primary"
+                fullWidth
+                leftIcon={<Plus />}
                 onClick={() => {
                   resetEditor();
                   setEditorOpen(true);
                 }}
-                className="mt-3 inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195c74] sm:h-10"
+                className="mt-3"
               >
-                <Plus size={17} />
                 피드 글 쓰기
-              </button>
+              </Button>
             </div>
 
             {editorOpen ? (
@@ -562,29 +558,26 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
                 <div key={communityUser.id} className="rounded-md border border-[#eef1f6] p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <button
-                        type="button"
+                      <Button
+                        variant="link"
                         onClick={() => router.push(`/community/users/${communityUser.id}`)}
-                        className="block max-w-full cursor-pointer truncate text-sm font-semibold hover:text-[#1f6f8b] hover:underline"
+                        className="block max-w-full truncate text-sm"
                       >
                         {communityUser.nickname}
                         {communityUser.isMe ? " · 나" : ""}
-                      </button>
-                      <p className="truncate text-xs text-[#607086]">
+                      </Button>
+                      <p className="truncate text-xs text-muted">
                         구독자 {communityUser.subscriberCount} · 구독중 {communityUser.followingCount}
                       </p>
                     </div>
                     {!communityUser.isMe ? (
-                      <button
+                      <Button
+                        variant={communityUser.isSubscribed ? "secondary" : "primary"}
+                        size="sm"
                         onClick={() => toggleSubscription(communityUser.id)}
-                        className={`h-8 cursor-pointer rounded-md px-2.5 text-xs font-semibold transition-colors ${
-                          communityUser.isSubscribed
-                            ? "border border-[#c7ceda] text-[#344052] hover:bg-[#eef1f6]"
-                            : "bg-[#1f6f8b] text-white hover:bg-[#195c74]"
-                        }`}
                       >
                         {communityUser.isSubscribed ? "구독중" : "구독"}
-                      </button>
+                      </Button>
                     ) : null}
                   </div>
                 </div>

@@ -2,6 +2,7 @@
 
 import { Dispatch, SetStateAction } from "react";
 import { Pencil, Send, Trash2 } from "lucide-react";
+import { Button } from "@/common/components/Button";
 import { CommunityComment } from "@/domain/community/types";
 
 export function CommentThread({
@@ -30,27 +31,29 @@ export function CommentThread({
   return (
     <div className="rounded-md bg-[#f6f8fb] p-3">
       <div className="flex items-center justify-between gap-2">
-        <button type="button" onClick={() => onAuthorClick?.(comment.author.id)} className="min-w-0 cursor-pointer truncate text-sm font-semibold hover:text-[#1f6f8b] hover:underline">
+        <Button variant="link" onClick={() => onAuthorClick?.(comment.author.id)} className="min-w-0 truncate text-sm">
           {comment.author.nickname}
-        </button>
+        </Button>
         {comment.author.id === currentUserId || canModerate ? (
           <div className="flex gap-1">
             {comment.author.id === currentUserId ? (
-            <button
-              onClick={() => onEditComment(comment.id, comment.content)}
-              title="수정"
-              className="grid h-7 w-7 cursor-pointer place-items-center rounded-md text-[#344052] transition-colors hover:bg-[#e8edf4]"
-            >
-              <Pencil size={13} />
-            </button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => onEditComment(comment.id, comment.content)}
+                title="수정"
+                aria-label="수정"
+                leftIcon={<Pencil />}
+              />
             ) : null}
-            <button
+            <Button
+              variant="ghost-danger"
+              size="icon-sm"
               onClick={() => onDeleteComment(comment.id)}
               title="삭제"
-              className="grid h-7 w-7 cursor-pointer place-items-center rounded-md text-[#9a2f2f] transition-colors hover:bg-[#fff1f1]"
-            >
-              <Trash2 size={13} />
-            </button>
+              aria-label="삭제"
+              leftIcon={<Trash2 />}
+            />
           </div>
         ) : null}
       </div>
@@ -60,27 +63,29 @@ export function CommentThread({
           {comment.replies.map((reply) => (
             <div key={reply.id} className="rounded-md bg-white p-2">
               <div className="flex items-center justify-between gap-2">
-                <button type="button" onClick={() => onAuthorClick?.(reply.author.id)} className="min-w-0 cursor-pointer truncate text-xs font-semibold hover:text-[#1f6f8b] hover:underline">
+                <Button variant="link" onClick={() => onAuthorClick?.(reply.author.id)} className="min-w-0 truncate text-xs">
                   {reply.author.nickname}
-                </button>
+                </Button>
                 {reply.author.id === currentUserId || canModerate ? (
                   <div className="flex gap-1">
                     {reply.author.id === currentUserId ? (
-                    <button
-                      onClick={() => onEditComment(reply.id, reply.content)}
-                      title="수정"
-                      className="grid h-7 w-7 cursor-pointer place-items-center rounded-md text-[#344052] transition-colors hover:bg-[#eef1f6]"
-                    >
-                      <Pencil size={12} />
-                    </button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => onEditComment(reply.id, reply.content)}
+                        title="수정"
+                        aria-label="수정"
+                        leftIcon={<Pencil />}
+                      />
                     ) : null}
-                    <button
+                    <Button
+                      variant="ghost-danger"
+                      size="icon-sm"
                       onClick={() => onDeleteComment(reply.id)}
                       title="삭제"
-                      className="grid h-7 w-7 cursor-pointer place-items-center rounded-md text-[#9a2f2f] transition-colors hover:bg-[#fff1f1]"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                      aria-label="삭제"
+                      leftIcon={<Trash2 />}
+                    />
                   </div>
                 ) : null}
               </div>
@@ -101,12 +106,13 @@ export function CommentThread({
           placeholder="답글 작성"
           className="h-10 flex-1 rounded-md border border-[#c7ceda] bg-white px-3 text-base outline-none focus:border-[#1f6f8b] sm:h-9 sm:text-sm"
         />
-        <button
+        <Button
+          variant="primary"
+          size="icon-sm"
           onClick={() => onComment(postId, comment.id)}
-          className="grid h-10 w-10 cursor-pointer place-items-center rounded-md bg-[#344052] text-white transition-colors hover:bg-[#1f2937] sm:h-9 sm:w-9"
-        >
-          <Send size={15} />
-        </button>
+          aria-label="답글 작성"
+          leftIcon={<Send />}
+        />
       </div>
     </div>
   );
