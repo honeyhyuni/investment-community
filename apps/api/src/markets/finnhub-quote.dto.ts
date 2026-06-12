@@ -48,10 +48,27 @@ export type CompanyProfile = {
 
 export type CompanyMetrics = Record<string, number | string | null | undefined>;
 
+export type StockFinancial = {
+  fiscalYear: number;
+  revenue: number | null;
+  operatingProfit: number | null;
+  netIncome: number | null;
+  equity: number | null;
+  eps: number | null;
+  marketCap: number | null;
+  per: number | null;
+  pbr: number | null;
+  psr: number | null;
+  roe: number | null;
+  source: string;
+  fetchedAt: Date | null;
+};
+
 export type StockDetail = {
   symbol: string;
   profile: CompanyProfile;
   metrics: CompanyMetrics | null;
+  financials?: StockFinancial[];
   overview: {
     en: string;
     ko: string;

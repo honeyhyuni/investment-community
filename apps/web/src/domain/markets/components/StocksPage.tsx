@@ -802,6 +802,7 @@ function StockDetailPanel({
           ))}
         </div>
       </div>
+      <FinancialBarChart financials={detail.financials ?? []} language={language} />
     </div>
   );
 }
@@ -1133,6 +1134,112 @@ function RelatedNews({ news }: { news: MarketNews[] }) {
       </div>
     </div>
   );
+}
+
+function FinancialBarChart({
+  financials,
+  language,
+}: {
+  financials: NonNullable<StockDetail["financials"]>;
+  language: Language;
+}) {
+  const rows = [...financials]
+    .filter((item) => item.revenue !== null || item.operatingProfit !== null)
+    .sort((a, b) => a.fiscalYear - b.fiscalYear)
+    .slice(-5);
+  const maxValue = Math.max(
+    ...rows.flatMap((item) => [
+      Math.abs(item.revenue ?? 0),
+      Math.abs(item.operatingProfit ?? 0),
+    ]),
+    0,
+  );
+
+  if (!rows.length || maxValue <= 0) {
+    return null;
+  }
+
+  const title = language === "ko" ? "5개년 실적" : "5Y financials";
+  const revenueLabel = language === "ko" ? "매출액" : "Revenue";
+  const operatingProfitLabel =
+    language === "ko" ? "영업이익" : "Operating profit";
+
+  return (
+    <div className="mt-5 rounded-md border border-[#d9dee8] p-3 sm:p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-semibold text-[#344052]">{title}</p>
+        <div className="flex gap-3 text-xs text-[#607086]">
+          <span className="flex items-center gap-1">
+            <span className="h-2 w-2 rounded-sm bg-[#1f6f8b]" />
+            {revenueLabel}
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="h-2 w-2 rounded-sm bg-[#2e7d4f]" />
+            {operatingProfitLabel}
+          </span>
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-5 items-end gap-2 sm:gap-4">
+        {rows.map((item) => {
+          const revenueHeight = getFinancialBarHeight(item.revenue, maxValue);
+          const operatingProfitHeight = getFinancialBarHeight(
+            item.operatingProfit,
+            maxValue,
+          );
+
+          return (
+            <div key={item.fiscalYear} className="min-w-0">
+              <div className="flex h-32 items-end justify-center gap-1 rounded-md bg-[#f9fafc] px-2 py-2">
+                <div
+                  className="w-4 rounded-t-sm bg-[#1f6f8b] sm:w-5"
+                  style={{ height: `${revenueHeight}%` }}
+                  title={`${revenueLabel}: ${formatFinancialAmount(item.revenue)}`}
+                />
+                <div
+                  className="w-4 rounded-t-sm bg-[#2e7d4f] sm:w-5"
+                  style={{ height: `${operatingProfitHeight}%` }}
+                  title={`${operatingProfitLabel}: ${formatFinancialAmount(
+                    item.operatingProfit,
+                  )}`}
+                />
+              </div>
+              <p className="mt-2 text-center text-xs font-semibold text-[#344052]">
+                {item.fiscalYear}
+              </p>
+              <p className="mt-1 truncate text-center text-[11px] text-[#607086]">
+                {formatFinancialAmount(item.revenue)}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function getFinancialBarHeight(value: number | null, maxValue: number) {
+  if (!value || maxValue <= 0) {
+    return 4;
+  }
+
+  return Math.max(4, Math.min(100, (Math.abs(value) / maxValue) * 100));
+}
+
+function formatFinancialAmount(value: number | null) {
+  if (value === null || !Number.isFinite(value)) {
+    return "-";
+  }
+
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  if (abs >= 1_000_000_000_000) {
+    return `${sign}${formatNumber(abs / 1_000_000_000_000)}T`;
+  }
+  if (abs >= 100_000_000) {
+    return `${sign}${formatNumber(abs / 100_000_000)}B`;
+  }
+
+  return `${sign}${formatNumber(abs)}`;
 }
 
 function InfoBox({ label, value }: { label: string; value: string }) {
