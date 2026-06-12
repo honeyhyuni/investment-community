@@ -36,7 +36,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#0f172a",
+  // 기본(라이트) 배경 토큰. 다크 토글 시 providers.tsx에서 동적으로 교체.
+  themeColor: "#f7f8fb",
 };
 
 export default function RootLayout({
