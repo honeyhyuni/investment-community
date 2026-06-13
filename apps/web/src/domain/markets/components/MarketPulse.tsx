@@ -31,6 +31,7 @@ export function MarketPulse({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  const showSkeleton = loading && pulse.length === 0;
 
   const updateScrollHint = useCallback(() => {
     const element = scrollRef.current;
@@ -78,33 +79,55 @@ export function MarketPulse({
           onScroll={updateScrollHint}
           className="-mx-3 flex gap-3 overflow-x-auto px-3 pb-1 md:mx-0 md:grid md:grid-cols-4 md:px-0"
         >
-          {pulse.map((item) => {
-            const live = livePrices[item.symbol];
-            return (
-              <PulseCard
-                key={item.symbol}
-                quote={applyLiveTrade(item, live)}
-                live={!!live}
-                exchangeRate={exchangeRate}
-                exchangeRateErrorLabel={exchangeRateErrorLabel}
-              />
-            );
-          })}
+          {showSkeleton
+            ? Array.from({ length: 4 }, (_, index) => (
+                <PulseCardSkeleton key={index} />
+              ))
+            : pulse.map((item) => {
+                const live = livePrices[item.symbol];
+                return (
+                  <PulseCard
+                    key={item.symbol}
+                    quote={applyLiveTrade(item, live)}
+                    live={!!live}
+                    exchangeRate={exchangeRate}
+                    exchangeRateErrorLabel={exchangeRateErrorLabel}
+                  />
+                );
+              })}
         </div>
         <div
           className={`pointer-events-none absolute inset-y-0 -left-3 w-10 bg-gradient-to-r from-surface via-surface/90 to-transparent backdrop-blur-[1px] transition-opacity duration-200 md:hidden ${
-            canScrollLeft ? "opacity-100" : "opacity-0"
+            !showSkeleton && canScrollLeft ? "opacity-100" : "opacity-0"
           }`}
           aria-hidden
         />
         <div
           className={`pointer-events-none absolute inset-y-0 -right-3 w-10 bg-gradient-to-l from-surface via-surface/90 to-transparent backdrop-blur-[1px] transition-opacity duration-200 md:hidden ${
-            canScrollRight ? "opacity-100" : "opacity-0"
+            !showSkeleton && canScrollRight ? "opacity-100" : "opacity-0"
           }`}
           aria-hidden
         />
       </div>
     </section>
+  );
+}
+
+function PulseCardSkeleton() {
+  return (
+    <div className="relative min-w-[184px] overflow-hidden rounded-md border border-border bg-surface p-4 shadow-sm md:min-w-0">
+      <span className="absolute inset-x-0 top-0 h-1 bg-surface-subtle" aria-hidden />
+      <div className="animate-pulse">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="h-4 w-24 rounded bg-surface-subtle" />
+          </div>
+          <div className="size-8 shrink-0 rounded-md bg-surface-subtle" />
+        </div>
+        <div className="mt-4 h-7 w-32 rounded bg-surface-subtle" />
+        <div className="mt-3 h-4 w-28 rounded bg-surface-subtle" />
+      </div>
+    </div>
   );
 }
 

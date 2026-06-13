@@ -24,9 +24,16 @@ export function AuthPanel(props: {
   submitAuth: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
   return (
-    <section className="rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
+    <section className="rounded-lg border border-border bg-surface p-5 shadow-sm sm:p-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">{props.heading}</h2>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
+            15F Access
+          </p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+            {props.heading}
+          </h2>
+        </div>
         {props.user?.status ? (
           <StatusBadge status={props.user.status} />
         ) : null}

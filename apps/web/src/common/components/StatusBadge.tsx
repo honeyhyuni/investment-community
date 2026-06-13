@@ -8,7 +8,7 @@ export const statusLabel: Record<UserStatus, string> = {
 
 export function StatusBadge({ status }: { status: UserStatus }) {
   return (
-    <span className="rounded-md bg-[#edf3ee] px-2.5 py-1 text-xs font-semibold text-[#27613a]">
+    <span className="rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
       {statusLabel[status]}
     </span>
   );
