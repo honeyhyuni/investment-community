@@ -55,7 +55,7 @@ src/
   common/                   # 범용 (도메인 안 가림)
     components/             # StatusBadge(+statusLabel), Notice, TextInput, SessionLoading, RichContent(TipTap HTML 렌더)
     lib/                    # api.ts (HTTP 클라이언트/인프라 래퍼 — 상태/부수효과 있음)
-    utils/                  # format.ts, stock-search.ts, community.ts (순수 함수 헬퍼 — 입력→출력)
+    utils/                  # format.ts, stock-search.ts (순수 함수 헬퍼 — 입력→출력)
     stores/                 # session.ts, preferences.ts, market-data.ts (zustand)
     types.ts                # Language, DisplayCurrency, MarketQuote, StockSymbol, TradeTick (도메인 안 가리는 공유 타입)
 ```
@@ -65,7 +65,7 @@ src/
 ### domain vs common 판단 기준
 > **"이게 이 도메인 없어지면 같이 사라지나?"** → 예면 `domain/<name>/`, 아니면 `common/`.
 
-예: `QuoteCard`는 markets 없으면 의미 없음 → `domain/markets`. `StatusBadge`/`Notice`는 어디서나 씀 → `common/components`. `formatMoney`는 순수 함수 → `common/utils`.
+예: `QuoteCard`는 markets 없으면 의미 없음 → `domain/markets`. `resolveCommunityStockTag`는 community 없으면 의미 없음 → `domain/community`. `StatusBadge`/`Notice`는 어디서나 씀 → `common/components`. `formatMoney`는 순수 함수이면서 여러 도메인에서 공유 → `common/utils`.
 
 > **에디터:** community 글쓰기는 **TipTap**(WYSIWYG) 사용. 콘텐츠는 **HTML**로 저장(`contentBlocks[0].text`), 렌더는 `common/components/RichContent`(dangerouslySetInnerHTML + `.tiptap-content` 스타일). 에디터/렌더가 `.tiptap-content` CSS(globals.css)를 공유. 마크다운 미사용.
 

@@ -32,7 +32,10 @@ export function StockTagQuote({
     <span className="group relative inline-flex items-center rounded-md border border-border-strong bg-surface-muted text-xs shadow-sm">
       <button
         type="button"
-        onClick={() => onClick?.(tag)}
+        onClick={(event) => {
+          event.stopPropagation();
+          onClick?.(tag);
+        }}
         className={`px-2.5 py-1.5 text-left ${
           onClick ? "cursor-pointer hover:bg-surface-muted" : "cursor-default"
         }`}
