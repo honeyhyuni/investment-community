@@ -22,6 +22,7 @@ export function Providers({ children }: { children: ReactNode }) {
   const applyTrade = useMarketDataStore((s) => s.applyTrade);
   const applyPulse = useMarketDataStore((s) => s.applyPulse);
   const hydratePreferences = usePreferencesStore((s) => s.hydrate);
+  const darkMode = usePreferencesStore((s) => s.darkMode);
 
   useEffect(() => {
     refresh();
@@ -30,6 +31,15 @@ export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
     hydratePreferences();
   }, [hydratePreferences]);
+
+  // 상태바(theme-color)를 다크 토글에 맞춰 페이지 배경과 동기화.
+  // 다크모드는 수동 토글(prefers-color-scheme 미사용)이라 동적 갱신이 필요.
+  // 값은 globals.css의 --background 라이트/다크 토큰과 일치.
+  useEffect(() => {
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", darkMode ? "#11151b" : "#f7f8fb");
+  }, [darkMode]);
 
   useEffect(() => {
     if (
