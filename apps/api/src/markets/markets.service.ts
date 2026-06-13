@@ -38,8 +38,20 @@ const MARKET_PULSE = [
 ];
 
 const KR_INDEX_PULSE = [
-  { symbol: 'KIS_INDEX:0001', name: 'KOSPI', code: '0001', marketClass: 'K', naverCode: 'KOSPI' },
-  { symbol: 'KIS_INDEX:1001', name: 'KOSDAQ', code: '1001', marketClass: 'Q', naverCode: 'KOSDAQ' },
+  {
+    symbol: 'KIS_INDEX:0001',
+    name: 'KOSPI',
+    code: '0001',
+    marketClass: 'K',
+    naverCode: 'KOSPI',
+  },
+  {
+    symbol: 'KIS_INDEX:1001',
+    name: 'KOSDAQ',
+    code: '1001',
+    marketClass: 'Q',
+    naverCode: 'KOSDAQ',
+  },
 ];
 
 const DEFAULT_US_STOCKS = [
@@ -222,8 +234,12 @@ export class MarketsService {
       'market:pulse:v4',
       Promise.resolve([
         this.emptyQuote('KIS_FX:USDKRW', 'USD/KRW', 'KRW'),
-        ...KR_INDEX_PULSE.map((item) => this.emptyQuote(item.symbol, item.name, 'KRW')),
-        ...MARKET_PULSE.map((item) => this.emptyQuote(item.symbol, item.name, 'USD')),
+        ...KR_INDEX_PULSE.map((item) =>
+          this.emptyQuote(item.symbol, item.name, 'KRW'),
+        ),
+        ...MARKET_PULSE.map((item) =>
+          this.emptyQuote(item.symbol, item.name, 'USD'),
+        ),
       ]),
       async () => {
         const [globalPulse, krPulse, exchangeRate] = await Promise.all([
@@ -290,7 +306,9 @@ export class MarketsService {
     const output = response.output1 ?? {};
     const rate = this.toNumber(output.ovrs_nmix_prpr);
     if (rate <= 0) {
-      throw new ServiceUnavailableException('KIS USD/KRW exchange rate is unavailable.');
+      throw new ServiceUnavailableException(
+        'KIS USD/KRW exchange rate is unavailable.',
+      );
     }
 
     const quote: MarketQuote = {
@@ -306,7 +324,9 @@ export class MarketsService {
       previousClose: this.toNumber(output.ovrs_nmix_prdy_clpr),
       timestamp: Math.floor(Date.now() / 1000),
     };
-    await this.redis.set(key, JSON.stringify(quote), 'EX', 5 * 60).catch(() => undefined);
+    await this.redis
+      .set(key, JSON.stringify(quote), 'EX', 5 * 60)
+      .catch(() => undefined);
     return quote;
   }
 
@@ -348,9 +368,13 @@ export class MarketsService {
 
     await this.ensureDefaultStockProfiles();
     const profiles = await this.stockProfilesRepository.find({
-      where: { symbol: In(DEFAULT_KR_STOCKS_CLEAN.map((stock) => stock.symbol)) },
+      where: {
+        symbol: In(DEFAULT_KR_STOCKS_CLEAN.map((stock) => stock.symbol)),
+      },
     });
-    const bySymbol = new Map(profiles.map((profile) => [profile.symbol, profile]));
+    const bySymbol = new Map(
+      profiles.map((profile) => [profile.symbol, profile]),
+    );
 
     return DEFAULT_KR_STOCKS_CLEAN.map((stock) => ({
       symbol: stock.symbol,
@@ -362,7 +386,9 @@ export class MarketsService {
   }
 
   async getKoreanQuotes(stocks: KisStock[]): Promise<MarketQuote[]> {
-    const nameMap = new Map(stocks.map((item) => [item.symbol, item.name] as const));
+    const nameMap = new Map(
+      stocks.map((item) => [item.symbol, item.name] as const),
+    );
     const quotes: MarketQuote[] = [];
 
     for (const stock of stocks) {
@@ -435,7 +461,9 @@ export class MarketsService {
         currency: 'KRW',
         current: this.toNumber(output.bstp_nmix_prpr),
         change: this.toNumber(output.bstp_nmix_prdy_vrss),
-        percentChange: this.toNumber(output.bstp_nmix_prdy_ctrt ?? output.prdy_ctrt),
+        percentChange: this.toNumber(
+          output.bstp_nmix_prdy_ctrt ?? output.prdy_ctrt,
+        ),
         high: this.toNumber(output.bstp_nmix_hgpr),
         low: this.toNumber(output.bstp_nmix_lwpr),
         open: this.toNumber(output.bstp_nmix_oprc),
@@ -547,7 +575,9 @@ export class MarketsService {
     const profiles = await this.stockProfilesRepository.find({
       where: { symbol: In(DEFAULT_US_STOCKS) },
     });
-    const bySymbol = new Map(profiles.map((profile) => [profile.symbol, profile]));
+    const bySymbol = new Map(
+      profiles.map((profile) => [profile.symbol, profile]),
+    );
 
     return this.buildFallbackSymbols().map((symbol) => ({
       ...symbol,
@@ -558,7 +588,9 @@ export class MarketsService {
   async getStockDetail(symbol: string): Promise<StockDetail> {
     const normalizedSymbol = symbol.toUpperCase().trim();
     const [cachedProfile, quote] = await Promise.all([
-      this.stockProfilesRepository.findOne({ where: { symbol: normalizedSymbol } }),
+      this.stockProfilesRepository.findOne({
+        where: { symbol: normalizedSymbol },
+      }),
       this.getQuote(normalizedSymbol),
     ]);
 
@@ -566,7 +598,11 @@ export class MarketsService {
     if (cachedProfile) {
       profile = this.toCompanyProfile(cachedProfile);
       if (!profile.logo) {
-        profile = await this.enrichCachedProfileLogo(normalizedSymbol, cachedProfile, profile);
+        profile = await this.enrichCachedProfileLogo(
+          normalizedSymbol,
+          cachedProfile,
+          profile,
+        );
       }
     } else {
       try {
@@ -617,21 +653,26 @@ export class MarketsService {
     profile: CompanyProfile,
   ): Promise<CompanyProfile> {
     try {
-      const freshProfile = await this.finnhubGet<CompanyProfile>('/stock/profile2', {
-        symbol,
-      });
+      const freshProfile = await this.finnhubGet<CompanyProfile>(
+        '/stock/profile2',
+        {
+          symbol,
+        },
+      );
       const nextProfile: CompanyProfile = {
         ...profile,
         country: freshProfile.country ?? profile.country,
         currency: freshProfile.currency ?? profile.currency,
         exchange: freshProfile.exchange ?? profile.exchange,
-        finnhubIndustry: freshProfile.finnhubIndustry ?? profile.finnhubIndustry,
+        finnhubIndustry:
+          freshProfile.finnhubIndustry ?? profile.finnhubIndustry,
         ipo: freshProfile.ipo ?? profile.ipo,
         logo: freshProfile.logo ?? profile.logo,
         marketCapitalization:
           freshProfile.marketCapitalization ?? profile.marketCapitalization,
         name: freshProfile.name ?? profile.name,
-        shareOutstanding: freshProfile.shareOutstanding ?? profile.shareOutstanding,
+        shareOutstanding:
+          freshProfile.shareOutstanding ?? profile.shareOutstanding,
         ticker: freshProfile.ticker ?? profile.ticker,
         weburl: freshProfile.weburl ?? profile.weburl,
       };
@@ -671,8 +712,10 @@ export class MarketsService {
 
   async getKoreanStockDetail(symbol: string): Promise<StockDetail> {
     const normalizedSymbol = symbol.toUpperCase().trim();
-    const stock = DEFAULT_KR_STOCKS_CLEAN.find((item) => item.symbol === normalizedSymbol);
-    const [cachedProfile, masterStock] = await Promise.all([
+    const stock = DEFAULT_KR_STOCKS_CLEAN.find(
+      (item) => item.symbol === normalizedSymbol,
+    );
+    let [cachedProfile, masterStock] = await Promise.all([
       this.stockProfilesRepository.findOne({
         where: { symbol: normalizedSymbol },
       }),
@@ -680,6 +723,34 @@ export class MarketsService {
         where: { symbol: normalizedSymbol, active: true },
       }),
     ]);
+    if (
+      masterStock?.dartCorpCode &&
+      (!cachedProfile || cachedProfile.source === 'krx_generated_batch')
+    ) {
+      const dartProfile = await this.getDartCompanyProfileByCorpCode(
+        masterStock.dartCorpCode,
+      ).catch(() => null);
+      if (dartProfile) {
+        const name = dartProfile.corp_name ?? masterStock.name;
+        cachedProfile = await this.stockProfilesRepository.save({
+          symbol: normalizedSymbol,
+          name,
+          exchange: masterStock.exchange,
+          currency: 'KRW',
+          country: '대한민국',
+          ipo: this.formatDartDate(dartProfile.est_dt) || null,
+          industry: cachedProfile?.industry ?? '국내주식',
+          website: dartProfile.hm_url || null,
+          logo: cachedProfile?.logo ?? null,
+          marketCapitalization: cachedProfile?.marketCapitalization ?? null,
+          shareOutstanding: cachedProfile?.shareOutstanding ?? null,
+          overviewEn: `${name} is a Korean listed corporation based on DART company profile data.`,
+          overviewKo: `${name}은(는) DART 기업개황 기준 한국 상장 법인입니다. 대표자는 ${dartProfile.ceo_nm || '미공개'}이며, 설립일은 ${this.formatDartDate(dartProfile.est_dt) || '미공개'}입니다. 본사는 ${dartProfile.adres || '미공개'}에 있습니다.`,
+          source: 'dart_company_runtime_cache',
+          fetchedAt: new Date(),
+        });
+      }
+    }
     const financials = await this.getKoreanFinancials(normalizedSymbol);
     const fallbackStock: KisStock = {
       symbol: normalizedSymbol,
@@ -692,7 +763,8 @@ export class MarketsService {
       financials[0] ?? null,
       output,
     );
-    const stockName = masterStock?.name ?? cachedProfile?.name ?? selectedStock.name;
+    const stockName =
+      masterStock?.name ?? cachedProfile?.name ?? selectedStock.name;
     const quote: MarketQuote = {
       symbol: normalizedSymbol,
       name: stockName,
@@ -714,7 +786,9 @@ export class MarketsService {
       country: '대한민국',
       finnhubIndustry: '국내주식',
       marketCapitalization:
-        this.toNumber(output.hts_avls) > 0 ? this.toNumber(output.hts_avls) * 100_000_000 : undefined,
+        this.toNumber(output.hts_avls) > 0
+          ? this.toNumber(output.hts_avls) * 100_000_000
+          : undefined,
     };
     if (cachedProfile) {
       profile.name = cachedProfile.name ?? profile.name;
@@ -723,7 +797,8 @@ export class MarketsService {
       profile.ipo = cachedProfile.ipo ?? undefined;
       profile.weburl = cachedProfile.website ?? undefined;
       profile.logo = cachedProfile.logo ?? undefined;
-      profile.finnhubIndustry = cachedProfile.industry ?? profile.finnhubIndustry;
+      profile.finnhubIndustry =
+        cachedProfile.industry ?? profile.finnhubIndustry;
     }
 
     return {
@@ -731,27 +806,31 @@ export class MarketsService {
       profile,
       metrics,
       financials,
-      ...(false ? { overview: {
-        en: `${profile.name} is a Korean listed company traded on the KRX.`,
-        ko: `${profile.name}은(는) 한국거래소에 상장된 국내 기업입니다.`,
-        source: 'kis_quote',
-        fetchedAt: null,
-      } } : {}),
+      ...(false
+        ? {
+            overview: {
+              en: `${profile.name} is a Korean listed company traded on the KRX.`,
+              ko: `${profile.name}은(는) 한국거래소에 상장된 국내 기업입니다.`,
+              source: 'kis_quote',
+              fetchedAt: null,
+            },
+          }
+        : {}),
       ...(cachedProfile
         ? {
             overview: {
-            en: cachedProfile.overviewEn,
-            ko: cachedProfile.overviewKo,
-            source: cachedProfile.source,
-            fetchedAt: cachedProfile.fetchedAt,
+              en: cachedProfile.overviewEn,
+              ko: cachedProfile.overviewKo,
+              source: cachedProfile.source,
+              fetchedAt: cachedProfile.fetchedAt,
             },
           }
         : {
             overview: {
-            en: `${profile.name} is a Korean listed company traded on the KRX.`,
-            ko: `${profile.name}은(는) 한국거래소에 상장된 국내 기업입니다.`,
-            source: 'runtime_fallback_not_cached',
-            fetchedAt: null,
+              en: `${profile.name} is a Korean listed company traded on the KRX.`,
+              ko: `${profile.name}은(는) 한국거래소에 상장된 국내 기업입니다.`,
+              source: 'runtime_fallback_not_cached',
+              fetchedAt: null,
             },
           }),
       quote,
@@ -839,7 +918,9 @@ export class MarketsService {
   }
 
   async getMarketBriefingById(id: string): Promise<MarketBriefing> {
-    const briefing = await this.marketBriefingsRepository.findOne({ where: { id } });
+    const briefing = await this.marketBriefingsRepository.findOne({
+      where: { id },
+    });
     if (!briefing) {
       throw new NotFoundException('Market briefing not found.');
     }
@@ -850,7 +931,9 @@ export class MarketsService {
     id: string,
     body: Partial<MarketBriefing>,
   ): Promise<MarketBriefing> {
-    const briefing = await this.marketBriefingsRepository.findOne({ where: { id } });
+    const briefing = await this.marketBriefingsRepository.findOne({
+      where: { id },
+    });
     if (!briefing) {
       throw new NotFoundException('Market briefing not found.');
     }
@@ -869,7 +952,9 @@ export class MarketsService {
     }
 
     if (Array.isArray(body.companyNews)) {
-      briefing.companyNews = this.normalizeBriefingCompanyNews(body.companyNews);
+      briefing.companyNews = this.normalizeBriefingCompanyNews(
+        body.companyNews,
+      );
     }
 
     if (Array.isArray(body.keywords)) {
@@ -917,7 +1002,9 @@ export class MarketsService {
     ]);
 
     if (briefingNews.length < 3 && !pulse.length) {
-      throw new ServiceUnavailableException('Not enough market news to create a briefing.');
+      throw new ServiceUnavailableException(
+        'Not enough market news to create a briefing.',
+      );
     }
     const generated = await this.generateMarketBriefing(
       normalizedMarket,
@@ -934,7 +1021,7 @@ export class MarketsService {
     );
     const datedTitle = this.withKoreanDatePrefix(generated.title);
     const saved = await this.marketBriefingsRepository.save(
-        this.marketBriefingsRepository.create({
+      this.marketBriefingsRepository.create({
         market: normalizedMarket,
         title: datedTitle,
         titleCandidates: generated.titleCandidates,
@@ -1069,7 +1156,10 @@ export class MarketsService {
     return [...byKey.values()].sort((a, b) => b.datetime - a.datetime);
   }
 
-  private scoreMacroBriefingNews(news: MarketNews, market: 'US' | 'KR'): number {
+  private scoreMacroBriefingNews(
+    news: MarketNews,
+    market: 'US' | 'KR',
+  ): number {
     const text = [
       news.headline,
       news.translatedHeadline,
@@ -1198,9 +1288,15 @@ export class MarketsService {
 
     const [master, profile] = await Promise.all([
       this.stockMasterRepository.findOne({
-        where: { symbol: normalizedSymbol, market: normalizedMarket, active: true },
+        where: {
+          symbol: normalizedSymbol,
+          market: normalizedMarket,
+          active: true,
+        },
       }),
-      this.stockProfilesRepository.findOne({ where: { symbol: normalizedSymbol } }),
+      this.stockProfilesRepository.findOne({
+        where: { symbol: normalizedSymbol },
+      }),
     ]);
     const companyName = master?.name || profile?.name || normalizedSymbol;
     const query =
@@ -1208,14 +1304,16 @@ export class MarketsService {
         ? `${companyName} ${normalizedSymbol}`
         : `${companyName} ${normalizedSymbol} 주식`;
 
-    let news: MarketNews[] = await this.getNaverSearchNews(query).catch((error) => {
-      this.logger.warn(
-        `Naver stock news request failed for ${normalizedSymbol}: ${
-          error instanceof Error ? error.message : 'unknown error'
-        }`,
-      );
-      return [] as MarketNews[];
-    });
+    let news: MarketNews[] = await this.getNaverSearchNews(query).catch(
+      (error) => {
+        this.logger.warn(
+          `Naver stock news request failed for ${normalizedSymbol}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+        return [] as MarketNews[];
+      },
+    );
 
     if (!news.length && normalizedMarket === 'US') {
       const [finnhubNews, yahooNews] = await Promise.all([
@@ -1229,14 +1327,16 @@ export class MarketsService {
       );
     }
     if (!news.length && normalizedMarket === 'KR') {
-      news = await this.getNaverStockNews(normalizedSymbol, companyName).catch((error) => {
-        this.logger.warn(
-          `Naver Finance stock news request failed for ${normalizedSymbol}: ${
-            error instanceof Error ? error.message : 'unknown error'
-          }`,
-        );
-        return [] as MarketNews[];
-      });
+      news = await this.getNaverStockNews(normalizedSymbol, companyName).catch(
+        (error) => {
+          this.logger.warn(
+            `Naver Finance stock news request failed for ${normalizedSymbol}: ${
+              error instanceof Error ? error.message : 'unknown error'
+            }`,
+          );
+          return [] as MarketNews[];
+        },
+      );
     }
     if (normalizedMarket === 'KR') {
       news = news.filter((item) =>
@@ -1288,13 +1388,14 @@ export class MarketsService {
 
     return [...keywords].some((keyword) => {
       const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(
-        text,
-      );
+      return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(text);
     });
   }
 
-  private isKoreanStockRelatedNews(news: MarketNews, companyName: string): boolean {
+  private isKoreanStockRelatedNews(
+    news: MarketNews,
+    companyName: string,
+  ): boolean {
     const normalizedName = companyName.replace(/\s+/g, '');
     if (!normalizedName) {
       return false;
@@ -1304,7 +1405,10 @@ export class MarketsService {
       .includes(normalizedName);
   }
 
-  async getCandles(symbol: string, period: ChartPeriod): Promise<CandlePoint[]> {
+  async getCandles(
+    symbol: string,
+    period: ChartPeriod,
+  ): Promise<CandlePoint[]> {
     const normalizedSymbol = symbol.toUpperCase().trim();
     const cacheKey = `market:candles:v1:${normalizedSymbol}:${period}`;
     const cached = await this.redis
@@ -1385,8 +1489,13 @@ export class MarketsService {
       .filter((point) => point.open && point.high && point.low && point.close);
   }
 
-  private async getKoreanCandles(symbol: string, period: ChartPeriod): Promise<CandlePoint[]> {
-    const stock = DEFAULT_KR_STOCKS_CLEAN.find((item) => item.symbol === symbol) ?? {
+  private async getKoreanCandles(
+    symbol: string,
+    period: ChartPeriod,
+  ): Promise<CandlePoint[]> {
+    const stock = DEFAULT_KR_STOCKS_CLEAN.find(
+      (item) => item.symbol === symbol,
+    ) ?? {
       symbol,
       name: symbol,
       marketDiv: 'J' as KisMarketDiv,
@@ -1439,7 +1548,14 @@ export class MarketsService {
         close: this.toNumber(row.stck_clpr),
         volume: this.toNumber(row.acml_vol),
       }))
-      .filter((point) => point.time > 0 && point.open > 0 && point.high > 0 && point.low > 0 && point.close > 0)
+      .filter(
+        (point) =>
+          point.time > 0 &&
+          point.open > 0 &&
+          point.high > 0 &&
+          point.low > 0 &&
+          point.close > 0,
+      )
       .sort((a, b) => a.time - b.time);
   }
 
@@ -1457,10 +1573,14 @@ export class MarketsService {
       });
 
       if (!response.ok) {
-        throw new ServiceUnavailableException('Naver Finance news request failed.');
+        throw new ServiceUnavailableException(
+          'Naver Finance news request failed.',
+        );
       }
 
-      const html = new TextDecoder('euc-kr').decode(await response.arrayBuffer());
+      const html = new TextDecoder('euc-kr').decode(
+        await response.arrayBuffer(),
+      );
       news.push(...this.parseNaverFinanceNews(html));
       if (news.length >= 60) {
         break;
@@ -1469,9 +1589,15 @@ export class MarketsService {
 
     if (news.length < 60) {
       const searchGroups = await Promise.all([
-        this.getNaverSearchNews('코스피 코스닥 증시').catch(() => [] as MarketNews[]),
-        this.getNaverSearchNews('한국 증시 마감').catch(() => [] as MarketNews[]),
-        this.getNaverSearchNews('반도체 2차전지 증시').catch(() => [] as MarketNews[]),
+        this.getNaverSearchNews('코스피 코스닥 증시').catch(
+          () => [] as MarketNews[],
+        ),
+        this.getNaverSearchNews('한국 증시 마감').catch(
+          () => [] as MarketNews[],
+        ),
+        this.getNaverSearchNews('반도체 2차전지 증시').catch(
+          () => [] as MarketNews[],
+        ),
       ]);
       news.push(...searchGroups.flat());
     }
@@ -1483,7 +1609,9 @@ export class MarketsService {
       }
     });
 
-    return [...byUrl.values()].sort((a, b) => b.datetime - a.datetime).slice(0, 60);
+    return [...byUrl.values()]
+      .sort((a, b) => b.datetime - a.datetime)
+      .slice(0, 60);
   }
 
   private async getNaverStockNews(
@@ -1511,7 +1639,9 @@ export class MarketsService {
         );
       }
 
-      const html = new TextDecoder('euc-kr').decode(await response.arrayBuffer());
+      const html = new TextDecoder('euc-kr').decode(
+        await response.arrayBuffer(),
+      );
       const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
       let match: RegExpExecArray | null;
 
@@ -1527,7 +1657,9 @@ export class MarketsService {
         const itemUrl = this.resolveNaverUrl(link[1]);
         const headline = this.decodeHtml(this.stripHtml(link[2]));
         const source = this.decodeHtml(
-          this.stripHtml(row.match(/<td[^>]*class="info"[^>]*>([\s\S]*?)<\/td>/i)?.[1] ?? ''),
+          this.stripHtml(
+            row.match(/<td[^>]*class="info"[^>]*>([\s\S]*?)<\/td>/i)?.[1] ?? '',
+          ),
         );
         const date = this.stripHtml(
           row.match(/<td[^>]*class="date"[^>]*>([\s\S]*?)<\/td>/i)?.[1] ?? '',
@@ -1579,7 +1711,9 @@ export class MarketsService {
     });
 
     if (!response.ok) {
-      throw new ServiceUnavailableException('Naver Search news request failed.');
+      throw new ServiceUnavailableException(
+        'Naver Search news request failed.',
+      );
     }
 
     const body = (await response.json()) as {
@@ -1597,13 +1731,16 @@ export class MarketsService {
       const headline = this.decodeHtml(this.stripHtml(item.title ?? ''));
       return {
         category: 'stock',
-        datetime: item.pubDate ? Math.floor(new Date(item.pubDate).getTime() / 1000) : 0,
+        datetime: item.pubDate
+          ? Math.floor(new Date(item.pubDate).getTime() / 1000)
+          : 0,
         headline,
         id: this.numericId(itemUrl || `${query}:${index}`),
         image: '',
         related: query,
         source: 'Naver News',
-        summary: this.decodeHtml(this.stripHtml(item.description ?? '')) || headline,
+        summary:
+          this.decodeHtml(this.stripHtml(item.description ?? '')) || headline,
         url: itemUrl,
       };
     });
@@ -1625,12 +1762,17 @@ export class MarketsService {
     news: MarketNews[],
     pulse: MarketQuote[],
     language: string,
-  ): Promise<Omit<MarketBriefing, 'id' | 'imageUrl' | 'imageModel' | 'generatedAt'> | null> {
+  ): Promise<Omit<
+    MarketBriefing,
+    'id' | 'imageUrl' | 'imageModel' | 'generatedAt'
+  > | null> {
     const apiKey = this.configService.get<string>('OPENAI_API_KEY');
     const model =
       this.configService.get<string>('OPENAI_MODEL')?.trim() || 'gpt-5.5';
     if (!apiKey) {
-      throw new ServiceUnavailableException('OpenAI API key is not configured.');
+      throw new ServiceUnavailableException(
+        'OpenAI API key is not configured.',
+      );
     }
 
     const sources = news.slice(0, 24).map((item) => ({
@@ -1651,7 +1793,8 @@ export class MarketsService {
         (item) =>
           `${item.name ?? item.symbol}: ${item.current} (${item.change}, ${item.percentChange}%)`,
       );
-    const targetLanguage = language.toLowerCase() === 'en' ? 'English' : 'Korean';
+    const targetLanguage =
+      language.toLowerCase() === 'en' ? 'English' : 'Korean';
     const reportScope =
       market === 'KR'
         ? '한국 개인투자자가 오늘 장 마감 후 확인하는 당일 한국 주식 요약입니다.'
@@ -1676,372 +1819,374 @@ export class MarketsService {
       'JSON 필드명은 반드시 companyNews를 사용해라.',
     ].join('\n');
 
-  type NewsSource = {
-  headline?: string;
-  source?: string;
-  summary?: string;
-  description?: string;
-  publishedAt?: string;
-  url?: string;
-};
+    type NewsSource = {
+      headline?: string;
+      source?: string;
+      summary?: string;
+      description?: string;
+      publishedAt?: string;
+      url?: string;
+    };
 
-function normalizeText(value?: string): string {
-  return (value || '').toLowerCase();
-}
+    function normalizeText(value?: string): string {
+      return (value || '').toLowerCase();
+    }
 
-function sourceToSearchText(item: NewsSource): string {
-  return [
-    item.headline,
-    item.summary,
-    item.description,
-    item.source,
-    item.publishedAt,
-  ]
-    .filter(Boolean)
-    .join(' ');
-}
-
-function hasAnyKeyword(text: string, keywords: string[]): boolean {
-  const lower = text.toLowerCase();
-  return keywords.some((keyword) => {
-    const escaped = keyword
-      .toLowerCase()
-      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      .replace(/\\ /g, '\\s+');
-    return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(lower);
-  });
-}
-
-/**
- * CPI/PCE/FOMC/고용처럼 "발표된 날에는 매크로 상단에서 반드시 검토해야 하는 이벤트"만 추출.
- * 발표 없는 날은 빈 배열이므로 CPI를 억지로 쓰지 않음.
- */
-function buildHighPriorityMacroLines(sources: NewsSource[]): string[] {
-  const highPriorityKeywords = [
-    'cpi',
-    'core cpi',
-    'consumer price index',
-    'inflation data',
-    'pce',
-    'core pce',
-    'personal consumption expenditures',
-    'fomc',
-    'federal reserve',
-    'rate decision',
-    'dot plot',
-    'nonfarm payrolls',
-    'payrolls',
-    'jobs report',
-    'unemployment',
-    'jobless claims',
-    'wage growth',
-    'average hourly earnings',
-    'ppi',
-    'producer price index',
-  ];
-
-  const highPrioritySources = sources.filter((item) => {
-    const text = sourceToSearchText(item);
-    return hasAnyKeyword(text, highPriorityKeywords);
-  });
-
-  return highPrioritySources.slice(0, 5).map((item, index) => {
-    return [
-      `${index + 1}. ${item.headline || 'No headline'} (${item.source || 'Unknown source'})`,
-      item.summary ? `Summary: ${item.summary}` : '',
-      item.description ? `Description: ${item.description}` : '',
-      item.publishedAt ? `Published: ${item.publishedAt}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-  });
-}
-
-/**
- * 일반 매크로 뉴스 후보.
- * 지정학, 유가, 금리, 달러, 원자재, 정책, 수급 등.
- * 단, High priority와 겹칠 수 있으므로 모델에게 우선순위는 따로 지시함.
- */
-function buildMacroEventLines(sources: NewsSource[]): string[] {
-  const macroKeywords = [
-    'oil',
-    'wti',
-    'brent',
-    'crude',
-    'treasury',
-    'yield',
-    'bond',
-    'dollar',
-    'currency',
-    'yen',
-    'won',
-    'gold',
-    'commodity',
-    'commodities',
-    'geopolitical',
-    'iran',
-    'israel',
-    'china',
-    'tariff',
-    'export control',
-    'sanction',
-    'opec',
-    'policy',
-    'central bank',
-    'liquidity',
-    'volatility',
-    'risk-off',
-    'risk on',
-    'credit',
-    'debt',
-    'fiscal',
-  ];
-
-  const macroSources = sources.filter((item) => {
-    const text = sourceToSearchText(item);
-    return hasAnyKeyword(text, macroKeywords);
-  });
-
-  return macroSources.slice(0, 8).map((item, index) => {
-    return [
-      `${index + 1}. ${item.headline || 'No headline'} (${item.source || 'Unknown source'})`,
-      item.summary ? `Summary: ${item.summary}` : '',
-      item.description ? `Description: ${item.description}` : '',
-      item.publishedAt ? `Published: ${item.publishedAt}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
-  });
-}
-
-function buildNewsText(sources: NewsSource[]): string {
-  if (!sources.length) return 'No news.';
-
-  return sources
-    .map((item, index) =>
-      [
-        `${index + 1}. ${item.headline || 'No headline'} (${item.source || 'Unknown source'})`,
-        item.summary ? `Summary: ${item.summary}` : '',
-        item.description ? `Description: ${item.description}` : '',
-        item.publishedAt ? `Published: ${item.publishedAt}` : '',
+    function sourceToSearchText(item: NewsSource): string {
+      return [
+        item.headline,
+        item.summary,
+        item.description,
+        item.source,
+        item.publishedAt,
       ]
         .filter(Boolean)
-        .join('\n'),
-    )
-    .join('\n\n');
-}
+        .join(' ');
+    }
 
-const typedSources = sources as NewsSource[];
+    function hasAnyKeyword(text: string, keywords: string[]): boolean {
+      const lower = text.toLowerCase();
+      return keywords.some((keyword) => {
+        const escaped = keyword
+          .toLowerCase()
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          .replace(/\\ /g, '\\s+');
+        return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(
+          lower,
+        );
+      });
+    }
 
-const highPriorityMacroLines = buildHighPriorityMacroLines(typedSources);
-const macroEventLines = buildMacroEventLines(typedSources);
-const newsText = buildNewsText(typedSources);
+    /**
+     * CPI/PCE/FOMC/고용처럼 "발표된 날에는 매크로 상단에서 반드시 검토해야 하는 이벤트"만 추출.
+     * 발표 없는 날은 빈 배열이므로 CPI를 억지로 쓰지 않음.
+     */
+    function buildHighPriorityMacroLines(sources: NewsSource[]): string[] {
+      const highPriorityKeywords = [
+        'cpi',
+        'core cpi',
+        'consumer price index',
+        'inflation data',
+        'pce',
+        'core pce',
+        'personal consumption expenditures',
+        'fomc',
+        'federal reserve',
+        'rate decision',
+        'dot plot',
+        'nonfarm payrolls',
+        'payrolls',
+        'jobs report',
+        'unemployment',
+        'jobless claims',
+        'wage growth',
+        'average hourly earnings',
+        'ppi',
+        'producer price index',
+      ];
 
-const response = await this.fetchOpenAiWithRetry(
-  'https://api.openai.com/v1/responses',
-  {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      service_tier: 'flex',
-      input: [
-        {
-          role: 'system',
-          content: [
-            'You are a market close report writer for Korean retail investors.',
-            'Use only the Market indicators, Core macro event candidates, Macro events, and News provided by the user.',
-            'Core macro event candidates are not mandatory every day.',
-            'If Core macro event candidates are provided, they must be reviewed before ordinary News.',
-            'If CPI, Core CPI, PCE, FOMC, Fed, or labor-market data appears in Core macro event candidates, it must not be omitted from macroLines.',
-            'Market indicators are results, not causes. Do not treat index moves as macro causes.',
-            'In macroLines, do not write absence statements such as "not included", "not provided", "not confirmed", or "no data"; silently omit unsupported topics instead.',
-            'Do not invent facts, prices, dates, quotes, company statements, or market moves.',
-            'Do not mention internal input section names such as Core macro event candidates, Macro events, High priority, or Priority note in the final Korean report.',
-            'If the market was closed, return exactly "휴장이었습니다." and nothing else.',
-            'Otherwise, return only valid JSON. Do not include markdown fences or extra commentary.',
-          ].join('\n'),
+      const highPrioritySources = sources.filter((item) => {
+        const text = sourceToSearchText(item);
+        return hasAnyKeyword(text, highPriorityKeywords);
+      });
+
+      return highPrioritySources.slice(0, 5).map((item, index) => {
+        return [
+          `${index + 1}. ${item.headline || 'No headline'} (${item.source || 'Unknown source'})`,
+          item.summary ? `Summary: ${item.summary}` : '',
+          item.description ? `Description: ${item.description}` : '',
+          item.publishedAt ? `Published: ${item.publishedAt}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n');
+      });
+    }
+
+    /**
+     * 일반 매크로 뉴스 후보.
+     * 지정학, 유가, 금리, 달러, 원자재, 정책, 수급 등.
+     * 단, High priority와 겹칠 수 있으므로 모델에게 우선순위는 따로 지시함.
+     */
+    function buildMacroEventLines(sources: NewsSource[]): string[] {
+      const macroKeywords = [
+        'oil',
+        'wti',
+        'brent',
+        'crude',
+        'treasury',
+        'yield',
+        'bond',
+        'dollar',
+        'currency',
+        'yen',
+        'won',
+        'gold',
+        'commodity',
+        'commodities',
+        'geopolitical',
+        'iran',
+        'israel',
+        'china',
+        'tariff',
+        'export control',
+        'sanction',
+        'opec',
+        'policy',
+        'central bank',
+        'liquidity',
+        'volatility',
+        'risk-off',
+        'risk on',
+        'credit',
+        'debt',
+        'fiscal',
+      ];
+
+      const macroSources = sources.filter((item) => {
+        const text = sourceToSearchText(item);
+        return hasAnyKeyword(text, macroKeywords);
+      });
+
+      return macroSources.slice(0, 8).map((item, index) => {
+        return [
+          `${index + 1}. ${item.headline || 'No headline'} (${item.source || 'Unknown source'})`,
+          item.summary ? `Summary: ${item.summary}` : '',
+          item.description ? `Description: ${item.description}` : '',
+          item.publishedAt ? `Published: ${item.publishedAt}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n');
+      });
+    }
+
+    function buildNewsText(sources: NewsSource[]): string {
+      if (!sources.length) return 'No news.';
+
+      return sources
+        .map((item, index) =>
+          [
+            `${index + 1}. ${item.headline || 'No headline'} (${item.source || 'Unknown source'})`,
+            item.summary ? `Summary: ${item.summary}` : '',
+            item.description ? `Description: ${item.description}` : '',
+            item.publishedAt ? `Published: ${item.publishedAt}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        )
+        .join('\n\n');
+    }
+
+    const typedSources = sources as NewsSource[];
+
+    const highPriorityMacroLines = buildHighPriorityMacroLines(typedSources);
+    const macroEventLines = buildMacroEventLines(typedSources);
+    const newsText = buildNewsText(typedSources);
+
+    const response = await this.fetchOpenAiWithRetry(
+      'https://api.openai.com/v1/responses',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
         },
-        {
-          role: 'user',
-          content: [
-            companyNewsPrompt,
+        body: JSON.stringify({
+          model,
+          service_tier: 'flex',
+          input: [
+            {
+              role: 'system',
+              content: [
+                'You are a market close report writer for Korean retail investors.',
+                'Use only the Market indicators, Core macro event candidates, Macro events, and News provided by the user.',
+                'Core macro event candidates are not mandatory every day.',
+                'If Core macro event candidates are provided, they must be reviewed before ordinary News.',
+                'If CPI, Core CPI, PCE, FOMC, Fed, or labor-market data appears in Core macro event candidates, it must not be omitted from macroLines.',
+                'Market indicators are results, not causes. Do not treat index moves as macro causes.',
+                'In macroLines, do not write absence statements such as "not included", "not provided", "not confirmed", or "no data"; silently omit unsupported topics instead.',
+                'Do not invent facts, prices, dates, quotes, company statements, or market moves.',
+                'Do not mention internal input section names such as Core macro event candidates, Macro events, High priority, or Priority note in the final Korean report.',
+                'If the market was closed, return exactly "휴장이었습니다." and nothing else.',
+                'Otherwise, return only valid JSON. Do not include markdown fences or extra commentary.',
+              ].join('\n'),
+            },
+            {
+              role: 'user',
+              content: [
+                companyNewsPrompt,
 
-            `Market: ${market}`,
-            `Language: ${targetLanguage}`,
-            `Report scope: ${effectiveReportScope}`,
+                `Market: ${market}`,
+                `Language: ${targetLanguage}`,
+                `Report scope: ${effectiveReportScope}`,
 
-            [
-              '기본 역할:',
-              '너는 한국 개인투자자를 위한 장 마감 리포트 작성자다.',
-              '아래 제공된 Market indicators, Core macro event candidates, Macro events, News만 근거로 사용해라.',
-              '제공되지 않은 사실, 주가, 날짜, 기업 발언, 시장 반응은 절대 추측하지 마라.',
-              '투자 권유 표현은 피하고, 정보 전달 중심으로 작성해라.',
-              '모든 문장은 존댓말 문체로 작성해라.',
-              '"~했다", "~강조했다", "~전망했다"가 아니라 "~했습니다", "~강조했습니다", "~전망했습니다"처럼 끝내라.',
-              '제목은 본문 날짜 기준으로 [M월 D일] 제목 형식이어야 한다.',
-              '종목 표기는 괄호 없이 "삼성전자 #005930", "Nvidia #NVDA" 형식으로 작성해라.',
-              '등락률이 제공된 경우에만 종목명 뒤에 숫자형 등락률을 붙여라. 예: "Nvidia #NVDA (+2.15%)", "삼성전자 #005930 (-1.02%)".',
-              '등락률이 제공되지 않았으면 등락률을 절대 만들지 마라.',
-              '미국장 리포트는 전일 미국장 요약이고, 한국장 리포트는 당일 한국장 요약이다.',
-              '전일 미국장이 휴장이었거나 금일 한국장이 휴장이었으면 다른 JSON을 쓰지 말고 정확히 "휴장이었습니다."만 출력해라.',
-              '뉴스 제목뿐 아니라 Summary 또는 Description이 제공된 경우, 그 안의 구체적 내용을 우선 활용해라.',
-              '단, Summary 또는 Description에 없는 세부 발언이나 사건 내용은 추측하지 마라.',
-              '중요: 이 프롬프트 안에 깨진 한글(mojibake)이 보이면 모두 무시하고, 정상 한국어 지시문만 따라라.',
-            ].join('\n'),
+                [
+                  '기본 역할:',
+                  '너는 한국 개인투자자를 위한 장 마감 리포트 작성자다.',
+                  '아래 제공된 Market indicators, Core macro event candidates, Macro events, News만 근거로 사용해라.',
+                  '제공되지 않은 사실, 주가, 날짜, 기업 발언, 시장 반응은 절대 추측하지 마라.',
+                  '투자 권유 표현은 피하고, 정보 전달 중심으로 작성해라.',
+                  '모든 문장은 존댓말 문체로 작성해라.',
+                  '"~했다", "~강조했다", "~전망했다"가 아니라 "~했습니다", "~강조했습니다", "~전망했습니다"처럼 끝내라.',
+                  '제목은 본문 날짜 기준으로 [M월 D일] 제목 형식이어야 한다.',
+                  '종목 표기는 괄호 없이 "삼성전자 #005930", "Nvidia #NVDA" 형식으로 작성해라.',
+                  '등락률이 제공된 경우에만 종목명 뒤에 숫자형 등락률을 붙여라. 예: "Nvidia #NVDA (+2.15%)", "삼성전자 #005930 (-1.02%)".',
+                  '등락률이 제공되지 않았으면 등락률을 절대 만들지 마라.',
+                  '미국장 리포트는 전일 미국장 요약이고, 한국장 리포트는 당일 한국장 요약이다.',
+                  '전일 미국장이 휴장이었거나 금일 한국장이 휴장이었으면 다른 JSON을 쓰지 말고 정확히 "휴장이었습니다."만 출력해라.',
+                  '뉴스 제목뿐 아니라 Summary 또는 Description이 제공된 경우, 그 안의 구체적 내용을 우선 활용해라.',
+                  '단, Summary 또는 Description에 없는 세부 발언이나 사건 내용은 추측하지 마라.',
+                  '중요: 이 프롬프트 안에 깨진 한글(mojibake)이 보이면 모두 무시하고, 정상 한국어 지시문만 따라라.',
+                ].join('\n'),
 
-            `Market indicators:\n${pulseLines.join('\n') || 'No indicator data.'}`,
+                `Market indicators:\n${pulseLines.join('\n') || 'No indicator data.'}`,
 
-            `Core macro event candidates:\n${
-              highPriorityMacroLines.length
-                ? highPriorityMacroLines.join('\n\n')
-                : 'No core macro event candidate data.'
-            }`,
+                `Core macro event candidates:\n${
+                  highPriorityMacroLines.length
+                    ? highPriorityMacroLines.join('\n\n')
+                    : 'No core macro event candidate data.'
+                }`,
 
-            `Macro events:\n${
-              macroEventLines.length
-                ? macroEventLines.join('\n\n')
-                : 'No macro event data.'
-            }`,
+                `Macro events:\n${
+                  macroEventLines.length
+                    ? macroEventLines.join('\n\n')
+                    : 'No macro event data.'
+                }`,
 
-            `News:\n${newsText}`,
+                `News:\n${newsText}`,
 
-            [
-              '출력 형식:',
-              '휴장이 아닌 경우에는 JSON만 출력해라.',
-              '마크다운 코드블록은 쓰지 마라.',
-              'JSON 필드는 반드시 다음 7개만 사용해라:',
-              'titleCandidates, title, summaryLines, macroLines, companyNews, keywords, watchPoints',
-              '',
-              '필드별 요구사항:',
-              '1. titleCandidates는 게시글 제목 후보 3개로 작성해라.',
-              '2. title은 titleCandidates 중 가장 좋은 제목 1개를 선택해라.',
-              '3. summaryLines는 시장 전체 요약을 정확히 5줄로 작성해라.',
-              '4. macroLines는 매크로 점검을 8~12줄로 작성하되, 근거가 부족하면 5~8줄로 작성해라.',
-              '5. companyNews는 전일 주요 종목/기업 뉴스 5~10개로 작성해라.',
-              '6. companyNews 각 항목의 lines는 2~5줄로 작성해라.',
-              '7. keywords는 오늘의 핵심 키워드 3~5개로 작성해라.',
-              '8. watchPoints는 마지막 단기 관전 포인트 2~3줄로 작성해라.',
-              '9. PNG 그림은 별도 이미지 생성 API에서 만들 예정이므로 JSON에는 넣지 마라.',
-              '10. 휴장일이면 JSON을 출력하지 말고 "휴장이었습니다."만 출력해라.',
-            ].join('\n'),
+                [
+                  '출력 형식:',
+                  '휴장이 아닌 경우에는 JSON만 출력해라.',
+                  '마크다운 코드블록은 쓰지 마라.',
+                  'JSON 필드는 반드시 다음 7개만 사용해라:',
+                  'titleCandidates, title, summaryLines, macroLines, companyNews, keywords, watchPoints',
+                  '',
+                  '필드별 요구사항:',
+                  '1. titleCandidates는 게시글 제목 후보 3개로 작성해라.',
+                  '2. title은 titleCandidates 중 가장 좋은 제목 1개를 선택해라.',
+                  '3. summaryLines는 시장 전체 요약을 정확히 5줄로 작성해라.',
+                  '4. macroLines는 매크로 점검을 8~12줄로 작성하되, 근거가 부족하면 5~8줄로 작성해라.',
+                  '5. companyNews는 전일 주요 종목/기업 뉴스 5~10개로 작성해라.',
+                  '6. companyNews 각 항목의 lines는 2~5줄로 작성해라.',
+                  '7. keywords는 오늘의 핵심 키워드 3~5개로 작성해라.',
+                  '8. watchPoints는 마지막 단기 관전 포인트 2~3줄로 작성해라.',
+                  '9. PNG 그림은 별도 이미지 생성 API에서 만들 예정이므로 JSON에는 넣지 마라.',
+                  '10. 휴장일이면 JSON을 출력하지 말고 "휴장이었습니다."만 출력해라.',
+                ].join('\n'),
 
-            [
-              '매크로 점검 작성 규칙:',
-              '',
-              '핵심 원칙:',
-              'macroLines는 전일 시장을 움직인 원인 이벤트와 매크로 배경을 설명하는 구간이다.',
-              'Market indicators는 시장 결과값이며, 원인으로 해석하지 마라.',
-              '지수 등락률, 금 가격, 비트코인 가격, 이더리움 가격, 원자재 가격 변화는 원인이 아니라 결과로 간주해라.',
-              '자산 가격 변화는 원인 설명을 보조할 때만 제한적으로 언급해라.',
-              'summaryLines에서 이미 다룬 나스닥, S&P 500, 다우, 코스피, 코스닥 등의 단순 등락률을 macroLines에서 반복하지 마라.',
-              '',
-              '우선순위 규칙:',
-              'macroLines 작성 시 근거 검토 순서는 반드시 다음 순서를 따른다.',
-              '1. Core macro event candidates',
-              '2. Macro events',
-              '3. News 중 매크로 관련 뉴스',
-              '4. Market indicators는 결과 확인용',
-              '5. 개별 기업 뉴스는 원칙적으로 companyNews에서 처리',
-              '',
-              'Core macro event candidates 처리 규칙:',
-              'Core macro event candidates는 매일 반드시 존재하는 항목이 아니다.',
-              'Core macro event candidates가 "No core macro event candidate data."이면 CPI, PCE, FOMC, 고용지표를 억지로 언급하지 마라.',
-              '반대로 Core macro event candidates에 CPI, Core CPI, PCE, Core PCE, FOMC, Fed, 고용지표, 실업률, 임금상승률, 실업수당청구건수 같은 항목이 제공되면 해당 항목을 일반 뉴스보다 먼저 검토해라.',
-              'Core macro event candidates에 CPI 또는 Core CPI가 제공되어 있으면, 해당 CPI/Core CPI가 전일 시장 해석에 어떤 의미였는지 macroLines 상단에서 반드시 다뤄라.',
-              'Core macro event candidates에 CPI가 제공되어 있는데 macroLines에서 CPI를 완전히 생략하지 마라.',
-              'Core macro event candidates에 있는 핵심 이벤트보다 지정학, AI, 개별 기업 뉴스, ETF 뉴스가 먼저 나오지 않도록 해라.',
-              '최종 문장에는 "Core macro event candidates", "Macro events", "High priority", "Priority note" 같은 내부 분류명을 절대 쓰지 마라.',
-              '단, CPI/Core CPI의 실제치, 예상치, 이전치, 발표일, 시장 반응이 제공되지 않았다면 절대 숫자나 반응을 만들지 말고 제공된 내용만 사용해라.',
-              '',
-              '매크로 뉴스 선별 규칙:',
-              'News에 CPI, PCE, FOMC, Fed, 고용, 금리, 국채금리, 달러, 환율, 유가, 원자재, 지정학, 정책, 재정, 신용위험, 변동성, 투자심리 관련 뉴스가 있으면 매크로 후보로 검토해라.',
-              '단, News에 있는 키워드만 보고 추측하지 말고, headline, summary, description에 실제 근거가 있는 경우에만 작성해라.',
-              '근거가 없거나 시장 영향이 확인되지 않은 항목은 언급하지 마라.',
-              '전일 CPI 관련 데이터나 뉴스가 제공되지 않았으면 CPI를 쓰지 마라.',
-              '',
-              '개별 기업 뉴스 처리 규칙:',
-              '개별 기업 실적, 제품, 계약, 소송, 주가 반응은 원칙적으로 companyNews에서 다뤄라.',
-              '다만 개별 기업 뉴스가 업종 전체 투자심리나 지수 방향성에 영향을 준 경우에는 업종 단위로만 macroLines에 연결해라.',
-              '예: "반도체 업종", "대형 기술주", "AI 인프라", "전기차 업종", "은행주"처럼 시장 단위로 설명해라.',
-              '',
-              '작성 분량:',
-              'macroLines는 원칙적으로 8~12줄로 작성해라.',
-              '단, 제공된 Core macro event candidates, Macro events, 매크로 관련 News가 부족하면 5~8줄로 줄여라.',
-              '근거가 부족한데 줄 수를 채우기 위해 지수 등락률, 금, 코인, 개별 종목 뉴스를 반복하지 마라.',
-              '',
-              '작성 방식:',
-              '각 macroLines 문장은 "원인 이벤트 또는 원인 뉴스 -> 시장이 해석한 의미 -> 영향을 받은 자산군/업종" 순서로 작성해라.',
-              '문장 비중은 원인 설명 70%, 시장 반응 설명 30%로 작성해라.',
-              '',
-              '금지 예시:',
-              '"나스닥이 1.98% 하락하며 S&P 500과 다우보다 더 부진했습니다."',
-              '"S&P 500은 1.62% 하락해 기술주 약세가 지수 전반으로 확산됐습니다."',
-              '"다우존스는 1.87% 하락했습니다."',
-              '"비트코인은 0.55%, 이더리움은 0.44% 상승했습니다."',
-            ].join('\n'),
+                [
+                  '매크로 점검 작성 규칙:',
+                  '',
+                  '핵심 원칙:',
+                  'macroLines는 전일 시장을 움직인 원인 이벤트와 매크로 배경을 설명하는 구간이다.',
+                  'Market indicators는 시장 결과값이며, 원인으로 해석하지 마라.',
+                  '지수 등락률, 금 가격, 비트코인 가격, 이더리움 가격, 원자재 가격 변화는 원인이 아니라 결과로 간주해라.',
+                  '자산 가격 변화는 원인 설명을 보조할 때만 제한적으로 언급해라.',
+                  'summaryLines에서 이미 다룬 나스닥, S&P 500, 다우, 코스피, 코스닥 등의 단순 등락률을 macroLines에서 반복하지 마라.',
+                  '',
+                  '우선순위 규칙:',
+                  'macroLines 작성 시 근거 검토 순서는 반드시 다음 순서를 따른다.',
+                  '1. Core macro event candidates',
+                  '2. Macro events',
+                  '3. News 중 매크로 관련 뉴스',
+                  '4. Market indicators는 결과 확인용',
+                  '5. 개별 기업 뉴스는 원칙적으로 companyNews에서 처리',
+                  '',
+                  'Core macro event candidates 처리 규칙:',
+                  'Core macro event candidates는 매일 반드시 존재하는 항목이 아니다.',
+                  'Core macro event candidates가 "No core macro event candidate data."이면 CPI, PCE, FOMC, 고용지표를 억지로 언급하지 마라.',
+                  '반대로 Core macro event candidates에 CPI, Core CPI, PCE, Core PCE, FOMC, Fed, 고용지표, 실업률, 임금상승률, 실업수당청구건수 같은 항목이 제공되면 해당 항목을 일반 뉴스보다 먼저 검토해라.',
+                  'Core macro event candidates에 CPI 또는 Core CPI가 제공되어 있으면, 해당 CPI/Core CPI가 전일 시장 해석에 어떤 의미였는지 macroLines 상단에서 반드시 다뤄라.',
+                  'Core macro event candidates에 CPI가 제공되어 있는데 macroLines에서 CPI를 완전히 생략하지 마라.',
+                  'Core macro event candidates에 있는 핵심 이벤트보다 지정학, AI, 개별 기업 뉴스, ETF 뉴스가 먼저 나오지 않도록 해라.',
+                  '최종 문장에는 "Core macro event candidates", "Macro events", "High priority", "Priority note" 같은 내부 분류명을 절대 쓰지 마라.',
+                  '단, CPI/Core CPI의 실제치, 예상치, 이전치, 발표일, 시장 반응이 제공되지 않았다면 절대 숫자나 반응을 만들지 말고 제공된 내용만 사용해라.',
+                  '',
+                  '매크로 뉴스 선별 규칙:',
+                  'News에 CPI, PCE, FOMC, Fed, 고용, 금리, 국채금리, 달러, 환율, 유가, 원자재, 지정학, 정책, 재정, 신용위험, 변동성, 투자심리 관련 뉴스가 있으면 매크로 후보로 검토해라.',
+                  '단, News에 있는 키워드만 보고 추측하지 말고, headline, summary, description에 실제 근거가 있는 경우에만 작성해라.',
+                  '근거가 없거나 시장 영향이 확인되지 않은 항목은 언급하지 마라.',
+                  '전일 CPI 관련 데이터나 뉴스가 제공되지 않았으면 CPI를 쓰지 마라.',
+                  '',
+                  '개별 기업 뉴스 처리 규칙:',
+                  '개별 기업 실적, 제품, 계약, 소송, 주가 반응은 원칙적으로 companyNews에서 다뤄라.',
+                  '다만 개별 기업 뉴스가 업종 전체 투자심리나 지수 방향성에 영향을 준 경우에는 업종 단위로만 macroLines에 연결해라.',
+                  '예: "반도체 업종", "대형 기술주", "AI 인프라", "전기차 업종", "은행주"처럼 시장 단위로 설명해라.',
+                  '',
+                  '작성 분량:',
+                  'macroLines는 원칙적으로 8~12줄로 작성해라.',
+                  '단, 제공된 Core macro event candidates, Macro events, 매크로 관련 News가 부족하면 5~8줄로 줄여라.',
+                  '근거가 부족한데 줄 수를 채우기 위해 지수 등락률, 금, 코인, 개별 종목 뉴스를 반복하지 마라.',
+                  '',
+                  '작성 방식:',
+                  '각 macroLines 문장은 "원인 이벤트 또는 원인 뉴스 -> 시장이 해석한 의미 -> 영향을 받은 자산군/업종" 순서로 작성해라.',
+                  '문장 비중은 원인 설명 70%, 시장 반응 설명 30%로 작성해라.',
+                  '',
+                  '금지 예시:',
+                  '"나스닥이 1.98% 하락하며 S&P 500과 다우보다 더 부진했습니다."',
+                  '"S&P 500은 1.62% 하락해 기술주 약세가 지수 전반으로 확산됐습니다."',
+                  '"다우존스는 1.87% 하락했습니다."',
+                  '"비트코인은 0.55%, 이더리움은 0.44% 상승했습니다."',
+                ].join('\n'),
 
-            [
-              '주요 종목/기업 뉴스 선정 규칙:',
-              'companyNews는 제공된 News 안에서 실제로 중요한 기업/종목 이슈만 선별해서 작성해라.',
-              '단순히 시가총액이 크거나 유명하다는 이유만으로 Nvidia #NVDA, Tesla #TSLA, Apple #AAPL, Microsoft #MSFT 같은 대형 기술주를 반복해서 선택하지 마라.',
-              '',
-              '선정 기준은 다음 순서로 판단해라.',
-              '1. 전일 주가지수 또는 업종 흐름에 영향을 준 기업 뉴스',
-              '2. 실적, 가이던스, 규제, 인수합병, 공급계약, 제품 출시, 소송, 정책 영향처럼 구체적 이벤트가 있는 뉴스',
-              '3. 특정 업종 전체의 투자심리나 수급에 영향을 준 대표 기업 뉴스',
-              '4. 한국 개인투자자가 관심을 가질 만한 글로벌 주도 업종 뉴스',
-              '5. 단순 주가 등락보다 원인과 파급효과가 명확한 뉴스',
-              '',
-              '미국장 리포트에서는 대형 기술주, 반도체, 전기차, 금융, 헬스케어, 소비재, 에너지, 산업재, 방산, 중국 ADR 등 여러 업종이 함께 보이도록 균형 있게 선택해라.',
-              '한 업종에 뉴스가 몰려 있더라도 같은 업종 뉴스만 반복하지 말고, 시장 흐름을 설명하는 데 필요한 경우에만 집중해서 다뤄라.',
-              'Nvidia #NVDA, Tesla #TSLA 같은 종목은 제공된 News에 실제 관련 뉴스가 있고 전일 시장 영향도가 클 때만 포함해라.',
-              '제공된 News에 명확한 근거가 없으면 유명 종목이라도 넣지 마라.',
-              '동일 리포트 안에서 Magnificent 7 종목은 최대 3개까지만 포함해라. 단, 제공된 News 대부분이 Magnificent 7 관련 뉴스인 경우에만 예외로 해라.',
-              'ETF 뉴스는 개별 기업 뉴스보다 우선순위를 낮춰라.',
-              '다만 ETF 뉴스가 업종 수급이나 시장 전체 흐름을 설명하는 핵심 근거일 때만 제한적으로 활용해라.',
-              '근거 있는 기업 뉴스가 5개 미만이면 억지로 5개를 채우지 말고, 제공된 근거 안에서만 작성해라.',
-              '',
-              '각 companyNews 항목은 "무슨 일이 있었고 -> 시장이 왜 주목했고 -> 관련 업종이나 투자심리에 어떤 의미가 있었는지"의 흐름으로 작성해라.',
-              '각 companyNews.lines는 2~5줄로 작성해라.',
-            ].join('\n'),
+                [
+                  '주요 종목/기업 뉴스 선정 규칙:',
+                  'companyNews는 제공된 News 안에서 실제로 중요한 기업/종목 이슈만 선별해서 작성해라.',
+                  '단순히 시가총액이 크거나 유명하다는 이유만으로 Nvidia #NVDA, Tesla #TSLA, Apple #AAPL, Microsoft #MSFT 같은 대형 기술주를 반복해서 선택하지 마라.',
+                  '',
+                  '선정 기준은 다음 순서로 판단해라.',
+                  '1. 전일 주가지수 또는 업종 흐름에 영향을 준 기업 뉴스',
+                  '2. 실적, 가이던스, 규제, 인수합병, 공급계약, 제품 출시, 소송, 정책 영향처럼 구체적 이벤트가 있는 뉴스',
+                  '3. 특정 업종 전체의 투자심리나 수급에 영향을 준 대표 기업 뉴스',
+                  '4. 한국 개인투자자가 관심을 가질 만한 글로벌 주도 업종 뉴스',
+                  '5. 단순 주가 등락보다 원인과 파급효과가 명확한 뉴스',
+                  '',
+                  '미국장 리포트에서는 대형 기술주, 반도체, 전기차, 금융, 헬스케어, 소비재, 에너지, 산업재, 방산, 중국 ADR 등 여러 업종이 함께 보이도록 균형 있게 선택해라.',
+                  '한 업종에 뉴스가 몰려 있더라도 같은 업종 뉴스만 반복하지 말고, 시장 흐름을 설명하는 데 필요한 경우에만 집중해서 다뤄라.',
+                  'Nvidia #NVDA, Tesla #TSLA 같은 종목은 제공된 News에 실제 관련 뉴스가 있고 전일 시장 영향도가 클 때만 포함해라.',
+                  '제공된 News에 명확한 근거가 없으면 유명 종목이라도 넣지 마라.',
+                  '동일 리포트 안에서 Magnificent 7 종목은 최대 3개까지만 포함해라. 단, 제공된 News 대부분이 Magnificent 7 관련 뉴스인 경우에만 예외로 해라.',
+                  'ETF 뉴스는 개별 기업 뉴스보다 우선순위를 낮춰라.',
+                  '다만 ETF 뉴스가 업종 수급이나 시장 전체 흐름을 설명하는 핵심 근거일 때만 제한적으로 활용해라.',
+                  '근거 있는 기업 뉴스가 5개 미만이면 억지로 5개를 채우지 말고, 제공된 근거 안에서만 작성해라.',
+                  '',
+                  '각 companyNews 항목은 "무슨 일이 있었고 -> 시장이 왜 주목했고 -> 관련 업종이나 투자심리에 어떤 의미가 있었는지"의 흐름으로 작성해라.',
+                  '각 companyNews.lines는 2~5줄로 작성해라.',
+                ].join('\n'),
 
-            [
-              'JSON Schema:',
-              '{',
-              '  "titleCandidates": ["string", "string", "string"],',
-              '  "title": "string",',
-              '  "summaryLines": ["string", "string", "string", "string", "string"],',
-              '  "macroLines": ["5~12 strings"],',
-              '  "companyNews": [',
-              '    {',
-              '      "symbol": "string",',
-              '      "name": "string",',
-              '      "headline": "string",',
-              '      "lines": ["2~5 strings"]',
-              '    }',
-              '  ],',
-              '  "keywords": ["3~5 strings"],',
-              '  "watchPoints": ["2~3 strings"]',
-              '}',
-              '',
-              'companyNews.symbol은 가능한 경우 "NVDA", "005930"처럼 #을 제외한 티커만 작성해라.',
-              '티커가 제공되지 않았거나 확실하지 않으면 symbol은 빈 문자열로 둬라.',
-              'companyNews.name은 종목명 또는 회사명만 작성해라.',
-              'companyNews.headline과 lines에서 종목명을 언급할 때는 가능한 경우 "Nvidia #NVDA" 형식을 사용해라.',
-            ].join('\n'),
-          ].join('\n\n'),
-        },
-      ],
-      max_output_tokens: 5000,
-    }),
-  },
-  120_000,
-  300_000,
-);
+                [
+                  'JSON Schema:',
+                  '{',
+                  '  "titleCandidates": ["string", "string", "string"],',
+                  '  "title": "string",',
+                  '  "summaryLines": ["string", "string", "string", "string", "string"],',
+                  '  "macroLines": ["5~12 strings"],',
+                  '  "companyNews": [',
+                  '    {',
+                  '      "symbol": "string",',
+                  '      "name": "string",',
+                  '      "headline": "string",',
+                  '      "lines": ["2~5 strings"]',
+                  '    }',
+                  '  ],',
+                  '  "keywords": ["3~5 strings"],',
+                  '  "watchPoints": ["2~3 strings"]',
+                  '}',
+                  '',
+                  'companyNews.symbol은 가능한 경우 "NVDA", "005930"처럼 #을 제외한 티커만 작성해라.',
+                  '티커가 제공되지 않았거나 확실하지 않으면 symbol은 빈 문자열로 둬라.',
+                  'companyNews.name은 종목명 또는 회사명만 작성해라.',
+                  'companyNews.headline과 lines에서 종목명을 언급할 때는 가능한 경우 "Nvidia #NVDA" 형식을 사용해라.',
+                ].join('\n'),
+              ].join('\n\n'),
+            },
+          ],
+          max_output_tokens: 5000,
+        }),
+      },
+      120_000,
+      300_000,
+    );
 
     if (!response.ok) {
       const message = await response.text().catch(() => '');
@@ -2062,7 +2207,9 @@ const response = await this.fetchOpenAiWithRetry(
         .filter(Boolean)
         .join('\n');
     if (!outputText) {
-      throw new ServiceUnavailableException('OpenAI briefing response is empty.');
+      throw new ServiceUnavailableException(
+        'OpenAI briefing response is empty.',
+      );
     }
 
     const trimmedOutput = outputText.trim();
@@ -2119,14 +2266,17 @@ const response = await this.fetchOpenAiWithRetry(
           description?: unknown;
         };
         const lines = Array.isArray(record.lines)
-          ? record.lines.filter((line): line is string => typeof line === 'string' && line.trim().length > 0)
+          ? record.lines.filter(
+              (line): line is string =>
+                typeof line === 'string' && line.trim().length > 0,
+            )
           : [];
         const headline =
           typeof record.headline === 'string'
             ? record.headline
             : typeof record.summary === 'string'
               ? record.summary
-              : lines[0] ?? '';
+              : (lines[0] ?? '');
         const symbol = this.extractBriefingTicker(
           [
             typeof record.symbol === 'string' ? record.symbol : '',
@@ -2211,16 +2361,21 @@ const response = await this.fetchOpenAiWithRetry(
           return item;
         }
 
-        const quote = await this.getStockQuote(symbol, market).catch((error) => {
-          this.logger.warn(
-            `Briefing quote enrichment skipped for ${symbol}: ${
-              error instanceof Error ? error.message : 'unknown error'
-            }`,
-          );
-          return null;
-        });
+        const quote = await this.getStockQuote(symbol, market).catch(
+          (error) => {
+            this.logger.warn(
+              `Briefing quote enrichment skipped for ${symbol}: ${
+                error instanceof Error ? error.message : 'unknown error'
+              }`,
+            );
+            return null;
+          },
+        );
         const percentChange = quote?.percentChange;
-        if (typeof percentChange !== 'number' || !Number.isFinite(percentChange)) {
+        if (
+          typeof percentChange !== 'number' ||
+          !Number.isFinite(percentChange)
+        ) {
           return item;
         }
 
@@ -2229,18 +2384,29 @@ const response = await this.fetchOpenAiWithRetry(
         return {
           ...item,
           name: this.appendBriefingChange(item.name, symbol, formattedChange),
-          headline: this.appendBriefingChange(item.headline, symbol, formattedChange),
+          headline: this.appendBriefingChange(
+            item.headline,
+            symbol,
+            formattedChange,
+          ),
         };
       }),
     );
   }
 
-  private appendBriefingChange(value: string, symbol: string, change: string): string {
+  private appendBriefingChange(
+    value: string,
+    symbol: string,
+    change: string,
+  ): string {
     if (!value) {
       return `#${symbol} ${change}`;
     }
 
-    const tickerPattern = new RegExp(`(#${this.escapeRegExp(symbol)})(?!\\s*\\()`, 'i');
+    const tickerPattern = new RegExp(
+      `(#${this.escapeRegExp(symbol)})(?!\\s*\\()`,
+      'i',
+    );
     if (tickerPattern.test(value)) {
       return value.replace(tickerPattern, `$1 ${change}`);
     }
@@ -2284,7 +2450,10 @@ const response = await this.fetchOpenAiWithRetry(
         return response;
       }
 
-      const message = await response.clone().text().catch(() => '');
+      const message = await response
+        .clone()
+        .text()
+        .catch(() => '');
       this.logger.warn(
         `OpenAI request retrying after retryable response ${response.status}: ${
           message || response.statusText
@@ -2316,7 +2485,9 @@ const response = await this.fetchOpenAiWithRetry(
       return true;
     }
     const message =
-      error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+      error instanceof Error
+        ? error.message.toLowerCase()
+        : String(error).toLowerCase();
     return (
       message.includes('timeout') ||
       message.includes('resource unavailable') ||
@@ -2343,7 +2514,9 @@ const response = await this.fetchOpenAiWithRetry(
       now.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }),
     );
     const prefix = `[${koreaDate.getMonth() + 1}월 ${koreaDate.getDate()}일]`;
-    const cleanTitle = title.replace(/^\[\d{1,2}월\s+\d{1,2}일\]\s*/, '').trim();
+    const cleanTitle = title
+      .replace(/^\[\d{1,2}월\s+\d{1,2}일\]\s*/, '')
+      .trim();
     return `${prefix} ${cleanTitle}`;
   }
 
@@ -2365,46 +2538,51 @@ const response = await this.fetchOpenAiWithRetry(
     }
 
     try {
-      const response = await this.fetchOpenAiWithRetry('https://api.openai.com/v1/responses', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
+      const response = await this.fetchOpenAiWithRetry(
+        'https://api.openai.com/v1/responses',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            service_tier: 'flex',
+            input: [
+              {
+                role: 'system',
+                content: [
+                  'You create clean SVG editorial cover art for financial market reports.',
+                  'Return only valid standalone SVG markup. Do not wrap it in markdown fences.',
+                  'Do not use external images, web fonts, scripts, animation, foreignObject, or embedded raster images.',
+                ].join('\n'),
+              },
+              {
+                role: 'user',
+                content: [
+                  'Create a polished 16:9 SVG cover image for a Korean retail investor market close report.',
+                  'Canvas must be viewBox="0 0 1440 810".',
+                  'Style: premium financial PPT cover, clean dashboard composition, dark navy and white surfaces, subtle green/red market accents, professional layout.',
+                  'Use only vector shapes: panels, abstract line charts, candlestick-like bars, arrows, soft grid lines, and simple finance icons.',
+                  'Short English labels are allowed if they improve the editorial design, such as MARKET BRIEF, MACRO, RISK, MOMENTUM, CLOSE, WATCH, FLOW, TECH, ENERGY, or POLICY.',
+                  'Do not render Korean text, article titles, ticker labels, prices, percentages, dates, company names, logos, or long readable sentences inside the SVG because generated text can break.',
+                  'Keep any English text large, sparse, and decorative; avoid paragraphs, tiny text, dense tables, and fake dashboards full of numbers.',
+                  'Keep important visual elements inside the central safe area so the image works as a web article banner without cropping.',
+                  'Avoid clutter, tiny text, fake logos, overloaded numbers, comic style, neon cyberpunk, or sensational news graphics.',
+                  `Market: ${market}`,
+                  `Title context, do not render as text: ${title}`,
+                  `Visual keywords, do not render as text: ${keywords.join(', ')}`,
+                  `Facts only for visual mood, do not render as text: ${summaryLines.slice(0, 5).join(' / ')}`,
+                ].join('\n'),
+              },
+            ],
+            max_output_tokens: 3500,
+          }),
         },
-        body: JSON.stringify({
-          model,
-          service_tier: 'flex',
-          input: [
-            {
-              role: 'system',
-              content: [
-                'You create clean SVG editorial cover art for financial market reports.',
-                'Return only valid standalone SVG markup. Do not wrap it in markdown fences.',
-                'Do not use external images, web fonts, scripts, animation, foreignObject, or embedded raster images.',
-              ].join('\n'),
-            },
-            {
-              role: 'user',
-              content: [
-                'Create a polished 16:9 SVG cover image for a Korean retail investor market close report.',
-                'Canvas must be viewBox="0 0 1440 810".',
-                'Style: premium financial PPT cover, clean dashboard composition, dark navy and white surfaces, subtle green/red market accents, professional layout.',
-                'Use only vector shapes: panels, abstract line charts, candlestick-like bars, arrows, soft grid lines, and simple finance icons.',
-                'Short English labels are allowed if they improve the editorial design, such as MARKET BRIEF, MACRO, RISK, MOMENTUM, CLOSE, WATCH, FLOW, TECH, ENERGY, or POLICY.',
-                'Do not render Korean text, article titles, ticker labels, prices, percentages, dates, company names, logos, or long readable sentences inside the SVG because generated text can break.',
-                'Keep any English text large, sparse, and decorative; avoid paragraphs, tiny text, dense tables, and fake dashboards full of numbers.',
-                'Keep important visual elements inside the central safe area so the image works as a web article banner without cropping.',
-                'Avoid clutter, tiny text, fake logos, overloaded numbers, comic style, neon cyberpunk, or sensational news graphics.',
-                `Market: ${market}`,
-                `Title context, do not render as text: ${title}`,
-                `Visual keywords, do not render as text: ${keywords.join(', ')}`,
-                `Facts only for visual mood, do not render as text: ${summaryLines.slice(0, 5).join(' / ')}`,
-              ].join('\n'),
-            },
-          ],
-          max_output_tokens: 3500,
-        }),
-      }, 120_000, 300_000);
+        120_000,
+        300_000,
+      );
 
       if (!response.ok) {
         const message = await response.text().catch(() => '');
@@ -2429,7 +2607,9 @@ const response = await this.fetchOpenAiWithRetry(
         return this.toSvgDataUrl(svg);
       }
 
-      this.logger.warn('OpenAI SVG response was not valid SVG; using local SVG fallback.');
+      this.logger.warn(
+        'OpenAI SVG response was not valid SVG; using local SVG fallback.',
+      );
     } catch (error) {
       this.logger.warn(
         `OpenAI SVG generation failed; using local SVG fallback: ${
@@ -2485,15 +2665,27 @@ const response = await this.fetchOpenAiWithRetry(
     const variant = seed % 4;
     const label = market === 'KR' ? 'KOREA CLOSE' : 'US CLOSE';
     const panelLabel = market === 'KR' ? 'SEOUL FLOW' : 'WALL ST FLOW';
-    const keywordLabels = (keywords.length ? keywords : ['MACRO', 'RISK', 'WATCH'])
-      .map((keyword) => keyword.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase())
+    const keywordLabels = (
+      keywords.length ? keywords : ['MACRO', 'RISK', 'WATCH']
+    )
+      .map((keyword) =>
+        keyword
+          .replace(/[^a-zA-Z0-9 ]/g, '')
+          .trim()
+          .toUpperCase(),
+      )
       .filter(Boolean)
       .slice(0, 3);
     const bars = Array.from({ length: 9 }, (_, index) => {
       const x = 210 + index * 62;
       const height = 70 + ((seed >> (index % 12)) % 190);
       const y = 610 - height;
-      const color = (index + variant) % 3 === 0 ? danger : (index + variant) % 2 === 0 ? accent : secondary;
+      const color =
+        (index + variant) % 3 === 0
+          ? danger
+          : (index + variant) % 2 === 0
+            ? accent
+            : secondary;
       return `<rect x="${x}" y="${y}" width="30" height="${height}" rx="9" fill="${color}" opacity="${0.58 + (index % 3) * 0.12}"/>`;
     }).join('');
     const chartPath =
@@ -2728,37 +2920,54 @@ const response = await this.fetchOpenAiWithRetry(
 
   private parseNaverFinanceNews(html: string): MarketNews[] {
     const articles: MarketNews[] = [];
-    const itemPattern = /<li[^>]*class="[^"]*(?:block1|newsList)[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
+    const itemPattern =
+      /<li[^>]*class="[^"]*(?:block1|newsList)[^"]*"[^>]*>([\s\S]*?)<\/li>/gi;
     let match: RegExpExecArray | null;
 
     while ((match = itemPattern.exec(html)) !== null) {
       const block = match[1];
       const linkMatch =
-        block.match(/articleSubject[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i) ??
-        block.match(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
+        block.match(
+          /articleSubject[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i,
+        ) ?? block.match(/<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
       if (!linkMatch) {
         continue;
       }
 
       const url = this.resolveNaverUrl(linkMatch[1]);
       const headline = this.decodeHtml(this.stripHtml(linkMatch[2]));
-      const summaryMatch = block.match(/<dd[^>]*class="[^"]*articleSummary[^"]*"[^>]*>([\s\S]*?)<\/dd>/i);
+      const summaryMatch = block.match(
+        /<dd[^>]*class="[^"]*articleSummary[^"]*"[^>]*>([\s\S]*?)<\/dd>/i,
+      );
       const summary = summaryMatch
         ? this.decodeHtml(
-            this.stripHtml(summaryMatch[1].replace(/<span[^>]*class="[^"]*wdate[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '')),
+            this.stripHtml(
+              summaryMatch[1].replace(
+                /<span[^>]*class="[^"]*wdate[^"]*"[^>]*>[\s\S]*?<\/span>/gi,
+                '',
+              ),
+            ),
           )
         : headline;
-      const sourceMatch = block.match(/<span[^>]*class="[^"]*press[^"]*"[^>]*>([\s\S]*?)<\/span>/i);
-      const dateMatch = block.match(/<span[^>]*class="[^"]*wdate[^"]*"[^>]*>([\s\S]*?)<\/span>/i);
+      const sourceMatch = block.match(
+        /<span[^>]*class="[^"]*press[^"]*"[^>]*>([\s\S]*?)<\/span>/i,
+      );
+      const dateMatch = block.match(
+        /<span[^>]*class="[^"]*wdate[^"]*"[^>]*>([\s\S]*?)<\/span>/i,
+      );
 
       articles.push({
         category: 'kr',
         datetime: this.parseNaverNewsDate(this.stripHtml(dateMatch?.[1] ?? '')),
         headline,
         id: this.numericId(url),
-        image: this.resolveNaverUrl(block.match(/<img[^>]+src="([^"]+)"/i)?.[1] ?? ''),
+        image: this.resolveNaverUrl(
+          block.match(/<img[^>]+src="([^"]+)"/i)?.[1] ?? '',
+        ),
         related: '',
-        source: this.decodeHtml(this.stripHtml(sourceMatch?.[1] ?? 'Naver Finance')),
+        source: this.decodeHtml(
+          this.stripHtml(sourceMatch?.[1] ?? 'Naver Finance'),
+        ),
         summary,
         url,
       });
@@ -2792,7 +3001,9 @@ const response = await this.fetchOpenAiWithRetry(
     const response = await fetch(url);
 
     if (!response.ok) {
-      throw new ServiceUnavailableException('Yahoo Finance news request failed.');
+      throw new ServiceUnavailableException(
+        'Yahoo Finance news request failed.',
+      );
     }
 
     const body = (await response.json()) as {
@@ -2812,10 +3023,14 @@ const response = await this.fetchOpenAiWithRetry(
   }
 
   private async getYahooTrendingNews(): Promise<MarketNews[]> {
-    const response = await fetch('https://query1.finance.yahoo.com/v1/finance/trending/US');
+    const response = await fetch(
+      'https://query1.finance.yahoo.com/v1/finance/trending/US',
+    );
 
     if (!response.ok) {
-      throw new ServiceUnavailableException('Yahoo Finance trending request failed.');
+      throw new ServiceUnavailableException(
+        'Yahoo Finance trending request failed.',
+      );
     }
 
     const body = (await response.json()) as {
@@ -2864,22 +3079,24 @@ const response = await this.fetchOpenAiWithRetry(
       logo: profile.logo ?? null,
       marketCapitalization: profile.marketCapitalization ?? null,
       shareOutstanding: profile.shareOutstanding ?? null,
-        overviewEn: this.buildEnglishOverview(normalizedSymbol, profile),
-        overviewKo: this.buildKoreanOverview(normalizedSymbol, profile),
-        source: 'finnhub_profile2_generated_overview',
+      overviewEn: this.buildEnglishOverview(normalizedSymbol, profile),
+      overviewKo: this.buildKoreanOverview(normalizedSymbol, profile),
+      source: 'finnhub_profile2_generated_overview',
       fetchedAt: new Date(),
     });
   }
 
   private async refreshKoreanProfile(stock: KisStock): Promise<void> {
-    const dartProfile = await this.getDartCompanyProfile(stock).catch((error) => {
-      this.logger.warn(
-        `DART profile fallback used for ${stock.symbol}: ${
-          error instanceof Error ? error.message : 'unknown error'
-        }`,
-      );
-      return null;
-    });
+    const dartProfile = await this.getDartCompanyProfile(stock).catch(
+      (error) => {
+        this.logger.warn(
+          `DART profile fallback used for ${stock.symbol}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+        return null;
+      },
+    );
     const name = dartProfile?.corp_name ?? stock.name;
     const overviewKo = dartProfile
       ? `${name}은(는) DART 기업개황 기준 ${this.toKoreanCorpClass(
@@ -2921,13 +3138,28 @@ const response = await this.fetchOpenAiWithRetry(
     hm_url?: string;
     est_dt?: string;
   } | null> {
-    const apiKey = this.configService.get<string>('DART_API_KEY');
     const corpCode = DART_CORP_CODES[stock.symbol];
 
-    if (!apiKey || !corpCode) {
+    if (!corpCode) {
       return null;
     }
+    return this.getDartCompanyProfileByCorpCode(corpCode);
+  }
 
+  private async getDartCompanyProfileByCorpCode(corpCode: string): Promise<{
+    corp_name?: string;
+    corp_name_eng?: string;
+    stock_code?: string;
+    ceo_nm?: string;
+    corp_cls?: string;
+    adres?: string;
+    hm_url?: string;
+    est_dt?: string;
+  } | null> {
+    const apiKey = this.configService.get<string>('DART_API_KEY');
+    if (!apiKey) {
+      return null;
+    }
     const url = new URL('https://opendart.fss.or.kr/api/company.json');
     url.searchParams.set('crtfc_key', apiKey);
     url.searchParams.set('corp_code', corpCode);
@@ -3064,17 +3296,26 @@ const response = await this.fetchOpenAiWithRetry(
     }
   }
 
-  private async getKoreanMetrics(stock: KisStock): Promise<CompanyMetrics | null> {
+  private async getKoreanMetrics(
+    stock: KisStock,
+  ): Promise<CompanyMetrics | null> {
     try {
-      const response = await this.kisGet<KisPriceResponse>('/uapi/domestic-stock/v1/quotations/inquire-price', {
-        FID_COND_MRKT_DIV_CODE: stock.marketDiv,
-        FID_INPUT_ISCD: stock.symbol,
-      });
+      const response = await this.kisGet<KisPriceResponse>(
+        '/uapi/domestic-stock/v1/quotations/inquire-price',
+        {
+          FID_COND_MRKT_DIV_CODE: stock.marketDiv,
+          FID_INPUT_ISCD: stock.symbol,
+        },
+      );
       const output = response.output ?? {};
       await this.sleep(350);
-      const financialRatio = await this.getKoreanFinancialRatio(stock).catch(() => null);
+      const financialRatio = await this.getKoreanFinancialRatio(stock).catch(
+        () => null,
+      );
       await this.sleep(350);
-      const profitRatio = await this.getKoreanProfitRatio(stock).catch(() => null);
+      const profitRatio = await this.getKoreanProfitRatio(stock).catch(
+        () => null,
+      );
       await this.sleep(350);
       const dividendYield = await this.getKoreanDividendYield(
         stock,
@@ -3086,7 +3327,9 @@ const response = await this.fetchOpenAiWithRetry(
       return {
         peTTM: this.toNumber(output.per),
         pbAnnual: this.toNumber(output.pbr),
-        epsTTM: this.toOptionalNumber(financialRatio?.eps) ?? this.toNumber(output.eps),
+        epsTTM:
+          this.toOptionalNumber(financialRatio?.eps) ??
+          this.toNumber(output.eps),
         psTTM:
           this.toOptionalNumber(output.psr) ??
           (sps && currentPrice > 0 ? currentPrice / sps : null),
@@ -3096,10 +3339,14 @@ const response = await this.fetchOpenAiWithRetry(
         dividendYieldTTM:
           dividendYield ??
           this.toOptionalNumber(
-          output.div_yld ?? output.dvdn_yld ?? output.stck_dvdn_yld,
+            output.div_yld ?? output.dvdn_yld ?? output.stck_dvdn_yld,
           ),
-        '52WeekHigh': this.toNumber(output.w52_hgpr ?? output.stck_hgpr_52w ?? output.stck_hgpr),
-        '52WeekLow': this.toNumber(output.w52_lwpr ?? output.stck_lwpr_52w ?? output.stck_lwpr),
+        '52WeekHigh': this.toNumber(
+          output.w52_hgpr ?? output.stck_hgpr_52w ?? output.stck_hgpr,
+        ),
+        '52WeekLow': this.toNumber(
+          output.w52_lwpr ?? output.stck_lwpr_52w ?? output.stck_lwpr,
+        ),
         currentPrice: this.toNumber(output.stck_prpr),
       };
     } catch (error) {
@@ -3152,12 +3399,33 @@ const response = await this.fetchOpenAiWithRetry(
       };
     }
 
+    const marketCap =
+      financial.marketCap ??
+      (this.toNumber(output.hts_avls) > 0
+        ? this.toNumber(output.hts_avls) * 100_000_000
+        : null);
+
     return {
-      peTTM: financial.per,
-      pbAnnual: financial.pbr,
-      epsTTM: financial.eps,
-      psTTM: financial.psr,
-      roeTTM: financial.roe,
+      peTTM:
+        financial.per ??
+        this.safeDivide(marketCap, financial.netIncome) ??
+        this.toOptionalNumber(output.per),
+      pbAnnual:
+        financial.pbr ??
+        this.safeDivide(marketCap, financial.equity) ??
+        this.toOptionalNumber(output.pbr),
+      epsTTM: financial.eps ?? this.toOptionalNumber(output.eps),
+      psTTM:
+        financial.psr ??
+        this.safeDivide(marketCap, financial.revenue) ??
+        this.toOptionalNumber(output.psr),
+      roeTTM:
+        financial.roe ??
+        (financial.netIncome !== null &&
+        financial.equity !== null &&
+        financial.equity > 0
+          ? (financial.netIncome / financial.equity) * 100
+          : null),
       dividendYieldTTM: null,
       '52WeekHigh': this.toOptionalNumber(
         output.w52_hgpr ?? output.stck_hgpr_52w,
@@ -3279,7 +3547,9 @@ const response = await this.fetchOpenAiWithRetry(
       },
     );
     if (!response.ok) {
-      throw new ServiceUnavailableException('Naver stock price request failed.');
+      throw new ServiceUnavailableException(
+        'Naver stock price request failed.',
+      );
     }
     const body = (await response.json()) as {
       closePrice?: string;
@@ -3359,7 +3629,9 @@ const response = await this.fetchOpenAiWithRetry(
         return sum + (this.toOptionalNumber(item.per_sto_divi_amt) ?? 0);
       }, 0);
 
-    return dividendPerShare > 0 ? (dividendPerShare / currentPrice) * 100 : null;
+    return dividendPerShare > 0
+      ? (dividendPerShare / currentPrice) * 100
+      : null;
   }
 
   private async kisGet<T>(
@@ -3434,7 +3706,10 @@ const response = await this.fetchOpenAiWithRetry(
     }
   }
 
-  private async getKisAccessToken(appKey: string, appSecret: string): Promise<string> {
+  private async getKisAccessToken(
+    appKey: string,
+    appSecret: string,
+  ): Promise<string> {
     const now = Date.now();
     if (this.kisTokenCache && this.kisTokenCache.expiresAt - 60_000 > now) {
       return this.kisTokenCache.token;
@@ -3509,7 +3784,9 @@ const response = await this.fetchOpenAiWithRetry(
     const apiKey = this.configService.get<string>('FINNHUB_API_KEY');
 
     if (!apiKey) {
-      throw new ServiceUnavailableException('Finnhub API key is not configured.');
+      throw new ServiceUnavailableException(
+        'Finnhub API key is not configured.',
+      );
     }
 
     const url = new URL(`${this.finnhubBaseUrl}${path}`);
@@ -3562,7 +3839,10 @@ const response = await this.fetchOpenAiWithRetry(
     return ['QQQ', 'SPY', 'DIA', 'GLD', 'USO'].includes(symbol);
   }
 
-  private toYahooRange(period: ChartPeriod): { range: string; interval: string } {
+  private toYahooRange(period: ChartPeriod): {
+    range: string;
+    interval: string;
+  } {
     switch (period) {
       case '1D':
         return { range: '1d', interval: '5m' };
@@ -3614,7 +3894,10 @@ const response = await this.fetchOpenAiWithRetry(
   }
 
   private stripHtml(value: string): string {
-    return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    return value
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   private decodeHtml(value: string): string {
@@ -3646,7 +3929,8 @@ const response = await this.fetchOpenAiWithRetry(
 
     const [, year, month, day, hour, minute] = match;
     return Math.floor(
-      new Date(`${year}-${month}-${day}T${hour}:${minute}:00+09:00`).getTime() / 1000,
+      new Date(`${year}-${month}-${day}T${hour}:${minute}:00+09:00`).getTime() /
+        1000,
     );
   }
 
@@ -3727,7 +4011,9 @@ const response = await this.fetchOpenAiWithRetry(
     const profiles = await this.stockProfilesRepository.find({
       where: { symbol: In(DEFAULT_US_STOCKS) },
     });
-    const bySymbol = new Map(profiles.map((profile) => [profile.symbol, profile]));
+    const bySymbol = new Map(
+      profiles.map((profile) => [profile.symbol, profile]),
+    );
 
     return DEFAULT_US_STOCKS.map((symbol) =>
       this.emptyQuote(symbol, bySymbol.get(symbol)?.name ?? symbol, 'USD'),
@@ -3740,7 +4026,9 @@ const response = await this.fetchOpenAiWithRetry(
     const profiles = await this.stockProfilesRepository.find({
       where: { symbol: In(symbols) },
     });
-    const bySymbol = new Map(profiles.map((profile) => [profile.symbol, profile]));
+    const bySymbol = new Map(
+      profiles.map((profile) => [profile.symbol, profile]),
+    );
 
     return DEFAULT_KR_STOCKS_CLEAN.map((stock) =>
       this.emptyQuote(
@@ -3802,9 +4090,10 @@ const response = await this.fetchOpenAiWithRetry(
     }));
 
     if (missingUs.length || missingKr.length) {
-      await this.stockProfilesRepository.upsert([...missingUs, ...missingKr], [
-        'symbol',
-      ]);
+      await this.stockProfilesRepository.upsert(
+        [...missingUs, ...missingKr],
+        ['symbol'],
+      );
     }
   }
 
@@ -3841,7 +4130,27 @@ const response = await this.fetchOpenAiWithRetry(
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
-  private toOptionalNumber(value: string | number | null | undefined): number | null {
+  private safeDivide(
+    numerator: number | null | undefined,
+    denominator: number | null | undefined,
+  ): number | null {
+    if (
+      numerator === null ||
+      numerator === undefined ||
+      denominator === null ||
+      denominator === undefined ||
+      !Number.isFinite(numerator) ||
+      !Number.isFinite(denominator) ||
+      denominator === 0
+    ) {
+      return null;
+    }
+    return numerator / denominator;
+  }
+
+  private toOptionalNumber(
+    value: string | number | null | undefined,
+  ): number | null {
     if (typeof value === 'number') {
       return Number.isFinite(value) ? value : null;
     }
@@ -3927,7 +4236,9 @@ const response = await this.fetchOpenAiWithRetry(
     };
   }
 
-  private async getYahooChartQuote(symbol: string): Promise<MarketQuote | null> {
+  private async getYahooChartQuote(
+    symbol: string,
+  ): Promise<MarketQuote | null> {
     const yahooSymbol = this.toYahooSymbol(symbol);
     const url = new URL(
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
@@ -3969,14 +4280,27 @@ const response = await this.fetchOpenAiWithRetry(
     const result = body.chart?.result?.[0];
     const meta = result?.meta;
     const quote = result?.indicators?.quote?.[0];
-    const closes = quote?.close?.filter((value): value is number => typeof value === 'number') ?? [];
+    const closes =
+      quote?.close?.filter(
+        (value): value is number => typeof value === 'number',
+      ) ?? [];
     const current = meta?.regularMarketPrice ?? closes.at(-1) ?? 0;
     const previousClose = meta?.chartPreviousClose ?? meta?.previousClose ?? 0;
     const change = previousClose > 0 ? current - previousClose : 0;
-    const percentChange = previousClose > 0 ? (change / previousClose) * 100 : 0;
-    const highs = quote?.high?.filter((value): value is number => typeof value === 'number') ?? [];
-    const lows = quote?.low?.filter((value): value is number => typeof value === 'number') ?? [];
-    const opens = quote?.open?.filter((value): value is number => typeof value === 'number') ?? [];
+    const percentChange =
+      previousClose > 0 ? (change / previousClose) * 100 : 0;
+    const highs =
+      quote?.high?.filter(
+        (value): value is number => typeof value === 'number',
+      ) ?? [];
+    const lows =
+      quote?.low?.filter(
+        (value): value is number => typeof value === 'number',
+      ) ?? [];
+    const opens =
+      quote?.open?.filter(
+        (value): value is number => typeof value === 'number',
+      ) ?? [];
 
     if (current <= 0) {
       return null;
@@ -3988,7 +4312,8 @@ const response = await this.fetchOpenAiWithRetry(
       current,
       change,
       percentChange,
-      high: meta?.regularMarketDayHigh ?? (highs.length ? Math.max(...highs) : 0),
+      high:
+        meta?.regularMarketDayHigh ?? (highs.length ? Math.max(...highs) : 0),
       low: meta?.regularMarketDayLow ?? (lows.length ? Math.min(...lows) : 0),
       open: meta?.regularMarketOpen ?? opens[0] ?? 0,
       previousClose,
@@ -4015,12 +4340,17 @@ const response = await this.fetchOpenAiWithRetry(
     };
   }
 
-  private buildEnglishOverview(symbol: string, profile: CompanyProfile): string {
+  private buildEnglishOverview(
+    symbol: string,
+    profile: CompanyProfile,
+  ): string {
     const name = profile.name || symbol;
     const industry = profile.finnhubIndustry || 'its listed industry';
     const exchange = profile.exchange || 'a US exchange';
     const country = profile.country || 'the United States';
-    const ipo = profile.ipo ? ` The company has been public since ${profile.ipo}.` : '';
+    const ipo = profile.ipo
+      ? ` The company has been public since ${profile.ipo}.`
+      : '';
     const marketCap = profile.marketCapitalization
       ? ` Its market capitalization is approximately ${Math.round(
           profile.marketCapitalization,

@@ -1159,7 +1159,7 @@ function FinancialBarChart({
     return null;
   }
 
-  const title = language === "ko" ? "5개년 실적" : "5Y financials";
+  const title = language === "ko" ? "5개년 실적 (원)" : "5Y financials (KRW)";
   const revenueLabel = language === "ko" ? "매출액" : "Revenue";
   const operatingProfitLabel =
     language === "ko" ? "영업이익" : "Operating profit";
@@ -1233,13 +1233,22 @@ function formatFinancialAmount(value: number | null) {
   const abs = Math.abs(value);
   const sign = value < 0 ? "-" : "";
   if (abs >= 1_000_000_000_000) {
-    return `${sign}${formatNumber(abs / 1_000_000_000_000)}T`;
+    return `${sign}${formatFinancialDecimal(abs / 1_000_000_000_000)}조`;
   }
   if (abs >= 100_000_000) {
-    return `${sign}${formatNumber(abs / 100_000_000)}B`;
+    return `${sign}${formatFinancialDecimal(abs / 100_000_000)}억`;
   }
 
-  return `${sign}${formatNumber(abs)}`;
+  return `${sign}${new Intl.NumberFormat("ko-KR", {
+    maximumFractionDigits: 0,
+  }).format(abs)}원`;
+}
+
+function formatFinancialDecimal(value: number) {
+  return new Intl.NumberFormat("ko-KR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function InfoBox({ label, value }: { label: string; value: string }) {
