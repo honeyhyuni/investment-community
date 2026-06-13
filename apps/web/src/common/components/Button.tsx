@@ -44,12 +44,14 @@ const VARIANT: Record<ButtonVariant, string> = {
   link: "text-primary underline-offset-2 enabled:hover:underline",
 };
 
+// 반응형: 모바일은 터치 타깃을 크게(1차 h-11 / 2차 h-10), 데스크톱(sm:)은 한 단계 컴팩트하게.
+// 프로젝트 전반의 입력창/버튼 컨벤션(h-11→sm:h-10, h-10→sm:h-9)과 동일.
 const SIZE: Record<ButtonSize, string> = {
-  sm: "h-9 gap-1.5 px-3 text-xs",
-  md: "h-11 gap-2 px-4 text-sm",
-  lg: "h-12 gap-2 px-5 text-base",
-  icon: "size-11 text-base",
-  "icon-sm": "size-9 text-sm",
+  sm: "h-10 gap-1.5 px-3 text-xs sm:h-9",
+  md: "h-11 gap-2 px-4 text-sm sm:h-10",
+  lg: "h-12 gap-2 px-5 text-base sm:h-11",
+  icon: "size-11 text-base sm:size-10",
+  "icon-sm": "size-10 text-sm sm:size-9",
 };
 
 export function Button({

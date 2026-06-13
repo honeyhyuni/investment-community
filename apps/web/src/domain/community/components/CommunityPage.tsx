@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Users } from "lucide-react";
+import { ChevronLeft, Plus, Users } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
 import { Button } from "@/common/components/Button";
 import { cn } from "@/common/utils/cn";
@@ -124,6 +124,28 @@ export function CommunityPage({ userId }: { userId?: string }) {
     return null;
   }
 
+  // 정렬 필터 버튼 (최신순/인기순) — 데스크톱은 툴바 안, 모바일은 툴바 아래에서 재사용.
+  const sortButtons = (["latest", "popular"] as FeedSort[]).map((item) => {
+    const active = sort === item;
+    return (
+      <button
+        key={item}
+        type="button"
+        aria-pressed={active}
+        onClick={() => setSort(item)}
+        className={cn(
+          "cursor-pointer rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+          active
+            ? "border-primary bg-primary/10 text-primary"
+            : "border-border bg-surface text-foreground hover:bg-surface-muted",
+        )}
+      >
+        {item === "latest" ? (ko ? "최신순" : "Latest") : ko ? "인기순" : "Popular"}
+      </button>
+    );
+  });
+
   const feedList = (
     <div className="grid gap-4">
       {loading && posts.length === 0 ? (
@@ -173,23 +195,44 @@ export function CommunityPage({ userId }: { userId?: string }) {
 
   // 유저 피드 — scope 탭/사이드바 없이 해당 유저 글 목록만
   if (userId) {
+    const profile = users.find((item) => item.id === userId);
+    const profileName = profile?.nickname ?? posts[0]?.author.nickname ?? "";
     return (
       <>
         {error ? <Notice message="" error={error} /> : null}
 
         <div className="flex-1 py-4 sm:py-6">
-          <div className="mb-4 grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-between">
-            <Button variant="secondary" onClick={() => router.push("/community")}>
-              {ko ? "피드 목록으로" : "Back to feed"}
-            </Button>
+          <div className="mb-4 flex items-center gap-3 sm:mb-5">
             <Button
-              variant="primary"
-              leftIcon={<Plus />}
-              onClick={() => router.push("/community/new")}
+              variant="secondary"
+              leftIcon={<ChevronLeft />}
+              onClick={() =>
+                window.history.length > 1 ? router.back() : router.push("/community")
+              }
+              className="shrink-0 text-primary"
             >
-              {ko ? "피드 글 쓰기" : "New post"}
+              {ko ? "뒤로" : "Back"}
             </Button>
+            <h1 className="flex h-11 min-w-0 items-center gap-2 rounded-md border border-border bg-white px-3 text-base font-semibold text-foreground shadow-sm sm:px-4 sm:text-lg">
+              <span className="truncate">
+                {ko ? `${profileName}님의 피드` : `${profileName}'s feed`}
+              </span>
+              <span className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 px-1.5 text-xs font-semibold text-primary">
+                {posts.length}
+              </span>
+            </h1>
+            {profile && !profile.isMe ? (
+              <Button
+                variant={profile.isSubscribed ? "secondary" : "primary"}
+                size="sm"
+                onClick={() => toggleSubscription(profile.id)}
+                className="ml-auto shrink-0"
+              >
+                {profile.isSubscribed ? (ko ? "구독중" : "Following") : ko ? "구독" : "Follow"}
+              </Button>
+            ) : null}
           </div>
+
           {feedList}
         </div>
       </>
@@ -219,7 +262,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
                     aria-selected={active}
                     onClick={() => setScope(item)}
                     className={cn(
-                      "flex-1 cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold transition-all sm:flex-none",
+                      "flex-1 cursor-pointer whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-all sm:flex-none",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-surface-subtle",
                       active
                         ? "bg-surface text-primary shadow-sm"
@@ -242,30 +285,24 @@ export function CommunityPage({ userId }: { userId?: string }) {
               })}
             </div>
 
-            {/* 정렬 필터 (최신순 / 인기순) */}
-            <div className="flex shrink-0 gap-1.5">
-              {(["latest", "popular"] as FeedSort[]).map((item) => {
-                const active = sort === item;
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setSort(item)}
-                    className={cn(
-                      "cursor-pointer rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-background",
-                      active
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-surface text-foreground hover:bg-surface-muted",
-                    )}
-                  >
-                    {item === "latest" ? (ko ? "최신순" : "Latest") : ko ? "인기순" : "Popular"}
-                  </button>
-                );
-              })}
-            </div>
+            {/* 정렬 필터 (최신순 / 인기순) — 데스크톱에서만 툴바 안에 표시 */}
+            <div className="hidden shrink-0 gap-1.5 sm:flex">{sortButtons}</div>
 
+            {/* 글 쓰기 — 데스크톱에서만 툴바 안에 표시 */}
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus />}
+              onClick={() => router.push("/community/new")}
+              className="ml-auto hidden shrink-0 sm:inline-flex"
+            >
+              {ko ? "글 쓰기" : "New post"}
+            </Button>
+          </div>
+
+          {/* 모바일: 정렬 필터(왼쪽) + 글 쓰기(오른쪽 끝)를 툴바 아래·피드 위에 표시 */}
+          <div className="flex items-center gap-1.5 sm:hidden">
+            {sortButtons}
             <Button
               variant="primary"
               size="sm"
@@ -273,14 +310,14 @@ export function CommunityPage({ userId }: { userId?: string }) {
               onClick={() => router.push("/community/new")}
               className="ml-auto shrink-0"
             >
-              {ko ? "피드 글 쓰기" : "New post"}
+              {ko ? "글 쓰기" : "New post"}
             </Button>
           </div>
 
           {feedList}
         </div>
 
-        <aside className="rounded-lg border border-[#d9dee8] bg-white p-4 shadow-sm lg:sticky lg:top-4 lg:self-start">
+        <aside className="-mx-4 rounded-none border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border lg:sticky lg:top-4 lg:self-start">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-[#344052]">{ko ? "구독" : "Following"}</h2>
             <Users size={16} className="text-[#607086]" />

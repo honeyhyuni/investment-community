@@ -1,7 +1,7 @@
 "use client";
 
 import { Dispatch, SetStateAction, useState } from "react";
-import { Heart, MessageCircle, Pencil, Send, Trash2 } from "lucide-react";
+import { Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { RichContent } from "@/common/components/RichContent";
 import { Button } from "@/common/components/Button";
 import { cn } from "@/common/utils/cn";
@@ -80,7 +80,7 @@ export function PostCard({
 
   return (
     <article
-      onDoubleClick={() => onOpenPost?.(post.id)}
+      onClick={() => onOpenPost?.(post.id)}
       className={`-mx-4 rounded-none border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border ${
         onOpenPost
           ? "cursor-pointer transition-all duration-150 ease-out will-change-transform hover:scale-[1.01] hover:shadow-md"
@@ -89,7 +89,7 @@ export function PostCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="line-clamp-2 text-lg font-semibold leading-snug text-foreground sm:truncate">
+          <h3 className="line-clamp-2 text-xl font-semibold leading-snug text-foreground sm:truncate sm:text-2xl">
             {post.title || post.content || (ko ? "제목 없음" : "Untitled")}
           </h3>
           <div className="mt-1.5 flex items-center gap-2">
@@ -109,7 +109,20 @@ export function PostCard({
               >
                 {post.author.nickname}
               </Button>{" "}
-              · {new Date(post.createdAt).toLocaleString()}
+              {(() => {
+                const edited =
+                  new Date(post.updatedAt).getTime() - new Date(post.createdAt).getTime() > 1000;
+                return (
+                  <>
+                    · {new Date(edited ? post.updatedAt : post.createdAt).toLocaleString()}
+                    {edited ? (
+                      <span className="ml-1.5 inline-flex items-center rounded-full bg-surface-subtle px-1.5 py-0.5 text-[10px] font-semibold text-muted">
+                        {ko ? "수정됨" : "Edited"}
+                      </span>
+                    ) : null}
+                  </>
+                );
+              })()}
             </p>
           </div>
         </div>
@@ -119,7 +132,10 @@ export function PostCard({
               <Button
                 variant="secondary"
                 size="icon-sm"
-                onClick={() => onEditPost(post)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEditPost(post);
+                }}
                 title={ko ? "수정" : "Edit"}
                 aria-label={ko ? "수정" : "Edit"}
                 leftIcon={<Pencil />}
@@ -129,7 +145,10 @@ export function PostCard({
             <Button
               variant="secondary"
               size="icon-sm"
-              onClick={() => onDeletePost(post.id)}
+              onClick={(event) => {
+                event.stopPropagation();
+                onDeletePost(post.id);
+              }}
               title={ko ? "삭제" : "Delete"}
               aria-label={ko ? "삭제" : "Delete"}
               leftIcon={<Trash2 />}
@@ -150,8 +169,10 @@ export function PostCard({
       {!showFull ? (
         <Button
           variant="link"
-          onClick={() => setExpanded(true)}
-          onDoubleClick={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpanded(true);
+          }}
           className="mt-3 text-sm"
         >
           {ko ? "전체 글 보기" : "View full post"}
@@ -181,8 +202,10 @@ export function PostCard({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => onLike(post.id)}
-            onDoubleClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onLike(post.id);
+            }}
             leftIcon={<Heart fill={post.likedByMe ? "currentColor" : "none"} />}
             className={cn(
               "text-sm",
@@ -210,23 +233,13 @@ export function PostCard({
       </div>
 
       {interactive ? (
-        <div className="mt-4 space-y-3">
-          {post.comments.map((comment) => (
-            <CommentThread
-              key={comment.id}
-              postId={post.id}
-              comment={comment}
-              replyDrafts={replyDrafts}
-              setReplyDrafts={setReplyDrafts}
-              onComment={onComment}
-              currentUserId={currentUserId}
-              onEditComment={onEditComment}
-              onDeleteComment={onDeleteComment}
-              canModerate={canModerate}
-              onAuthorClick={onAuthorClick}
-            />
-          ))}
-          <div className="flex gap-2">
+        <div className="mt-5 border-t border-border pt-5">
+          <h4 className="text-sm font-semibold text-foreground">
+            {ko ? "댓글" : "Comments"}{" "}
+            <span className="text-muted">{post.commentCount}</span>
+          </h4>
+
+          <div className="mt-4 flex gap-2">
             <input
               value={commentDrafts[post.id] ?? ""}
               onChange={(event) =>
@@ -235,19 +248,47 @@ export function PostCard({
                   [post.id]: event.target.value,
                 }))
               }
-              placeholder={ko ? "댓글 작성" : "Write a comment"}
-              className="h-11 flex-1 rounded-md border border-[#c7ceda] px-3 text-base outline-none focus:border-[#1f6f8b] sm:h-10 sm:text-sm"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  onComment(post.id);
+                }
+              }}
+              placeholder={ko ? "댓글을 남겨보세요" : "Write a comment"}
+              className="h-11 flex-1 rounded-md border border-border-strong bg-surface px-3 text-base outline-none transition-colors focus:border-primary sm:h-10 sm:text-sm"
             />
             <Button
               variant="primary"
-              size="icon"
               onClick={() => onComment(post.id)}
-              onDoubleClick={(event) => event.stopPropagation()}
-              aria-label={ko ? "댓글 작성" : "Write a comment"}
-              leftIcon={<Send />}
-              className="h-11 w-11 shrink-0 sm:size-10"
-            />
+              className="shrink-0"
+            >
+              {ko ? "등록" : "Post"}
+            </Button>
           </div>
+
+          {post.comments.length ? (
+            <div className="mt-5 space-y-5">
+              {post.comments.map((comment) => (
+                <CommentThread
+                  key={comment.id}
+                  postId={post.id}
+                  comment={comment}
+                  replyDrafts={replyDrafts}
+                  setReplyDrafts={setReplyDrafts}
+                  onComment={onComment}
+                  currentUserId={currentUserId}
+                  onEditComment={onEditComment}
+                  onDeleteComment={onDeleteComment}
+                  canModerate={canModerate}
+                  onAuthorClick={onAuthorClick}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-5 text-center text-sm text-muted">
+              {ko ? "첫 번째 댓글을 남겨보세요." : "Be the first to comment."}
+            </p>
+          )}
         </div>
       ) : null}
 

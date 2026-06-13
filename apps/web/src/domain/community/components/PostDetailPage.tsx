@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
 import { Button } from "@/common/components/Button";
 import { apiRequest } from "@/common/lib/api";
@@ -88,16 +88,16 @@ export function PostDetailPage({ postId }: { postId: string }) {
       {error ? <Notice message="" error={error} /> : null}
 
       <div className="flex-1 py-4 sm:py-6">
-        <div className="mb-4 grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-between">
-          <Button variant="secondary" onClick={() => router.push("/community")}>
-            {ko ? "피드 목록으로" : "Back to feed"}
-          </Button>
+        <div className="mb-4">
           <Button
-            variant="primary"
-            leftIcon={<Plus />}
-            onClick={() => router.push("/community/new")}
+            variant="secondary"
+            leftIcon={<ChevronLeft />}
+            onClick={() =>
+              window.history.length > 1 ? router.back() : router.push("/community")
+            }
+            className="text-primary"
           >
-            {ko ? "피드 글 쓰기" : "New post"}
+            {ko ? "뒤로" : "Back"}
           </Button>
         </div>
 

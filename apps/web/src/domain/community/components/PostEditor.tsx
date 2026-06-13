@@ -172,24 +172,27 @@ export function PostEditor({
 
   return (
     <div className="-mx-4 w-auto border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:w-full sm:rounded-lg sm:border sm:p-5">
-      <div className="flex items-center justify-between border-b border-[#eef1f6] pb-4">
-        <p className="text-sm font-semibold text-[#344052]">
-          {editingPostId ? (ko ? "피드 수정" : "Edit post") : (ko ? "투자 글쓰기" : "New post")}
-        </p>
-        <Button
-          variant="secondary"
-          size="icon-sm"
-          onClick={onCancel}
-          title={ko ? "닫기" : "Close"}
-          aria-label={ko ? "닫기" : "Close"}
-          leftIcon={<X />}
-        />
-      </div>
+      {editingPostId ? null : (
+        <div className="flex items-center justify-between border-b border-[#eef1f6] pb-4">
+          <p className="text-sm font-semibold text-[#344052]">{ko ? "투자 글쓰기" : "New post"}</p>
+          <Button
+            variant="secondary"
+            size="icon-sm"
+            onClick={onCancel}
+            title={ko ? "닫기" : "Close"}
+            aria-label={ko ? "닫기" : "Close"}
+            leftIcon={<X />}
+          />
+        </div>
+      )}
       <input
         value={title}
         onChange={(event) => setTitle(event.target.value)}
         placeholder={ko ? "제목: 예) 엔비디아 실적 이후 반도체 사이클 점검" : "Title: e.g. Semiconductor cycle check after NVIDIA earnings"}
-        className="mt-4 h-12 w-full rounded-md border border-[#c7ceda] px-3 text-base font-semibold outline-none focus:border-[#1f6f8b] sm:text-lg"
+        className={cn(
+          "h-12 w-full rounded-md border border-[#c7ceda] px-3 text-base font-semibold outline-none focus:border-[#1f6f8b] sm:text-lg",
+          editingPostId ? "" : "mt-4",
+        )}
       />
       <div className="mt-4 overflow-hidden rounded-md border border-[#d9dee8] bg-white">
         <div className="flex items-center gap-1 overflow-x-auto border-b border-[#d9dee8] bg-[#f9fafc] p-2">
@@ -289,22 +292,24 @@ export function PostEditor({
                   }
                 />
               </label>
+              <label
+                title={ko ? "사진 삽입" : "Insert image"}
+                className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md border border-[#c7ceda] bg-white"
+              >
+                <ImageIcon size={15} />
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => {
+                    insertImages(event.target.files);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </label>
             </>
           ) : null}
-          <label className="ml-auto inline-flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold">
-            <ImageIcon size={15} />
-            {ko ? "사진 삽입" : "Insert image"}
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={(event) => {
-                insertImages(event.target.files);
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
         </div>
         <div
           onDragOver={(event) => event.preventDefault()}
@@ -373,7 +378,7 @@ export function PostEditor({
           {ko ? "취소" : "Cancel"}
         </Button>
         <Button variant="primary" loading={loading} onClick={onSubmit}>
-          {editingPostId ? (ko ? "수정 완료" : "Save") : (ko ? "게시" : "Post")}
+          {editingPostId ? (ko ? "수정" : "Save") : (ko ? "게시" : "Post")}
         </Button>
       </div>
     </div>
