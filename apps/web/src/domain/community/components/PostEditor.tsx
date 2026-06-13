@@ -12,6 +12,9 @@ import { stockSearchScore } from "@/common/utils/stock-search";
 import { CommunityContentBlock, StockTag } from "@/domain/community/types";
 import { MarketQuote, StockSymbol, TradeTick } from "@/common/types";
 import { StockTagQuote } from "@/domain/community/components/StockTagQuote";
+import { Button } from "@/common/components/Button";
+import { cn } from "@/common/utils/cn";
+import { usePreferencesStore } from "@/common/stores/preferences";
 
 const StyledText = Mark.create({
   name: "styledText",
@@ -80,6 +83,7 @@ export function PostEditor({
   onSubmit: () => Promise<void>;
   onCancel: () => void;
 }) {
+  const ko = usePreferencesStore((s) => s.language) === "ko";
   const blockIdRef = useRef(blocks[0]?.id ?? makeEditorBlockId());
   const editorContent = blocks[0]?.text ?? "";
 
@@ -90,7 +94,7 @@ export function PostEditor({
       StyledText,
       Placeholder.configure({
         placeholder:
-          "자유롭게 글을 작성하세요. 예) 투자 근거 · 핵심 지표 · 리스크 점검",
+          ko ? "자유롭게 글을 작성하세요. 예) 투자 근거 · 핵심 지표 · 리스크 점검" : "Write freely. e.g. thesis · key metrics · risk check",
       }),
     ],
     content: editorContent,
@@ -155,7 +159,7 @@ export function PostEditor({
       return;
     }
     const previous = editor.getAttributes("link").href as string | undefined;
-    const url = window.prompt("링크 URL", previous ?? "");
+    const url = window.prompt(ko ? "링크 URL" : "Link URL", previous ?? "");
     if (url === null) {
       return;
     }
@@ -170,20 +174,21 @@ export function PostEditor({
     <div className="-mx-4 w-auto border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:w-full sm:rounded-lg sm:border sm:p-5">
       <div className="flex items-center justify-between border-b border-[#eef1f6] pb-4">
         <p className="text-sm font-semibold text-[#344052]">
-          {editingPostId ? "피드 수정" : "투자 글쓰기"}
+          {editingPostId ? (ko ? "피드 수정" : "Edit post") : (ko ? "투자 글쓰기" : "New post")}
         </p>
-        <button
+        <Button
+          variant="secondary"
+          size="icon-sm"
           onClick={onCancel}
-          className="grid h-8 w-8 cursor-pointer place-items-center rounded-md border border-[#c7ceda] transition-colors hover:bg-[#eef1f6]"
-          title="닫기"
-        >
-          <X size={15} />
-        </button>
+          title={ko ? "닫기" : "Close"}
+          aria-label={ko ? "닫기" : "Close"}
+          leftIcon={<X />}
+        />
       </div>
       <input
         value={title}
         onChange={(event) => setTitle(event.target.value)}
-        placeholder="제목: 예) 엔비디아 실적 이후 반도체 사이클 점검"
+        placeholder={ko ? "제목: 예) 엔비디아 실적 이후 반도체 사이클 점검" : "Title: e.g. Semiconductor cycle check after NVIDIA earnings"}
         className="mt-4 h-12 w-full rounded-md border border-[#c7ceda] px-3 text-base font-semibold outline-none focus:border-[#1f6f8b] sm:text-lg"
       />
       <div className="mt-4 overflow-hidden rounded-md border border-[#d9dee8] bg-white">
@@ -192,68 +197,68 @@ export function PostEditor({
             <>
               <ToolbarButton
                 label="B"
-                title="굵게"
+                title={ko ? "굵게" : "Bold"}
                 active={editor.isActive("bold")}
                 onClick={() => editor.chain().focus().toggleBold().run()}
                 className="font-bold"
               />
               <ToolbarButton
                 label="I"
-                title="기울임"
+                title={ko ? "기울임" : "Italic"}
                 active={editor.isActive("italic")}
                 onClick={() => editor.chain().focus().toggleItalic().run()}
                 className="italic"
               />
               <ToolbarButton
                 label="H1"
-                title="제목 1"
+                title={ko ? "제목 1" : "Heading 1"}
                 active={editor.isActive("heading", { level: 1 })}
                 onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
               />
               <ToolbarButton
                 label="H2"
-                title="제목 2"
+                title={ko ? "제목 2" : "Heading 2"}
                 active={editor.isActive("heading", { level: 2 })}
                 onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
               />
               <ToolbarButton
-                label="• 목록"
-                title="글머리 목록"
+                label={ko ? "• 목록" : "• List"}
+                title={ko ? "글머리 목록" : "Bullet list"}
                 active={editor.isActive("bulletList")}
                 onClick={() => editor.chain().focus().toggleBulletList().run()}
               />
               <ToolbarButton
-                label="1. 목록"
-                title="번호 목록"
+                label={ko ? "1. 목록" : "1. List"}
+                title={ko ? "번호 목록" : "Numbered list"}
                 active={editor.isActive("orderedList")}
                 onClick={() => editor.chain().focus().toggleOrderedList().run()}
               />
               <ToolbarButton
-                label="인용"
-                title="인용구"
+                label={ko ? "인용" : "Quote"}
+                title={ko ? "인용구" : "Blockquote"}
                 active={editor.isActive("blockquote")}
                 onClick={() => editor.chain().focus().toggleBlockquote().run()}
               />
               <ToolbarButton
                 label="< >"
-                title="인라인 코드"
+                title={ko ? "인라인 코드" : "Inline code"}
                 active={editor.isActive("code")}
                 onClick={() => editor.chain().focus().toggleCode().run()}
               />
               <ToolbarButton
                 label="—"
-                title="구분선"
+                title={ko ? "구분선" : "Divider"}
                 active={false}
                 onClick={() => editor.chain().focus().setHorizontalRule().run()}
               />
               <ToolbarButton
-                label="링크"
-                title="링크"
+                label={ko ? "링크" : "Link"}
+                title={ko ? "링크" : "Link"}
                 active={editor.isActive("link")}
                 onClick={promptLink}
               />
               <select
-                title="글자 크기"
+                title={ko ? "글자 크기" : "Font size"}
                 defaultValue=""
                 onChange={(event) => {
                   const fontSize = event.target.value;
@@ -265,14 +270,14 @@ export function PostEditor({
                 }}
                 className="h-9 shrink-0 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-2 text-sm font-semibold text-[#344052]"
               >
-                <option value="">기본 크기</option>
-                <option value="13px">작게</option>
-                <option value="16px">보통</option>
-                <option value="20px">크게</option>
-                <option value="28px">매우 크게</option>
+                <option value="">{ko ? "기본 크기" : "Default"}</option>
+                <option value="13px">{ko ? "작게" : "Small"}</option>
+                <option value="16px">{ko ? "보통" : "Normal"}</option>
+                <option value="20px">{ko ? "크게" : "Large"}</option>
+                <option value="28px">{ko ? "매우 크게" : "X-Large"}</option>
               </select>
               <label
-                title="글자 색상"
+                title={ko ? "글자 색상" : "Text color"}
                 className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md border border-[#c7ceda] bg-white"
               >
                 <span className="h-4 w-4 rounded-sm border border-[#c7ceda] bg-[linear-gradient(135deg,#b64242_0_33%,#1f6f8b_33%_66%,#344052_66%)]" />
@@ -288,7 +293,7 @@ export function PostEditor({
           ) : null}
           <label className="ml-auto inline-flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold">
             <ImageIcon size={15} />
-            사진 삽입
+            {ko ? "사진 삽입" : "Insert image"}
             <input
               type="file"
               accept="image/*"
@@ -315,7 +320,7 @@ export function PostEditor({
         <input
           value={tagQuery}
           onChange={(event) => setTagQuery(event.target.value.replace(/^#/, ""))}
-          placeholder="태그할 종목 검색"
+          placeholder={ko ? "태그할 종목 검색" : "Search a stock to tag"}
           className="h-11 w-full rounded-md border border-[#c7ceda] px-3 text-base outline-none focus:border-[#1f6f8b] sm:h-10 sm:text-sm"
         />
         {suggestions.length ? (
@@ -340,7 +345,7 @@ export function PostEditor({
                   className="flex cursor-pointer items-center justify-between gap-3 rounded-md bg-white px-3 py-2 text-left text-sm"
                 >
                   <span className="font-semibold">{item.symbol}</span>
-                  <span className="truncate text-[#607086]">{item.description}</span>
+                  <span className="truncate text-muted">{item.description}</span>
                 </button>
               );
             })}
@@ -364,19 +369,12 @@ export function PostEditor({
         ) : null}
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
-        <button
-          onClick={onCancel}
-          className="h-11 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-sm font-semibold transition-colors hover:bg-[#eef1f6] sm:h-10"
-        >
-          취소
-        </button>
-        <button
-          disabled={loading}
-          onClick={onSubmit}
-          className="h-11 cursor-pointer rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195c74] disabled:opacity-60 sm:h-10"
-        >
-          {editingPostId ? "수정 완료" : "게시"}
-        </button>
+        <Button variant="secondary" onClick={onCancel}>
+          {ko ? "취소" : "Cancel"}
+        </Button>
+        <Button variant="primary" loading={loading} onClick={onSubmit}>
+          {editingPostId ? (ko ? "수정 완료" : "Save") : (ko ? "게시" : "Post")}
+        </Button>
       </div>
     </div>
   );
@@ -396,17 +394,18 @@ function ToolbarButton({
   className?: string;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="secondary"
+      size="sm"
       title={title}
       onClick={onClick}
-      className={`h-9 min-w-9 shrink-0 cursor-pointer rounded-md border px-2.5 text-sm font-semibold transition-colors ${
-        active
-          ? "border-[#1f6f8b] bg-[#eef6f9] text-[#1f6f8b]"
-          : "border-[#c7ceda] bg-white text-[#344052] hover:bg-[#eef1f6]"
-      } ${className}`}
+      className={cn(
+        "min-w-9 shrink-0 px-2.5 text-sm",
+        active && "border-primary bg-surface-subtle text-primary",
+        className,
+      )}
     >
       {label}
-    </button>
+    </Button>
   );
 }

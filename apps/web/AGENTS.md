@@ -4,3 +4,4 @@
 
 - [`docs/frontend-architecture.md`](./docs/frontend-architecture.md) — 목표 구조(`domain/` + `common/`), 네이밍, 라우팅 모델, 공유 상태(zustand) 전략. **새/이동 코드는 이 규칙을 따른다.**
 - [`docs/refactor-plan.md`](./docs/refactor-plan.md) — 거대 `page.tsx` → 멀티라우트 단계별 마이그레이션. **구조 변경 전 현재 Phase/상태를 확인한다.**
+- [`docs/DESIGN.md`](./docs/DESIGN.md) — 디자인 토큰 기반 컬러/타이포/간격 사양. **색은 `globals.css` 토큰만 쓰고 hex를 직접 박지 않는다.**

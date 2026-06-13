@@ -3,6 +3,9 @@
 import { Dispatch, SetStateAction, useState } from "react";
 import { Heart, MessageCircle, Pencil, Send, Trash2 } from "lucide-react";
 import { RichContent } from "@/common/components/RichContent";
+import { Button } from "@/common/components/Button";
+import { cn } from "@/common/utils/cn";
+import { usePreferencesStore } from "@/common/stores/preferences";
 import { MarketQuote, TradeTick } from "@/common/types";
 import { CommunityPost, StockTag } from "@/domain/community/types";
 import { getPostHtml } from "@/common/utils/community";
@@ -58,6 +61,7 @@ export function PostCard({
   onAuthorClick?: (userId: string) => void;
   canModerate?: boolean;
 }) {
+  const ko = usePreferencesStore((s) => s.language) === "ko";
   const [expanded, setExpanded] = useState(forceExpanded);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const html = getPostHtml(post);
@@ -81,40 +85,43 @@ export function PostCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold text-[#607086] sm:text-xs">
-            <button
-              type="button"
+            <Button
+              variant="link"
               onClick={(event) => {
                 event.stopPropagation();
                 onAuthorClick?.(post.author.id);
               }}
-              className="cursor-pointer hover:text-[#1f6f8b] hover:underline"
             >
               {post.author.nickname}
-            </button>{" "}
+            </Button>{" "}
             · {new Date(post.createdAt).toLocaleString()}
           </p>
           <h3 className="mt-1 line-clamp-2 text-base font-semibold leading-6 sm:truncate sm:text-lg">
-            {post.title || post.content || "제목 없음"}
+            {post.title || post.content || (ko ? "제목 없음" : "Untitled")}
           </h3>
         </div>
         {post.author.id === currentUserId || canModerate ? (
           <div className="flex gap-1">
             {post.author.id === currentUserId ? (
-            <button
-              onClick={() => onEditPost(post)}
-              title="수정"
-              className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-[#344052] transition-colors hover:bg-[#eef1f6]"
-            >
-              <Pencil size={15} />
-            </button>
+              <Button
+                variant="secondary"
+                size="icon-sm"
+                onClick={() => onEditPost(post)}
+                title={ko ? "수정" : "Edit"}
+                aria-label={ko ? "수정" : "Edit"}
+                leftIcon={<Pencil />}
+                className="text-muted"
+              />
             ) : null}
-            <button
+            <Button
+              variant="secondary"
+              size="icon-sm"
               onClick={() => onDeletePost(post.id)}
-              title="삭제"
-              className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-[#9a2f2f] transition-colors hover:bg-[#fff1f1]"
-            >
-              <Trash2 size={15} />
-            </button>
+              title={ko ? "삭제" : "Delete"}
+              aria-label={ko ? "삭제" : "Delete"}
+              leftIcon={<Trash2 />}
+              className="text-muted"
+            />
           </div>
         ) : null}
       </div>
@@ -128,13 +135,14 @@ export function PostCard({
         />
       </div>
       {!showFull ? (
-        <button
+        <Button
+          variant="link"
           onClick={() => setExpanded(true)}
           onDoubleClick={(event) => event.stopPropagation()}
-          className="mt-3 cursor-pointer text-sm font-semibold text-[#1f6f8b] hover:underline"
+          className="mt-3 text-sm"
         >
-          전체 글 보기
-        </button>
+          {ko ? "전체 글 보기" : "View full post"}
+        </Button>
       ) : null}
 
       {post.stockTags.length ? (
@@ -155,21 +163,23 @@ export function PostCard({
         </div>
       ) : null}
 
-      <div className="mt-4 flex items-center gap-2 border-t border-[#eef1f6] pt-3">
-        <button
+      <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => onLike(post.id)}
           onDoubleClick={(event) => event.stopPropagation()}
-          className={`inline-flex h-10 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-semibold transition-colors sm:h-9 ${
-            post.likedByMe
-              ? "border-[#b64242] bg-[#fff1f1] text-[#b64242] hover:bg-[#ffe6e6]"
-              : "border-[#c7ceda] text-[#344052] hover:bg-[#eef1f6]"
-          }`}
+          leftIcon={<Heart fill={post.likedByMe ? "currentColor" : "none"} />}
+          className={cn(
+            "text-sm",
+            post.likedByMe &&
+              "border-negative bg-negative-surface text-negative hover:bg-negative-surface hover:text-negative",
+          )}
         >
-          <Heart size={16} fill={post.likedByMe ? "currentColor" : "none"} />
           {post.likeCount}
-        </button>
-        <span className="inline-flex h-10 items-center gap-2 rounded-md border border-[#c7ceda] px-3 text-sm font-semibold text-[#344052] sm:h-9">
-          <MessageCircle size={16} />
+        </Button>
+        <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-semibold text-foreground [&_svg]:size-[1.15em]">
+          <MessageCircle />
           {post.commentCount}
         </span>
       </div>
@@ -200,16 +210,18 @@ export function PostCard({
                   [post.id]: event.target.value,
                 }))
               }
-              placeholder="댓글 작성"
+              placeholder={ko ? "댓글 작성" : "Write a comment"}
               className="h-11 flex-1 rounded-md border border-[#c7ceda] px-3 text-base outline-none focus:border-[#1f6f8b] sm:h-10 sm:text-sm"
             />
-            <button
+            <Button
+              variant="primary"
+              size="icon"
               onClick={() => onComment(post.id)}
               onDoubleClick={(event) => event.stopPropagation()}
-              className="grid h-11 w-11 cursor-pointer place-items-center rounded-md bg-[#1f6f8b] text-white transition-colors hover:bg-[#195c74] sm:h-10 sm:w-10"
-            >
-              <Send size={16} />
-            </button>
+              aria-label={ko ? "댓글 작성" : "Write a comment"}
+              leftIcon={<Send />}
+              className="h-11 w-11 shrink-0 sm:size-10"
+            />
           </div>
         </div>
       ) : null}
