@@ -133,7 +133,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
     >
       <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] pt-0 sm:px-8 sm:pb-6">
         <header
-          className={`sticky top-0 z-40 -mx-4 flex items-center justify-between gap-3 border-b px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300 sm:-mx-8 sm:px-8 sm:pb-4 sm:pt-4 ${
+          className={`sticky top-0 z-40 w-screen self-center border-b transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300 ${
             headerScrolled
               ? darkMode
                 ? "border-border bg-surface-muted/85 backdrop-blur-md"
@@ -141,50 +141,51 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
               : "border-border bg-surface/95 shadow-sm"
           }`}
         >
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <Image
-              src="/icons/icon.svg"
-              width={40}
-              height={40}
-              alt="15F"
-              className="size-10 shrink-0 rounded-lg shadow-sm"
-              priority
-            />
-            <div className="min-w-0 leading-tight">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
-                Private
-              </p>
-              <h1 className="truncate text-lg font-semibold tracking-tight sm:text-xl">
-                Investment Community
-              </h1>
+          <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:px-8 sm:pb-4 sm:pt-4">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <Image
+                src="/icons/icon.svg"
+                width={40}
+                height={40}
+                alt="15F"
+                className="size-10 shrink-0 rounded-lg shadow-sm"
+                priority
+              />
+              <div className="min-w-0 leading-tight">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
+                  Private
+                </p>
+                <h1 className="truncate text-lg font-semibold tracking-tight sm:text-xl">
+                  Investment Community
+                </h1>
+              </div>
             </div>
-          </div>
-          <div className="flex shrink-0 items-center justify-end gap-3">
-            <div
-              className="hidden items-center rounded-md border border-border bg-surface p-1 sm:flex"
-              aria-label={language === "ko" ? "앱 설정" : "App settings"}
-            >
-              <button
-                type="button"
-                onClick={toggleLanguage}
-                className="flex h-9 min-w-11 cursor-pointer items-center justify-center rounded-md px-3 text-sm font-semibold text-muted transition-colors hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                aria-label={language === "ko" ? "Switch to English" : "한국어로 변경"}
+            <div className="flex shrink-0 items-center justify-end gap-3">
+              <div
+                className="hidden items-center rounded-md border border-border bg-surface p-1 sm:flex"
+                aria-label={language === "ko" ? "앱 설정" : "App settings"}
               >
-                {language === "en" ? "KO" : "EN"}
-              </button>
-              <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-              <button
-                type="button"
-                onClick={toggleDarkMode}
-                className="grid size-9 cursor-pointer place-items-center rounded-md text-muted transition-colors hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                title={darkMode ? "Light mode" : "Dark mode"}
-                aria-label={darkMode ? "Light mode" : "Dark mode"}
-              >
-                {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={toggleLanguage}
+                  className="flex h-9 min-w-11 cursor-pointer items-center justify-center rounded-md px-3 text-sm font-semibold text-muted transition-colors hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  aria-label={language === "ko" ? "Switch to English" : "한국어로 변경"}
+                >
+                  {language === "en" ? "KO" : "EN"}
+                </button>
+                <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+                <button
+                  type="button"
+                  onClick={toggleDarkMode}
+                  className="grid size-9 cursor-pointer place-items-center rounded-md text-muted transition-colors hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  title={darkMode ? "Light mode" : "Dark mode"}
+                  aria-label={darkMode ? "Light mode" : "Dark mode"}
+                >
+                  {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+                </button>
+              </div>
 
-            <details ref={accountMenuRef} className="group relative">
+              <details ref={accountMenuRef} className="group relative">
               <summary
                 className={`flex h-11 max-w-52 cursor-pointer list-none items-center gap-2 rounded-md border bg-surface px-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background [&::-webkit-details-marker]:hidden ${
                   isProfile
@@ -267,6 +268,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                 </button>
               </div>
             </details>
+          </div>
           </div>
         </header>
 
