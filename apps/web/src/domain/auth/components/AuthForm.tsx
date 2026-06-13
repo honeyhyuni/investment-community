@@ -1,5 +1,6 @@
 import { FormEvent } from "react";
 import { ShieldCheck, UserPlus } from "lucide-react";
+import { Button } from "@/common/components/Button";
 import { TextInput } from "@/common/components/TextInput";
 import { AuthMode } from "@/domain/auth/types";
 
@@ -32,23 +33,25 @@ export function AuthForm({
 }) {
   return (
     <>
-      <div className="mt-5 grid grid-cols-2 rounded-md border border-[#d4dae5] bg-[#f3f5f9] p-1">
+      <div className="mt-5 grid grid-cols-2 rounded-md border border-border bg-surface-muted p-1">
         <button
+          type="button"
           onClick={() => setMode("login")}
-          className={`h-9 rounded px-3 text-sm font-medium ${
+          className={`h-9 cursor-pointer rounded-md px-3 text-sm font-semibold transition-colors ${
             mode === "login"
-              ? "bg-white text-[#151923] shadow-sm"
-              : "text-[#607086]"
+              ? "bg-surface text-primary shadow-sm"
+              : "text-muted hover:text-primary"
           }`}
         >
           Sign in
         </button>
         <button
+          type="button"
           onClick={() => setMode("register")}
-          className={`h-9 rounded px-3 text-sm font-medium ${
+          className={`h-9 cursor-pointer rounded-md px-3 text-sm font-semibold transition-colors ${
             mode === "register"
-              ? "bg-white text-[#151923] shadow-sm"
-              : "text-[#607086]"
+              ? "bg-surface text-primary shadow-sm"
+              : "text-muted hover:text-primary"
           }`}
         >
           Request
@@ -58,12 +61,12 @@ export function AuthForm({
       <form onSubmit={submitAuth} className="mt-5 space-y-4">
         <TextInput label="Email" value={email} setValue={setEmail} type="email" />
         {mode === "login" ? (
-          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-[#344052]">
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-foreground">
             <input
               type="checkbox"
               checked={rememberEmail}
               onChange={(event) => setRememberEmail(event.target.checked)}
-              className="h-4 w-4 cursor-pointer accent-[#1f6f8b]"
+              className="h-4 w-4 cursor-pointer accent-primary"
             />
             email 기억
           </label>
@@ -78,13 +81,14 @@ export function AuthForm({
           type="password"
           minLength={8}
         />
-        <button
-          disabled={loading}
-          className="inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white hover:bg-[#195b72] disabled:cursor-not-allowed disabled:opacity-60"
+        <Button
+          type="submit"
+          fullWidth
+          loading={loading}
+          leftIcon={mode === "register" ? <UserPlus /> : <ShieldCheck />}
         >
-          {mode === "register" ? <UserPlus size={16} /> : <ShieldCheck size={16} />}
-          {loading ? "Working" : mode === "register" ? "Request access" : "Sign in"}
-        </button>
+          {mode === "register" ? "Request access" : "Sign in"}
+        </Button>
       </form>
     </>
   );

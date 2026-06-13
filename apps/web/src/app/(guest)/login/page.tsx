@@ -34,11 +34,13 @@ export default function LoginPage() {
   }, [user?.status, router]);
 
   useEffect(() => {
-    const rememberedEmail = window.localStorage.getItem(REMEMBER_EMAIL_KEY);
-    if (rememberedEmail) {
-      setEmail(rememberedEmail);
-      setRememberEmail(true);
-    }
+    queueMicrotask(() => {
+      const rememberedEmail = window.localStorage.getItem(REMEMBER_EMAIL_KEY);
+      if (rememberedEmail) {
+        setEmail(rememberedEmail);
+        setRememberEmail(true);
+      }
+    });
   }, []);
 
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
@@ -82,7 +84,7 @@ export default function LoginPage() {
   const heading = mode === "login" ? "Sign in" : "Request access";
 
   return (
-    <div className="grid flex-1 gap-6 py-6 lg:grid-cols-[380px_1fr]">
+    <div className="grid flex-1 items-start gap-5 py-5 sm:py-6 lg:grid-cols-[420px_1fr]">
       <AuthPanel
         mode={mode}
         setMode={setMode}

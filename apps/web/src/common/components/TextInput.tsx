@@ -13,14 +13,14 @@ export function TextInput({
 }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-[#344052]">{label}</span>
+      <span className="text-sm font-medium text-foreground">{label}</span>
       <input
         value={value}
         onChange={(event) => setValue(event.target.value)}
         type={type}
         required
         minLength={minLength}
-        className="mt-1 h-11 w-full rounded-md border border-[#c7ceda] px-3 outline-none focus:border-[#1f6f8b]"
+        className="mt-1 h-11 w-full rounded-md border border-border-strong bg-surface px-3 text-foreground outline-none transition-colors focus:border-primary"
       />
     </label>
   );
