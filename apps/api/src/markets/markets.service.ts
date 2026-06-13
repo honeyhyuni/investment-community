@@ -933,19 +933,6 @@ export class MarketsService {
       generated.companyNews,
     );
     const datedTitle = this.withKoreanDatePrefix(generated.title);
-    const imageUrl = await this.generateMarketBriefingImage(
-      normalizedMarket,
-      datedTitle,
-      generated.keywords,
-      generated.summaryLines,
-    ).catch((error) => {
-      this.logger.warn(
-        `Market briefing image generation failed for ${normalizedMarket}: ${
-          error instanceof Error ? error.message : 'unknown error'
-        }`,
-      );
-      return null;
-    });
     const saved = await this.marketBriefingsRepository.save(
         this.marketBriefingsRepository.create({
         market: normalizedMarket,
@@ -957,15 +944,11 @@ export class MarketsService {
         companyNews: generated.companyNews,
         keywords: generated.keywords,
         watchPoints: generated.watchPoints,
-        imageUrl,
+        imageUrl: null,
         sources: generated.sources,
         source: 'openai',
         model: generated.model,
-        imageModel: imageUrl
-          ? this.configService.get<string>('OPENAI_SVG_MODEL')?.trim() ||
-            this.configService.get<string>('OPENAI_MODEL')?.trim() ||
-            'gpt-5.5'
-          : null,
+        imageModel: null,
         generatedAt: new Date(),
       }),
     );
