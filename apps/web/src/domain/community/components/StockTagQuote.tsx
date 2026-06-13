@@ -3,6 +3,7 @@
 import { MarketQuote, TradeTick } from "@/common/types";
 import { formatMoney, formatNumber } from "@/common/utils/format";
 import { applyLiveTrade } from "@/common/utils/market";
+import { usePreferencesStore } from "@/common/stores/preferences";
 import { StockTag } from "@/domain/community/types";
 
 type StockTagQuoteProps = {
@@ -22,6 +23,7 @@ export function StockTagQuote({
   onRemove,
   exchangeRate,
 }: StockTagQuoteProps) {
+  const ko = usePreferencesStore((s) => s.language) === "ko";
   const displayCurrency = tag.market === "KR" ? "KRW" : "USD";
   const currentQuote = quote ? applyLiveTrade(quote, live) : null;
   const positive = (currentQuote?.change ?? 0) >= 0;
@@ -52,7 +54,7 @@ export function StockTagQuote({
           type="button"
           onClick={() => onRemove(tag)}
           className="border-l border-border px-2 py-1.5 font-semibold text-muted hover:bg-surface-muted"
-          title={`${tag.symbol} 제거`}
+          title={ko ? `${tag.symbol} 제거` : `Remove ${tag.symbol}`}
         >
           x
         </button>

@@ -3,6 +3,7 @@
 import { Dispatch, SetStateAction } from "react";
 import { Pencil, Send, Trash2 } from "lucide-react";
 import { Button } from "@/common/components/Button";
+import { usePreferencesStore } from "@/common/stores/preferences";
 import { CommunityComment } from "@/domain/community/types";
 
 export function CommentThread({
@@ -28,6 +29,7 @@ export function CommentThread({
   canModerate?: boolean;
   onAuthorClick?: (userId: string) => void;
 }) {
+  const ko = usePreferencesStore((s) => s.language) === "ko";
   return (
     <div className="rounded-md bg-[#f6f8fb] p-3">
       <div className="flex items-center justify-between gap-2">
@@ -38,21 +40,23 @@ export function CommentThread({
           <div className="flex gap-1">
             {comment.author.id === currentUserId ? (
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="icon-sm"
                 onClick={() => onEditComment(comment.id, comment.content)}
-                title="수정"
-                aria-label="수정"
+                title={ko ? "수정" : "Edit"}
+                aria-label={ko ? "수정" : "Edit"}
                 leftIcon={<Pencil />}
+                className="size-7 text-muted"
               />
             ) : null}
             <Button
-              variant="ghost-danger"
+              variant="secondary"
               size="icon-sm"
               onClick={() => onDeleteComment(comment.id)}
-              title="삭제"
-              aria-label="삭제"
+              title={ko ? "삭제" : "Delete"}
+              aria-label={ko ? "삭제" : "Delete"}
               leftIcon={<Trash2 />}
+              className="size-7 text-muted"
             />
           </div>
         ) : null}
@@ -70,21 +74,23 @@ export function CommentThread({
                   <div className="flex gap-1">
                     {reply.author.id === currentUserId ? (
                       <Button
-                        variant="ghost"
+                        variant="secondary"
                         size="icon-sm"
                         onClick={() => onEditComment(reply.id, reply.content)}
-                        title="수정"
-                        aria-label="수정"
+                        title={ko ? "수정" : "Edit"}
+                        aria-label={ko ? "수정" : "Edit"}
                         leftIcon={<Pencil />}
+                        className="size-7 text-muted"
                       />
                     ) : null}
                     <Button
-                      variant="ghost-danger"
+                      variant="secondary"
                       size="icon-sm"
                       onClick={() => onDeleteComment(reply.id)}
-                      title="삭제"
-                      aria-label="삭제"
+                      title={ko ? "삭제" : "Delete"}
+                      aria-label={ko ? "삭제" : "Delete"}
                       leftIcon={<Trash2 />}
+                      className="size-7 text-muted"
                     />
                   </div>
                 ) : null}
@@ -103,15 +109,16 @@ export function CommentThread({
               [comment.id]: event.target.value,
             }))
           }
-          placeholder="답글 작성"
+          placeholder={ko ? "답글 작성" : "Write a reply"}
           className="h-10 flex-1 rounded-md border border-[#c7ceda] bg-white px-3 text-base outline-none focus:border-[#1f6f8b] sm:h-9 sm:text-sm"
         />
         <Button
           variant="primary"
           size="icon-sm"
           onClick={() => onComment(postId, comment.id)}
-          aria-label="답글 작성"
+          aria-label={ko ? "답글 작성" : "Write a reply"}
           leftIcon={<Send />}
+          className="h-10 w-10 shrink-0 sm:size-9"
         />
       </div>
     </div>

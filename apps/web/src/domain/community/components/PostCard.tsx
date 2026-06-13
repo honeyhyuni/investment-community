@@ -5,6 +5,7 @@ import { Heart, MessageCircle, Pencil, Send, Trash2 } from "lucide-react";
 import { RichContent } from "@/common/components/RichContent";
 import { Button } from "@/common/components/Button";
 import { cn } from "@/common/utils/cn";
+import { usePreferencesStore } from "@/common/stores/preferences";
 import { MarketQuote, TradeTick } from "@/common/types";
 import { CommunityPost, StockTag } from "@/domain/community/types";
 import { getPostHtml } from "@/common/utils/community";
@@ -60,6 +61,7 @@ export function PostCard({
   onAuthorClick?: (userId: string) => void;
   canModerate?: boolean;
 }) {
+  const ko = usePreferencesStore((s) => s.language) === "ko";
   const [expanded, setExpanded] = useState(forceExpanded);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const html = getPostHtml(post);
@@ -95,28 +97,30 @@ export function PostCard({
             · {new Date(post.createdAt).toLocaleString()}
           </p>
           <h3 className="mt-1 line-clamp-2 text-base font-semibold leading-6 sm:truncate sm:text-lg">
-            {post.title || post.content || "제목 없음"}
+            {post.title || post.content || (ko ? "제목 없음" : "Untitled")}
           </h3>
         </div>
         {post.author.id === currentUserId || canModerate ? (
           <div className="flex gap-1">
             {post.author.id === currentUserId ? (
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="icon-sm"
                 onClick={() => onEditPost(post)}
-                title="수정"
-                aria-label="수정"
+                title={ko ? "수정" : "Edit"}
+                aria-label={ko ? "수정" : "Edit"}
                 leftIcon={<Pencil />}
+                className="text-muted"
               />
             ) : null}
             <Button
-              variant="ghost-danger"
+              variant="secondary"
               size="icon-sm"
               onClick={() => onDeletePost(post.id)}
-              title="삭제"
-              aria-label="삭제"
+              title={ko ? "삭제" : "Delete"}
+              aria-label={ko ? "삭제" : "Delete"}
               leftIcon={<Trash2 />}
+              className="text-muted"
             />
           </div>
         ) : null}
@@ -137,7 +141,7 @@ export function PostCard({
           onDoubleClick={(event) => event.stopPropagation()}
           className="mt-3 text-sm"
         >
-          전체 글 보기
+          {ko ? "전체 글 보기" : "View full post"}
         </Button>
       ) : null}
 
@@ -206,7 +210,7 @@ export function PostCard({
                   [post.id]: event.target.value,
                 }))
               }
-              placeholder="댓글 작성"
+              placeholder={ko ? "댓글 작성" : "Write a comment"}
               className="h-11 flex-1 rounded-md border border-[#c7ceda] px-3 text-base outline-none focus:border-[#1f6f8b] sm:h-10 sm:text-sm"
             />
             <Button
@@ -214,8 +218,9 @@ export function PostCard({
               size="icon"
               onClick={() => onComment(post.id)}
               onDoubleClick={(event) => event.stopPropagation()}
-              aria-label="댓글 작성"
+              aria-label={ko ? "댓글 작성" : "Write a comment"}
               leftIcon={<Send />}
+              className="h-11 w-11 shrink-0 sm:size-10"
             />
           </div>
         </div>

@@ -152,8 +152,23 @@ src/
 
 ---
 
-## 6. 원칙 요약
+## 6. 다국어(i18n) 컨벤션
+
+**전용 i18n 라이브러리는 없다.** 언어는 `usePreferencesStore`의 `language: "en" | "ko"` 하나로 관리하고, 컴포넌트가 직접 분기한다.
+
+- **모든 사용자 노출 문자열은 언어 대응이 필수다.** 버튼 라벨·placeholder·empty/loading 문구는 물론 `window.confirm/prompt` 다이얼로그까지 포함. 하드코딩 한국어를 그대로 두면 언어 토글에 반응하지 않는다 — **가장 흔한 누락**이다(예: 초기 `CommunityPage`는 `language`를 안 읽어 버튼이 안 바뀌었다).
+- 패턴: 컴포넌트에서 `const language = usePreferencesStore((s) => s.language)` 구독 → 짧게 `const ko = language === "ko"` → `{ko ? "최신순" : "Latest"}`.
+  - 동적 문장은 템플릿 리터럴로 분기: `` ko ? `구독자 ${n}` : `${n} followers` ``.
+  - 셸(헤더/nav 라벨), `NewsPage`/`StocksPage` 등은 이미 이 방식. 새 컴포넌트도 동일하게.
+- **새 문자열을 추가할 때 ko/en 둘 다 적는다.** 한쪽만 적고 "나중에" 미루지 않는다 — 미작성이 곧 미번역 버그다.
+- **UI 칩(chrome) vs 서버 콘텐츠 구분:** 뉴스 본문·종목명처럼 서버에서 오는 텍스트는 API의 `language` 파라미터로 받는다(예: `/markets/news?...&language=ko`). 컴포넌트 분기는 UI 라벨에만.
+- 한계: 단일 분기라 문자열이 많아지면 장황하다. 메시지 카탈로그/i18n 라이브러리 도입은 구조 안정화 **이후 별도 패스**로(react-query 전환과 동일 기조).
+
+---
+
+## 7. 원칙 요약
 
 1. 새 컴포넌트/훅/타입은 위 폴더 규칙 자리에 둔다. `app/page.tsx`에 새 로직을 더 쌓지 않는다.
 2. 공유는 zustand, 로컬은 라우트/도메인 훅, 라우트 점프는 URL.
 3. Next 16은 학습데이터와 다르다 — 라우팅/서버·클라이언트 경계는 `node_modules/next/dist/docs/`(레포 루트, workspace hoist) 확인 후 작성.
+4. 사용자 노출 문자열은 항상 `language` 대응 — 새 문자열은 ko/en 둘 다 작성한다(§6).
