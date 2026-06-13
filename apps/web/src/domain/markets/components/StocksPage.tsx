@@ -37,7 +37,7 @@ import {
   TradeTick,
 } from "@/common/types";
 import { CommunityPost } from "@/domain/community/types";
-import { getPostHtml, htmlToPlainText } from "@/common/utils/community";
+import { getPostHtml, htmlToPlainText } from "@/domain/community/utils";
 import { useStockRouteSelection } from "@/domain/markets/hooks/useStockRouteSelection";
 import {
   buildMetricItems,

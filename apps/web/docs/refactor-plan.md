@@ -32,7 +32,8 @@
 
 **유틸/타입 추출** (lib = I/O 래퍼, utils = 순수 함수)
 - `common/types.ts`(Language/DisplayCurrency/MarketQuote/StockSymbol/TradeTick)
-- `common/utils/`: `format.ts`(공유 formatMoney/formatNumber/convertMoneyValue — MarketPulse·StockTagQuote 중복 제거), `stock-search.ts`, `community.ts`
+- `common/utils/`: `format.ts`(공유 formatMoney/formatNumber/convertMoneyValue — MarketPulse·StockTagQuote 중복 제거), `stock-search.ts`
+- `domain/community/utils.ts`: 커뮤니티 글/에디터/태그 정규화 헬퍼
 - `common/lib/api.ts` (기존 `src/lib/api.ts` 이동)
 
 - 종목 뷰 `domain/markets/components/StocksPage.tsx`로 추출 완료 → `(auth)/page.tsx`는 13줄 래퍼. 종목 전용 formatter는 `domain/markets/utils/format.ts`, 타입은 `domain/markets/types.ts`. (데드코드 `convertQuote` 제거)
@@ -44,7 +45,7 @@
 ## Phase 진행표
 
 - [x] **Phase 0 — 문서화**: `docs/` + AGENTS.md 연결
-- [x] **Phase 1 — 순수 유틸/타입 추출** — `common/types.ts`, `common/utils/{stock-search,community,format}.ts`, `common/lib/api.ts`, `domain/markets/{types,utils/format}.ts`
+- [x] **Phase 1 — 순수 유틸/타입 추출** — `common/types.ts`, `common/utils/{stock-search,format}.ts`, `common/lib/api.ts`, `domain/community/utils.ts`, `domain/markets/{types,utils/format}.ts`
 - [x] **Phase 2 — leaf/도메인 컴포넌트 추출** — auth/markets/community/news/admin/profile + 공용(StatusBadge/Notice/TextInput/SessionLoading/MarkdownContent)
 - [x] **Phase 3 — zustand 스토어 + 상태 리프팅** — session/market-data/preferences 전부, providers로 라이프사이클 일원화
 - [x] **Phase 4 — 라우트 분리** — `(guest)/login`, `(auth)/layout` 공유 셸, 뷰 라우트 5개 전부 얇은 래퍼, nav(usePathname)+URL 점프, `Home()` 해체, 종목 `StocksPage` 추출

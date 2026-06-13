@@ -10,7 +10,7 @@ import {
   htmlToPlainText,
   makeEditorBlockId,
   resolveCommunityStockTag,
-} from "@/common/utils/community";
+} from "@/domain/community/utils";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { useSessionStore } from "@/common/stores/session";
 import { CommunityContentBlock, CommunityPost, StockTag } from "@/domain/community/types";

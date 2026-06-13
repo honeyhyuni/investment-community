@@ -7,7 +7,7 @@ import { Mark, mergeAttributes } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
-import { encodeImageForPost, makeEditorBlockId } from "@/common/utils/community";
+import { encodeImageForPost, makeEditorBlockId } from "@/domain/community/utils";
 import { stockSearchScore } from "@/common/utils/stock-search";
 import { CommunityContentBlock, StockTag } from "@/domain/community/types";
 import { MarketQuote, StockSymbol, TradeTick } from "@/common/types";

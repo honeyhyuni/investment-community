@@ -8,7 +8,7 @@ import { cn } from "@/common/utils/cn";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { MarketQuote, TradeTick } from "@/common/types";
 import { CommunityPost, StockTag } from "@/domain/community/types";
-import { getPostHtml } from "@/common/utils/community";
+import { getPostHtml } from "@/domain/community/utils";
 import { CommentThread } from "@/domain/community/components/CommentThread";
 import { StockTagQuote } from "@/domain/community/components/StockTagQuote";
 

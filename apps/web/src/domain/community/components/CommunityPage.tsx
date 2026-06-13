@@ -7,7 +7,7 @@ import { Notice } from "@/common/components/Notice";
 import { Button } from "@/common/components/Button";
 import { cn } from "@/common/utils/cn";
 import { apiRequest } from "@/common/lib/api";
-import { resolveCommunityStockTag } from "@/common/utils/community";
+import { resolveCommunityStockTag } from "@/domain/community/utils";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";

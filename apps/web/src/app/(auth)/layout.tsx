@@ -165,8 +165,8 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
         {children}
       </section>
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[#d9dee8] bg-white/95 px-2 pb-[calc(0.45rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_24px_rgba(21,25,35,0.08)] backdrop-blur sm:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(21,25,35,0.08)] backdrop-blur sm:hidden">
+        <div className="mx-auto grid h-16 max-w-md grid-cols-4">
           {NAV_ITEMS.filter((item) => !item.adminOnly).map((item) => {
             const active =
               pathname === item.href ||
@@ -177,10 +177,10 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
               <Link
                 key={item.id}
                 href={item.href}
-                className={`flex h-14 flex-col items-center justify-center gap-1 rounded-md text-[11px] font-semibold transition-colors ${
+                className={`flex flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors ${
                   active
-                    ? "bg-[#eef6f9] text-[#1f6f8b]"
-                    : "text-[#607086] hover:bg-[#f3f5f9] hover:text-[#1f6f8b]"
+                    ? "text-primary"
+                    : "text-muted hover:text-primary"
                 }`}
               >
                 <Icon size={19} />
