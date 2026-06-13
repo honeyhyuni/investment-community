@@ -788,7 +788,7 @@ export class MarketsService {
       marketCapitalization:
         this.toNumber(output.hts_avls) > 0
           ? this.toNumber(output.hts_avls) * 100_000_000
-          : undefined,
+          : (financials[0]?.marketCap ?? undefined),
     };
     if (cachedProfile) {
       profile.name = cachedProfile.name ?? profile.name;
