@@ -1290,7 +1290,10 @@ export class MarketsService {
       this.stockMasterRepository.findOne({
         where: {
           symbol: normalizedSymbol,
-          market: normalizedMarket,
+          market:
+            normalizedMarket === 'KR'
+              ? In(['KR:KOSPI', 'KR:KOSDAQ'])
+              : normalizedMarket,
           active: true,
         },
       }),
