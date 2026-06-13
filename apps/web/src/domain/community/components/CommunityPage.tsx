@@ -1,92 +1,66 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus, Users } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
 import { Button } from "@/common/components/Button";
 import { cn } from "@/common/utils/cn";
 import { apiRequest } from "@/common/lib/api";
-import {
-  NEW_POST_TEMPLATE,
-  makeEditorBlockId,
-  getPostHtml,
-  htmlToPlainText,
-} from "@/common/utils/community";
+import { resolveCommunityStockTag } from "@/common/utils/community";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import {
-  CommunityContentBlock,
   CommunityPost,
   CommunityScope,
   CommunityUser,
   FeedSort,
-  StockTag,
 } from "@/domain/community/types";
 import { PostCard } from "@/domain/community/components/PostCard";
-import { PostEditor } from "@/domain/community/components/PostEditor";
-import { stockSearchScore } from "@/common/utils/stock-search";
-import { StockSymbol } from "@/common/types";
+import { useCommunityPosts } from "@/domain/community/hooks/useCommunityPosts";
 
-export function CommunityPage({ postId, userId }: { postId?: string; userId?: string }) {
+export function CommunityPage({ userId }: { userId?: string }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const accessToken = useSessionStore((s) => s.accessToken);
   const user = useSessionStore((s) => s.user);
-  const language = usePreferencesStore((s) => s.language);
-  const ko = language === "ko";
+  const ko = usePreferencesStore((s) => s.language) === "ko";
   const usStocks = useMarketDataStore((s) => s.usStocks);
-  const usSymbols = useMarketDataStore((s) => s.usSymbols);
   const krStocks = useMarketDataStore((s) => s.krStocks);
-  const krSymbols = useMarketDataStore((s) => s.krSymbols);
   const livePrices = useMarketDataStore((s) => s.livePrices);
   const extraQuotes = useMarketDataStore((s) => s.extraQuotes);
   const exchangeRate = useMarketDataStore((s) => s.exchangeRate);
-  const loadStockQuotes = useMarketDataStore((s) => s.loadStockQuotes);
 
-  const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const {
+    posts,
+    setPosts,
+    commentDrafts,
+    setCommentDrafts,
+    replyDrafts,
+    setReplyDrafts,
+    error,
+    setError,
+    stockSymbols,
+    toggleLike,
+    createComment,
+    editComment,
+    deleteComment,
+    deletePost,
+    openStock,
+  } = useCommunityPosts();
+
   const [users, setUsers] = useState<CommunityUser[]>([]);
   const [scope, setScope] = useState<CommunityScope>("all");
   const [sort, setSort] = useState<FeedSort>("latest");
-  const [editingPostId, setEditingPostId] = useState<string | null>(null);
-  const [postTitle, setPostTitle] = useState("");
-  const [postBlocks, setPostBlocks] = useState<CommunityContentBlock[]>([
-    { id: makeEditorBlockId(), type: "text", text: NEW_POST_TEMPLATE },
-  ]);
-  const [postTagQuery, setPostTagQuery] = useState("");
-  const [postTags, setPostTags] = useState<StockTag[]>([]);
-  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
-  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
-  const [editorOpen, setEditorOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  const selectedPostId = postId ?? searchParams.get("post");
-  const detailMode = !!selectedPostId || !!userId;
-  const stockSymbols = useMemo(() => [...krSymbols, ...usSymbols], [krSymbols, usSymbols]);
   useEffect(() => {
     if (!accessToken) {
-      return;
-    }
-    if (selectedPostId) {
-      loadSinglePost(selectedPostId, accessToken);
       return;
     }
     loadCommunity(accessToken, userId ? "user" : scope, sort, userId);
-  }, [accessToken, scope, sort, selectedPostId, userId]);
-
-  useEffect(() => {
-    if (!accessToken) {
-      return;
-    }
-    const tags = [...posts.flatMap((post) => post.stockTags), ...postTags].map(
-      (tag) => resolveCommunityStockTag(tag, stockSymbols),
-    );
-    if (tags.length > 0) {
-      loadStockQuotes(tags, accessToken);
-    }
-  }, [accessToken, loadStockQuotes, postTags, posts, stockSymbols]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, scope, sort, userId]);
 
   async function loadCommunity(
     token = accessToken,
@@ -126,155 +100,13 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
     }
   }
 
-  function resetEditor() {
-    setEditingPostId(null);
-    setPostTitle("");
-    setPostBlocks([{ id: makeEditorBlockId(), type: "text", text: NEW_POST_TEMPLATE }]);
-    setPostTagQuery("");
-    setPostTags([]);
-  }
-
-  async function savePost() {
-    const html = postBlocks.find((block) => block.type === "text")?.text?.trim() ?? "";
-    const contentBlocks: CommunityContentBlock[] = html
-      ? [{ id: postBlocks[0]?.id ?? makeEditorBlockId(), type: "text", text: html }]
-      : [];
-    const plainContent = htmlToPlainText(html).slice(0, 50000);
-
-    if (!accessToken || (!postTitle.trim() && contentBlocks.length === 0)) {
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    try {
-      await apiRequest<CommunityPost>(
-        editingPostId ? `/community/posts/${editingPostId}` : "/community/posts",
-        editingPostId ? "PATCH" : "POST",
-        {
-          accessToken,
-          body: {
-            title: postTitle,
-            content: plainContent,
-            contentBlocks,
-            stockTags: postTags,
-            imageUrls: [],
-          },
-        },
-      );
-      resetEditor();
-      setEditorOpen(false);
-      await loadCommunity(accessToken, userId ? "user" : scope, sort, userId);
-    } catch (postError) {
-      setError(postError instanceof Error ? postError.message : "Could not post.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function editPost(post: CommunityPost) {
-    setEditingPostId(post.id);
-    setPostTitle(post.title ?? "");
-    setPostBlocks([
-      {
-        id: makeEditorBlockId(),
-        type: "text",
-        text: getPostHtml(post),
-      },
-    ]);
-    setPostTags(post.stockTags);
-    setEditorOpen(true);
-  }
-
-  async function deletePost(postId: string) {
-    if (!accessToken || !window.confirm(ko ? "이 게시글을 삭제할까요?" : "Delete this post?")) {
-      return;
-    }
-    await apiRequest<{ ok: true }>(`/community/posts/${postId}`, "DELETE", { accessToken });
-    setPosts((current) => current.filter((post) => post.id !== postId));
-  }
-
-  async function toggleLike(postId: string) {
-    if (!accessToken) {
-      return;
-    }
-    try {
-      const result = await apiRequest<{ liked: boolean; likeCount: number }>(
-        `/community/posts/${postId}/like`,
-        "POST",
-        { accessToken },
-      );
-      setPosts((current) =>
-        current.map((post) =>
-          post.id === postId
-            ? { ...post, likedByMe: result.liked, likeCount: result.likeCount }
-            : post,
-        ),
-      );
-    } catch (likeError) {
-      setError(likeError instanceof Error ? likeError.message : "Could not like.");
-    }
-  }
-
-  async function createComment(postId: string, parentId?: string) {
-    if (!accessToken) {
-      return;
-    }
-    const draftKey = parentId ?? postId;
-    const content = parentId ? replyDrafts[draftKey] : commentDrafts[draftKey];
-    if (!content?.trim()) {
-      return;
-    }
-
-    try {
-      const post = await apiRequest<CommunityPost>(
-        `/community/posts/${postId}/comments`,
-        "POST",
-        { accessToken, body: { content, parentId } },
-      );
-      setPosts((current) => current.map((item) => (item.id === post.id ? post : item)));
-      if (parentId) {
-        setReplyDrafts((drafts) => ({ ...drafts, [draftKey]: "" }));
-      } else {
-        setCommentDrafts((drafts) => ({ ...drafts, [draftKey]: "" }));
-      }
-    } catch (commentError) {
-      setError(commentError instanceof Error ? commentError.message : "Could not comment.");
-    }
-  }
-
-  async function editComment(commentId: string, content: string) {
-    if (!accessToken) {
-      return;
-    }
-    const next = window.prompt(ko ? "댓글 수정" : "Edit comment", content);
-    if (!next?.trim()) {
-      return;
-    }
-    const post = await apiRequest<CommunityPost>(`/community/comments/${commentId}`, "PATCH", {
-      accessToken,
-      body: { content: next },
-    });
-    setPosts((current) => current.map((item) => (item.id === post.id ? post : item)));
-  }
-
-  async function deleteComment(commentId: string) {
-    if (!accessToken || !window.confirm(ko ? "이 댓글을 삭제할까요?" : "Delete this comment?")) {
-      return;
-    }
-    const post = await apiRequest<CommunityPost>(`/community/comments/${commentId}`, "DELETE", {
-      accessToken,
-    });
-    setPosts((current) => current.map((item) => (item.id === post.id ? post : item)));
-  }
-
-  async function toggleSubscription(userId: string) {
+  async function toggleSubscription(targetUserId: string) {
     if (!accessToken) {
       return;
     }
     try {
       await apiRequest<{ subscribed: boolean }>(
-        `/community/users/${userId}/subscribe`,
+        `/community/users/${targetUserId}/subscribe`,
         "POST",
         { accessToken },
       );
@@ -288,82 +120,59 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
     }
   }
 
-  function openStock(tag: StockTag) {
-    const resolvedTag = resolveCommunityStockTag(tag, stockSymbols);
-    router.push(
-      `/?symbol=${encodeURIComponent(resolvedTag.symbol)}&market=${resolvedTag.market}`,
-    );
-  }
-
-  const visiblePosts = selectedPostId
-    ? posts.filter((post) => post.id === selectedPostId)
-    : posts;
-
   if (!user) {
     return null;
   }
 
-  async function loadSinglePost(nextPostId: string, token = accessToken) {
-    if (!token) {
-      return;
-    }
+  const feedList = (
+    <div className="grid gap-4">
+      {loading && posts.length === 0 ? (
+        <p className="rounded-lg border border-[#d9dee8] bg-white p-8 text-center text-sm text-[#607086]">
+          {ko ? "불러오는 중입니다." : "Loading…"}
+        </p>
+      ) : null}
+      {!loading && posts.length === 0 ? (
+        <p className="rounded-lg border border-[#d9dee8] bg-white p-8 text-center text-sm text-[#607086]">
+          {ko ? "표시할 피드가 없습니다." : "No posts to show."}
+        </p>
+      ) : null}
+      {posts.map((post) => (
+        <PostCard
+          key={post.id}
+          post={{
+            ...post,
+            stockTags: post.stockTags.map((tag) =>
+              resolveCommunityStockTag(tag, stockSymbols),
+            ),
+          }}
+          currentUserId={user.id}
+          commentDrafts={commentDrafts}
+          setCommentDrafts={setCommentDrafts}
+          replyDrafts={replyDrafts}
+          setReplyDrafts={setReplyDrafts}
+          onLike={toggleLike}
+          onComment={createComment}
+          onEditPost={(target) => router.push(`/community/${target.id}/edit`)}
+          onDeletePost={deletePost}
+          onEditComment={editComment}
+          onDeleteComment={deleteComment}
+          onStockTagClick={openStock}
+          usStocks={usStocks}
+          krStocks={krStocks}
+          livePrices={livePrices}
+          extraQuotes={extraQuotes}
+          exchangeRate={exchangeRate}
+          enableImagePreview={false}
+          onOpenPost={(nextPostId) => router.push(`/community/${nextPostId}`)}
+          canModerate={user.role === "ADMIN"}
+          onAuthorClick={(nextUserId) => router.push(`/community/users/${nextUserId}`)}
+        />
+      ))}
+    </div>
+  );
 
-    setLoading(true);
-    setError("");
-    try {
-      const post = await apiRequest<CommunityPost>(
-        `/community/posts/${encodeURIComponent(nextPostId)}`,
-        "GET",
-        { accessToken: token },
-      );
-      setPosts([post]);
-    } catch (communityError) {
-      setPosts([]);
-      setError(
-        communityError instanceof Error
-          ? communityError.message
-          : "Could not load community post.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (editorOpen) {
-    return (
-      <>
-        {error ? <Notice message="" error={error} /> : null}
-
-        <div className="flex-1 py-4 sm:py-6">
-          <PostEditor
-            title={postTitle}
-            setTitle={setPostTitle}
-            blocks={postBlocks}
-            setBlocks={setPostBlocks}
-            tagQuery={postTagQuery}
-            setTagQuery={setPostTagQuery}
-            tags={postTags}
-            setTags={setPostTags}
-            stockSymbols={stockSymbols}
-            usStocks={usStocks}
-            krStocks={krStocks}
-            livePrices={livePrices}
-            extraQuotes={extraQuotes}
-            exchangeRate={exchangeRate}
-            editingPostId={editingPostId}
-            loading={loading}
-            onSubmit={savePost}
-            onCancel={() => {
-              resetEditor();
-              setEditorOpen(false);
-            }}
-          />
-        </div>
-      </>
-    );
-  }
-
-  if (detailMode) {
+  // 유저 피드 — scope 탭/사이드바 없이 해당 유저 글 목록만
+  if (userId) {
     return (
       <>
         {error ? <Notice message="" error={error} /> : null}
@@ -376,59 +185,12 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
             <Button
               variant="primary"
               leftIcon={<Plus />}
-              onClick={() => {
-                resetEditor();
-                setEditorOpen(true);
-              }}
+              onClick={() => router.push("/community/new")}
             >
               {ko ? "피드 글 쓰기" : "New post"}
             </Button>
           </div>
-
-          <div className="grid gap-4">
-            {loading && posts.length === 0 ? (
-              <p className="rounded-lg border border-[#d9dee8] bg-white p-8 text-center text-sm text-[#607086]">
-                {ko ? "불러오는 중입니다." : "Loading…"}
-              </p>
-            ) : null}
-            {!loading && visiblePosts.length === 0 ? (
-              <p className="rounded-lg border border-[#d9dee8] bg-white p-8 text-center text-sm text-[#607086]">
-                {ko ? "표시할 피드가 없습니다." : "No posts to show."}
-              </p>
-            ) : null}
-            {visiblePosts.map((post) => (
-              <PostCard
-                key={post.id}
-                post={{
-                  ...post,
-                  stockTags: post.stockTags.map((tag) =>
-                    resolveCommunityStockTag(tag, stockSymbols),
-                  ),
-                }}
-                currentUserId={user.id}
-                commentDrafts={commentDrafts}
-                setCommentDrafts={setCommentDrafts}
-                replyDrafts={replyDrafts}
-                setReplyDrafts={setReplyDrafts}
-                onLike={toggleLike}
-                onComment={createComment}
-                onEditPost={editPost}
-                onDeletePost={deletePost}
-                onEditComment={editComment}
-                onDeleteComment={deleteComment}
-                onStockTagClick={openStock}
-                usStocks={usStocks}
-                krStocks={krStocks}
-                livePrices={livePrices}
-                extraQuotes={extraQuotes}
-                exchangeRate={exchangeRate}
-                forceExpanded
-                enableImagePreview
-                canModerate={user.role === "ADMIN"}
-                onAuthorClick={(nextUserId) => router.push(`/community/users/${nextUserId}`)}
-              />
-            ))}
-          </div>
+          {feedList}
         </div>
       </>
     );
@@ -439,89 +201,49 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
       {error ? <Notice message="" error={error} /> : null}
 
       <div className="grid flex-1 gap-4 py-4 sm:gap-5 sm:py-6 lg:grid-cols-[1fr_320px]">
-          <div className="flex flex-col gap-4">
-            {/* 피드 툴바 (탭 + 글쓰기) */}
-            <div className="-mx-4 flex items-center gap-2 border-y border-[#d9dee8] bg-white p-3 shadow-sm sm:mx-0 sm:rounded-lg sm:border">
-              {/* 스코프 탭 (세그먼티드 컨트롤) */}
-              <div
-                role="tablist"
-                className="flex flex-1 gap-1 rounded-xl bg-surface-subtle p-1 sm:inline-flex sm:flex-none"
-              >
-                {(["all", "subscribed", "mine"] as CommunityScope[]).map((item) => {
-                  const active = scope === item;
-                  return (
-                    <button
-                      key={item}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => setScope(item)}
-                      className={cn(
-                        "flex-1 cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold transition-all sm:flex-none",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-surface-subtle",
-                        active
-                          ? "bg-surface text-primary shadow-sm"
-                          : "text-muted hover:bg-surface/60",
-                      )}
-                    >
-                      {item === "all"
+        <div className="flex flex-col gap-4">
+          {/* 피드 툴바 (탭 + 정렬 + 글쓰기) */}
+          <div className="-mx-4 flex items-center gap-2 border-y border-[#d9dee8] bg-white p-3 shadow-sm sm:mx-0 sm:rounded-lg sm:border">
+            {/* 스코프 탭 (세그먼티드 컨트롤) */}
+            <div
+              role="tablist"
+              className="flex flex-1 gap-1 rounded-xl bg-surface-subtle p-1 sm:inline-flex sm:flex-none"
+            >
+              {(["all", "subscribed", "mine"] as CommunityScope[]).map((item) => {
+                const active = scope === item;
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setScope(item)}
+                    className={cn(
+                      "flex-1 cursor-pointer rounded-lg px-4 py-2 text-sm font-semibold transition-all sm:flex-none",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-surface-subtle",
+                      active
+                        ? "bg-surface text-primary shadow-sm"
+                        : "text-muted hover:bg-surface/60",
+                    )}
+                  >
+                    {item === "all"
+                      ? ko
+                        ? "전체 피드"
+                        : "All"
+                      : item === "subscribed"
                         ? ko
-                          ? "전체 피드"
-                          : "All"
-                        : item === "subscribed"
-                          ? ko
-                            ? "구독 피드"
-                            : "Following"
-                          : ko
-                            ? "내 피드"
-                            : "Mine"}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <Button
-                variant="primary"
-                size="sm"
-                leftIcon={<Plus />}
-                onClick={() => {
-                  resetEditor();
-                  setEditorOpen(true);
-                }}
-                className="ml-auto shrink-0"
-              >
-                {ko ? "피드 글 쓰기" : "New post"}
-              </Button>
+                          ? "구독 피드"
+                          : "Following"
+                        : ko
+                          ? "내 피드"
+                          : "Mine"}
+                  </button>
+                );
+              })}
             </div>
 
-            {editorOpen ? (
-              <PostEditor
-                title={postTitle}
-                setTitle={setPostTitle}
-                blocks={postBlocks}
-                setBlocks={setPostBlocks}
-                tagQuery={postTagQuery}
-                setTagQuery={setPostTagQuery}
-                tags={postTags}
-                setTags={setPostTags}
-                stockSymbols={stockSymbols}
-                usStocks={usStocks}
-                krStocks={krStocks}
-                livePrices={livePrices}
-                extraQuotes={extraQuotes}
-                exchangeRate={exchangeRate}
-                editingPostId={editingPostId}
-                loading={loading}
-                onSubmit={savePost}
-                onCancel={() => {
-                  resetEditor();
-                  setEditorOpen(false);
-                }}
-              />
-            ) : null}
-
-            {/* 필터 (글 목록 좌상단) */}
-            <div className="-my-1.5 flex gap-1.5">
+            {/* 정렬 필터 (최신순 / 인기순) */}
+            <div className="flex shrink-0 gap-1.5">
               {(["latest", "popular"] as FeedSort[]).map((item) => {
                 const active = sort === item;
                 return (
@@ -544,123 +266,72 @@ export function CommunityPage({ postId, userId }: { postId?: string; userId?: st
               })}
             </div>
 
-            <div className="grid gap-4">
-              {loading && posts.length === 0 ? (
-                <p className="rounded-lg border border-[#d9dee8] bg-white p-8 text-center text-sm text-[#607086]">
-                  {ko ? "불러오는 중입니다." : "Loading…"}
-                </p>
-              ) : null}
-              {!loading && visiblePosts.length === 0 ? (
-                <p className="rounded-lg border border-[#d9dee8] bg-white p-8 text-center text-sm text-[#607086]">
-                  {ko ? "표시할 피드가 없습니다." : "No posts to show."}
-                </p>
-              ) : null}
-              {visiblePosts.map((post) => (
-                <PostCard
-                  key={post.id}
-                  post={{
-                    ...post,
-                    stockTags: post.stockTags.map((tag) =>
-                      resolveCommunityStockTag(tag, stockSymbols),
-                    ),
-                  }}
-                  currentUserId={user.id}
-                  commentDrafts={commentDrafts}
-                  setCommentDrafts={setCommentDrafts}
-                  replyDrafts={replyDrafts}
-                  setReplyDrafts={setReplyDrafts}
-                  onLike={toggleLike}
-                  onComment={createComment}
-                  onEditPost={editPost}
-                  onDeletePost={deletePost}
-                  onEditComment={editComment}
-                  onDeleteComment={deleteComment}
-                  onStockTagClick={openStock}
-                  usStocks={usStocks}
-                  krStocks={krStocks}
-                  livePrices={livePrices}
-                  extraQuotes={extraQuotes}
-                  exchangeRate={exchangeRate}
-                  forceExpanded={post.id === selectedPostId}
-                  enableImagePreview={false}
-                  onOpenPost={(nextPostId) => router.push(`/community/${nextPostId}`)}
-                  canModerate={user.role === "ADMIN"}
-                  onAuthorClick={(nextUserId) => router.push(`/community/users/${nextUserId}`)}
-                />
-              ))}
-            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus />}
+              onClick={() => router.push("/community/new")}
+              className="ml-auto shrink-0"
+            >
+              {ko ? "피드 글 쓰기" : "New post"}
+            </Button>
           </div>
 
-          <aside className="rounded-lg border border-[#d9dee8] bg-white p-4 shadow-sm lg:sticky lg:top-4 lg:self-start">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-[#344052]">{ko ? "구독" : "Following"}</h2>
-              <Users size={16} className="text-[#607086]" />
-            </div>
-            <div className="mt-3 space-y-2">
-              {users.length === 0 ? (
-                <div className="py-6 text-center">
-                  <p className="text-xs text-muted">
-                    {ko ? "아직 표시할 멤버가 없어요." : "No members to show yet."}
-                  </p>
-                </div>
-              ) : null}
-              {users.slice(0, 3).map((communityUser) => (
-                <div key={communityUser.id} className="rounded-md border border-[#eef1f6] p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <Button
-                        variant="link"
-                        onClick={() => router.push(`/community/users/${communityUser.id}`)}
-                        className="block max-w-full truncate text-sm"
-                      >
-                        {communityUser.nickname}
-                        {communityUser.isMe ? (ko ? " · 나" : " · You") : ""}
-                      </Button>
-                      <p className="truncate text-xs text-muted">
-                        {ko
-                          ? `구독자 ${communityUser.subscriberCount} · 구독중 ${communityUser.followingCount}`
-                          : `${communityUser.subscriberCount} followers · ${communityUser.followingCount} following`}
-                      </p>
-                    </div>
-                    {!communityUser.isMe ? (
-                      <Button
-                        variant={communityUser.isSubscribed ? "secondary" : "primary"}
-                        size="sm"
-                        onClick={() => toggleSubscription(communityUser.id)}
-                      >
-                        {communityUser.isSubscribed
-                          ? ko
-                            ? "구독중"
-                            : "Following"
-                          : ko
-                            ? "구독"
-                            : "Follow"}
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
+          {feedList}
         </div>
+
+        <aside className="rounded-lg border border-[#d9dee8] bg-white p-4 shadow-sm lg:sticky lg:top-4 lg:self-start">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-[#344052]">{ko ? "구독" : "Following"}</h2>
+            <Users size={16} className="text-[#607086]" />
+          </div>
+          <div className="mt-3 space-y-2">
+            {users.length === 0 ? (
+              <div className="py-6 text-center">
+                <p className="text-xs text-muted">
+                  {ko ? "아직 표시할 멤버가 없어요." : "No members to show yet."}
+                </p>
+              </div>
+            ) : null}
+            {users.slice(0, 3).map((communityUser) => (
+              <div key={communityUser.id} className="rounded-md border border-[#eef1f6] p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Button
+                      variant="link"
+                      onClick={() => router.push(`/community/users/${communityUser.id}`)}
+                      className="block max-w-full truncate text-sm"
+                    >
+                      {communityUser.nickname}
+                      {communityUser.isMe ? (ko ? " · 나" : " · You") : ""}
+                    </Button>
+                    <p className="truncate text-xs text-muted">
+                      {ko
+                        ? `구독자 ${communityUser.subscriberCount} · 구독중 ${communityUser.followingCount}`
+                        : `${communityUser.subscriberCount} followers · ${communityUser.followingCount} following`}
+                    </p>
+                  </div>
+                  {!communityUser.isMe ? (
+                    <Button
+                      variant={communityUser.isSubscribed ? "secondary" : "primary"}
+                      size="sm"
+                      onClick={() => toggleSubscription(communityUser.id)}
+                    >
+                      {communityUser.isSubscribed
+                        ? ko
+                          ? "구독중"
+                          : "Following"
+                        : ko
+                          ? "구독"
+                          : "Follow"}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </aside>
+      </div>
     </>
   );
-}
-
-function resolveCommunityStockTag(tag: StockTag, stockSymbols: StockSymbol[]): StockTag {
-  const exact = stockSymbols.find(
-    (item) => item.symbol.toUpperCase() === tag.symbol.toUpperCase(),
-  );
-  const resolved =
-    exact ??
-    stockSymbols
-      .map((item) => ({ item, score: stockSearchScore(item, tag.symbol) }))
-      .filter((result) => result.score >= 50)
-      .sort((a, b) => b.score - a.score)[0]?.item;
-
-  return {
-    symbol: resolved?.symbol ?? tag.symbol.toUpperCase(),
-    name: resolved?.description ?? tag.name,
-    market: resolved ? (resolved.currency === "KRW" ? "KR" : "US") : tag.market,
-  };
 }

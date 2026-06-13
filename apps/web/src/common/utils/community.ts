@@ -1,4 +1,6 @@
-import { CommunityPost } from "@/domain/community/types";
+import { StockSymbol } from "@/common/types";
+import { stockSearchScore } from "@/common/utils/stock-search";
+import { CommunityPost, StockTag } from "@/domain/community/types";
 
 export function makeEditorBlockId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -32,6 +34,28 @@ export function htmlToPlainText(html: string): string {
     .replace(/&gt;/g, ">")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** 글 태그 심볼을 실제 보유 심볼 목록에 맞춰 정규화(정확 일치 우선, 없으면 유사도 매칭). */
+export function resolveCommunityStockTag(
+  tag: StockTag,
+  stockSymbols: StockSymbol[],
+): StockTag {
+  const exact = stockSymbols.find(
+    (item) => item.symbol.toUpperCase() === tag.symbol.toUpperCase(),
+  );
+  const resolved =
+    exact ??
+    stockSymbols
+      .map((item) => ({ item, score: stockSearchScore(item, tag.symbol) }))
+      .filter((result) => result.score >= 50)
+      .sort((a, b) => b.score - a.score)[0]?.item;
+
+  return {
+    symbol: resolved?.symbol ?? tag.symbol.toUpperCase(),
+    name: resolved?.description ?? tag.name,
+    market: resolved ? (resolved.currency === "KRW" ? "KR" : "US") : tag.market,
+  };
 }
 
 export async function encodeImageForPost(file: File): Promise<string> {

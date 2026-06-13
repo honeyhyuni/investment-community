@@ -208,7 +208,7 @@ export function StocksPage() {
   }
 
   function openRelatedPost(postId: string) {
-    router.push(`/community?post=${encodeURIComponent(postId)}`);
+    router.push(`/community/${encodeURIComponent(postId)}`);
   }
 
   async function loadStockDetail(symbol: string, token = accessToken) {

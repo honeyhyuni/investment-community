@@ -66,6 +66,9 @@ export function PostCard({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const html = getPostHtml(post);
   const showFull = forceExpanded || expanded || html.length < 1200;
+  // 리스트(카드) 모드에서는 onOpenPost가 있어 카운트만 보여주고,
+  // 상세 모드(onOpenPost 없음)에서만 좋아요/댓글 인터랙션을 허용한다.
+  const interactive = !onOpenPost;
 
   function getTagQuote(tag: StockTag) {
     return (
@@ -79,26 +82,36 @@ export function PostCard({
     <article
       onDoubleClick={() => onOpenPost?.(post.id)}
       className={`-mx-4 rounded-none border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border ${
-        onOpenPost ? "cursor-pointer transition-shadow hover:shadow-md" : ""
+        onOpenPost
+          ? "cursor-pointer transition-all duration-150 ease-out will-change-transform hover:scale-[1.01] hover:shadow-md"
+          : ""
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold text-[#607086] sm:text-xs">
-            <Button
-              variant="link"
-              onClick={(event) => {
-                event.stopPropagation();
-                onAuthorClick?.(post.author.id);
-              }}
-            >
-              {post.author.nickname}
-            </Button>{" "}
-            · {new Date(post.createdAt).toLocaleString()}
-          </p>
-          <h3 className="mt-1 line-clamp-2 text-base font-semibold leading-6 sm:truncate sm:text-lg">
+          <h3 className="line-clamp-2 text-lg font-semibold leading-snug text-foreground sm:truncate">
             {post.title || post.content || (ko ? "제목 없음" : "Untitled")}
           </h3>
+          <div className="mt-1.5 flex items-center gap-2">
+            <span
+              aria-hidden
+              className="grid size-6 shrink-0 place-items-center rounded-full bg-surface-subtle text-[10px] font-semibold uppercase text-muted"
+            >
+              {post.author.nickname.charAt(0)}
+            </span>
+            <p className="min-w-0 truncate text-[11px] font-semibold text-muted sm:text-xs">
+              <Button
+                variant="link"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onAuthorClick?.(post.author.id);
+                }}
+              >
+                {post.author.nickname}
+              </Button>{" "}
+              · {new Date(post.createdAt).toLocaleString()}
+            </p>
+          </div>
         </div>
         {post.author.id === currentUserId || canModerate ? (
           <div className="flex gap-1">
@@ -164,27 +177,39 @@ export function PostCard({
       ) : null}
 
       <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => onLike(post.id)}
-          onDoubleClick={(event) => event.stopPropagation()}
-          leftIcon={<Heart fill={post.likedByMe ? "currentColor" : "none"} />}
-          className={cn(
-            "text-sm",
-            post.likedByMe &&
-              "border-negative bg-negative-surface text-negative hover:bg-negative-surface hover:text-negative",
-          )}
-        >
-          {post.likeCount}
-        </Button>
-        <span className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-semibold text-foreground [&_svg]:size-[1.15em]">
+        {interactive ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => onLike(post.id)}
+            onDoubleClick={(event) => event.stopPropagation()}
+            leftIcon={<Heart fill={post.likedByMe ? "currentColor" : "none"} />}
+            className={cn(
+              "text-sm",
+              post.likedByMe &&
+                "border-negative bg-negative-surface text-negative hover:bg-negative-surface hover:text-negative",
+            )}
+          >
+            {post.likeCount}
+          </Button>
+        ) : (
+          <span
+            className={cn(
+              "inline-flex h-9 items-center gap-1.5 text-sm font-semibold [&_svg]:size-[1.15em]",
+              post.likedByMe ? "text-negative" : "text-muted",
+            )}
+          >
+            <Heart fill={post.likedByMe ? "currentColor" : "none"} />
+            {post.likeCount}
+          </span>
+        )}
+        <span className="inline-flex h-9 items-center gap-1.5 text-sm font-semibold text-muted [&_svg]:size-[1.15em]">
           <MessageCircle />
           {post.commentCount}
         </span>
       </div>
 
-      {(showFull || post.comments.length > 0) ? (
+      {interactive ? (
         <div className="mt-4 space-y-3">
           {post.comments.map((comment) => (
             <CommentThread

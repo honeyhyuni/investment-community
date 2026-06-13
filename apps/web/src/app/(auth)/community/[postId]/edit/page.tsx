@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { SessionLoading } from "@/common/components/SessionLoading";
-import { PostDetailPage } from "@/domain/community/components/PostDetailPage";
+import { PostEditorPage } from "@/domain/community/components/PostEditorPage";
 
 export default async function Page({
   params,
@@ -11,7 +11,7 @@ export default async function Page({
 
   return (
     <Suspense fallback={<SessionLoading />}>
-      <PostDetailPage postId={postId} />
+      <PostEditorPage postId={postId} />
     </Suspense>
   );
 }
