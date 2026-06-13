@@ -1,10 +1,12 @@
 "use client";
 
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
+  ChevronDown,
   FileText,
   LogOut,
   MessageSquareText,
@@ -15,7 +17,6 @@ import {
   UserPen,
 } from "lucide-react";
 import { SessionLoading } from "@/common/components/SessionLoading";
-import { Button } from "@/common/components/Button";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { useMarketDataStore } from "@/common/stores/market-data";
@@ -39,6 +40,8 @@ const NAV_ITEMS: Array<{
 export default function AuthLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const accountMenuRef = useRef<HTMLDetailsElement>(null);
+  const [headerScrolled, setHeaderScrolled] = useState(false);
 
   const accessToken = useSessionStore((s) => s.accessToken);
   const user = useSessionStore((s) => s.user);
@@ -58,6 +61,8 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
   const isAdmin = user?.role === "ADMIN";
   const isProfile = pathname === "/profile";
+  const accountName = user?.nickname || user?.email || "Account";
+  const accountInitial = accountName.trim().charAt(0).toUpperCase() || "U";
 
   useEffect(() => {
     if (!authChecking && user?.status !== "APPROVED") {
@@ -65,10 +70,55 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
     }
   }, [authChecking, user?.status, router]);
 
+  useEffect(() => {
+    const syncHeaderState = () => {
+      setHeaderScrolled(window.scrollY > 12);
+    };
+
+    syncHeaderState();
+    window.addEventListener("scroll", syncHeaderState, { passive: true });
+    return () => window.removeEventListener("scroll", syncHeaderState);
+  }, []);
+
+  useEffect(() => {
+    const closeAccountMenu = () => {
+      if (accountMenuRef.current) {
+        accountMenuRef.current.open = false;
+      }
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const menu = accountMenuRef.current;
+      if (!menu?.open || !(event.target instanceof Node) || menu.contains(event.target)) {
+        return;
+      }
+      closeAccountMenu();
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeAccountMenu();
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (accountMenuRef.current) {
+      accountMenuRef.current.open = false;
+    }
+  }, [pathname]);
+
   if (authChecking || user?.status !== "APPROVED") {
     return (
       <main
-        className={`min-h-dvh overflow-x-hidden bg-[#f6f7fb] text-[#161a22] ${darkMode ? "dark-app" : ""}`}
+        className={`min-h-dvh overflow-x-clip bg-[#f6f7fb] text-[#161a22] ${darkMode ? "dark-app" : ""}`}
       >
         <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:px-8 sm:py-6">
           <SessionLoading />
@@ -79,14 +129,27 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
   return (
     <main
-      className={`min-h-dvh overflow-x-hidden bg-[#f6f7fb] text-[#161a22] ${darkMode ? "dark-app" : ""}`}
+      className={`min-h-dvh overflow-x-clip bg-[#f6f7fb] text-[#161a22] ${darkMode ? "dark-app" : ""}`}
     >
-      <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] pt-[calc(1rem+env(safe-area-inset-top))] sm:px-8 sm:py-6">
-        <header className="flex flex-col gap-4 border-b border-[#d9dee8] pb-4 sm:flex-row sm:items-center sm:justify-between sm:pb-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-[image:var(--primary-gradient)] text-sm font-extrabold tracking-tight text-white shadow-sm">
-              15F
-            </span>
+      <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] pt-0 sm:px-8 sm:pb-6">
+        <header
+          className={`sticky top-0 z-40 -mx-4 flex items-center justify-between gap-3 border-b px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300 sm:-mx-8 sm:px-8 sm:pb-4 sm:pt-4 ${
+            headerScrolled
+              ? darkMode
+                ? "border-border bg-surface-muted/85 backdrop-blur-md"
+                : "border-border bg-background/70 backdrop-blur-md"
+              : "border-border bg-surface/95 shadow-sm"
+          }`}
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <Image
+              src="/icons/icon.svg"
+              width={40}
+              height={40}
+              alt="15F"
+              className="size-10 shrink-0 rounded-lg shadow-sm"
+              priority
+            />
             <div className="min-w-0 leading-tight">
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
                 Private
@@ -96,34 +159,114 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
               </h1>
             </div>
           </div>
-          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-            <Button variant="outline" onClick={toggleLanguage} className="flex-1 sm:flex-none">
-              {language === "en" ? "한국어" : "English"}
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={toggleDarkMode}
-              title={darkMode ? "Light mode" : "Dark mode"}
-              aria-label={darkMode ? "Light mode" : "Dark mode"}
-              leftIcon={darkMode ? <Sun /> : <Moon />}
-            />
-            <Button
-              variant={isProfile ? "primary" : "outline"}
-              onClick={() => router.push("/profile")}
-              leftIcon={<UserPen />}
-              className="flex-1 sm:flex-none"
+          <div className="flex shrink-0 items-center justify-end gap-3">
+            <div
+              className="hidden items-center rounded-md border border-border bg-surface p-1 sm:flex"
+              aria-label={language === "ko" ? "앱 설정" : "App settings"}
             >
-              {language === "ko" ? "프로필 수정" : "Profile"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={logout}
-              leftIcon={<LogOut />}
-              className="flex-1 sm:flex-none"
-            >
-              {language === "ko" ? "로그아웃" : "Logout"}
-            </Button>
+              <button
+                type="button"
+                onClick={toggleLanguage}
+                className="flex h-9 min-w-11 cursor-pointer items-center justify-center rounded-md px-3 text-sm font-semibold text-muted transition-colors hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                aria-label={language === "ko" ? "Switch to English" : "한국어로 변경"}
+              >
+                {language === "en" ? "KO" : "EN"}
+              </button>
+              <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+              <button
+                type="button"
+                onClick={toggleDarkMode}
+                className="grid size-9 cursor-pointer place-items-center rounded-md text-muted transition-colors hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                title={darkMode ? "Light mode" : "Dark mode"}
+                aria-label={darkMode ? "Light mode" : "Dark mode"}
+              >
+                {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+              </button>
+            </div>
+
+            <details ref={accountMenuRef} className="group relative">
+              <summary
+                className={`flex h-11 max-w-52 cursor-pointer list-none items-center gap-2 rounded-md border bg-surface px-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background [&::-webkit-details-marker]:hidden ${
+                  isProfile
+                    ? "border-primary text-primary"
+                    : "border-border text-foreground hover:border-primary hover:text-primary"
+                }`}
+              >
+                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                  {accountInitial}
+                </span>
+                <span className="hidden min-w-0 max-w-28 truncate sm:block">
+                  {accountName}
+                </span>
+                <ChevronDown
+                  size={16}
+                  className="shrink-0 text-muted transition-transform group-open:rotate-180"
+                  aria-hidden
+                />
+              </summary>
+              <div className="absolute right-0 z-50 mt-2 w-56 rounded-md border border-border bg-surface p-1 shadow-lg">
+                <div className="border-b border-border px-3 py-2">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {accountName}
+                  </p>
+                  {user?.email ? (
+                    <p className="truncate text-xs text-muted">{user.email}</p>
+                  ) : null}
+                </div>
+                <div className="border-b border-border py-1 sm:hidden">
+                  <button
+                    type="button"
+                    onClick={toggleLanguage}
+                    className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <span className="grid size-5 place-items-center text-xs font-bold">
+                      {language === "en" ? "KO" : "EN"}
+                    </span>
+                    {language === "ko" ? "English" : "한국어"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleDarkMode}
+                    className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+                    {darkMode
+                      ? language === "ko"
+                        ? "라이트 모드"
+                        : "Light mode"
+                      : language === "ko"
+                        ? "다크 모드"
+                        : "Dark mode"}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (accountMenuRef.current) {
+                      accountMenuRef.current.open = false;
+                    }
+                    router.push("/profile");
+                  }}
+                  className="mt-1 flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <UserPen size={16} />
+                  {language === "ko" ? "프로필 수정" : "Profile"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (accountMenuRef.current) {
+                      accountMenuRef.current.open = false;
+                    }
+                    logout();
+                  }}
+                  className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <LogOut size={16} />
+                  {language === "ko" ? "로그아웃" : "Logout"}
+                </button>
+              </div>
+            </details>
           </div>
         </header>
 
@@ -137,11 +280,15 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             }
           }}
           title={language === "ko" ? "시장 지표" : "Market pulse"}
+          eyebrow={language === "ko" ? "실시간 개요" : "Live overview"}
           refreshLabel={language === "ko" ? "새로고침" : "Refresh"}
           exchangeRate={exchangeRate}
+          exchangeRateErrorLabel={
+            language === "ko" ? "KIS 환율 조회 실패" : "Exchange rate unavailable"
+          }
         />
 
-        <nav className="mt-4 hidden gap-2 overflow-x-auto border-b border-[#d9dee8] sm:flex">
+        <nav className="mt-4 hidden gap-2 overflow-x-auto border-b border-border sm:flex">
           {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
             const active =
               pathname === item.href ||
@@ -153,8 +300,8 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                 href={item.href}
                 className={`flex h-11 shrink-0 cursor-pointer items-center whitespace-nowrap border-b-2 px-3 text-sm font-semibold transition-colors ${
                   active
-                    ? "border-[#1f6f8b] text-[#1f6f8b]"
-                    : "border-transparent text-[#607086] hover:border-[#c7ceda] hover:text-[#1f6f8b]"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted hover:border-border-strong hover:text-primary"
                 }`}
               >
                 {language === "ko" ? item.label.ko : item.label.en}
@@ -166,8 +313,12 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         {children}
       </section>
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(21,25,35,0.08)] backdrop-blur sm:hidden">
-        <div className="mx-auto grid h-16 max-w-md grid-cols-4">
-          {NAV_ITEMS.filter((item) => !item.adminOnly).map((item) => {
+        <div
+          className={`mx-auto grid h-16 max-w-md ${
+            isAdmin ? "grid-cols-5" : "grid-cols-4"
+          }`}
+        >
+          {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
             const active =
               pathname === item.href ||
               (item.href !== "/" && pathname.startsWith(`${item.href}/`));
