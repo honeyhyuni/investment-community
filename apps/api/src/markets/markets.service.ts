@@ -1272,7 +1272,7 @@ export class MarketsService {
   ): Promise<MarketNews[]> {
     const normalizedSymbol = symbol.toUpperCase().trim();
     const normalizedMarket = market.toUpperCase() === 'KR' ? 'KR' : 'US';
-    const cacheKey = `market:stock-news:v3:${normalizedMarket}:${normalizedSymbol}`;
+    const cacheKey = `market:stock-news:v6:${normalizedMarket}:${normalizedSymbol}`;
     const cached = await this.redis.get(cacheKey).catch(() => null);
 
     if (cached) {
@@ -1298,10 +1298,24 @@ export class MarketsService {
         where: { symbol: normalizedSymbol },
       }),
     ]);
-    const companyName = master?.name || profile?.name || normalizedSymbol;
+    let companyName = profile?.name || master?.name || normalizedSymbol;
+    if (
+      normalizedMarket === 'KR' &&
+      master?.dartCorpCode &&
+      !/[가-힣]/.test(companyName)
+    ) {
+      const dartProfile = await this.getDartCompanyProfileByCorpCode(
+        master.dartCorpCode,
+      ).catch(() => null);
+      companyName = dartProfile?.corp_name || companyName;
+    }
+    const newsCompanyName =
+      normalizedMarket === 'KR'
+        ? this.normalizeKoreanCompanyName(companyName)
+        : companyName;
     const query =
       normalizedMarket === 'KR'
-        ? `${companyName} ${normalizedSymbol}`
+        ? newsCompanyName
         : `${companyName} ${normalizedSymbol} 주식`;
 
     let news: MarketNews[] = await this.getNaverSearchNews(query).catch(
@@ -1326,8 +1340,11 @@ export class MarketsService {
         this.isStockRelatedNews(item, normalizedSymbol, companyName),
       );
     }
-    if (!news.length && normalizedMarket === 'KR') {
-      news = await this.getNaverStockNews(normalizedSymbol, companyName).catch(
+    if (normalizedMarket === 'KR') {
+      const financeNews = await this.getNaverStockNews(
+        normalizedSymbol,
+        newsCompanyName,
+      ).catch(
         (error) => {
           this.logger.warn(
             `Naver Finance stock news request failed for ${normalizedSymbol}: ${
@@ -1337,14 +1354,21 @@ export class MarketsService {
           return [] as MarketNews[];
         },
       );
-    }
-    if (normalizedMarket === 'KR') {
-      news = news.filter((item) =>
-        this.isKoreanStockRelatedNews(item, companyName),
+      news = [...news, ...financeNews];
+      news = news.filter(
+        (item) =>
+          item.related === normalizedSymbol ||
+          this.isKoreanStockRelatedNews(item, newsCompanyName),
       );
     }
 
-    const latest = news
+    const byUrl = new Map<string, MarketNews>();
+    news.forEach((item) => {
+      if (item.url && !byUrl.has(item.url)) {
+        byUrl.set(item.url, item);
+      }
+    });
+    const latest = [...byUrl.values()]
       .filter((item) => item.headline && item.url)
       .sort((a, b) => b.datetime - a.datetime)
       .slice(0, 5);
@@ -1396,13 +1420,28 @@ export class MarketsService {
     news: MarketNews,
     companyName: string,
   ): boolean {
-    const normalizedName = companyName.replace(/\s+/g, '');
-    if (!normalizedName) {
+    const normalizedName = this.normalizeKoreanCompanyName(companyName).replace(
+      /\s+/g,
+      '',
+    );
+    if (normalizedName.length < 2) {
       return false;
     }
-    return `${news.headline} ${news.summary}`
-      .replace(/\s+/g, '')
-      .includes(normalizedName);
+    const text = `${news.headline} ${news.summary}`.replace(/\s+/g, '');
+    const aliases = new Set([normalizedName]);
+    if (normalizedName.length >= 4 && normalizedName.endsWith('우')) {
+      aliases.add(normalizedName.slice(0, -1));
+    }
+    return [...aliases].some((alias) => text.includes(alias));
+  }
+
+  private normalizeKoreanCompanyName(companyName: string): string {
+    return companyName
+      .replace(/\(주\)|（주）|㈜/g, '')
+      .replace(/^주식회사\s*/g, '')
+      .replace(/\s*주식회사$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   async getCandles(
@@ -1700,7 +1739,7 @@ export class MarketsService {
 
     const url = new URL('https://openapi.naver.com/v1/search/news.json');
     url.searchParams.set('query', query);
-    url.searchParams.set('display', '5');
+    url.searchParams.set('display', '20');
     url.searchParams.set('start', '1');
     url.searchParams.set('sort', 'date');
     const response = await fetch(url, {
