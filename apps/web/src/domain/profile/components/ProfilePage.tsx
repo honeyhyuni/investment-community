@@ -2,18 +2,21 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPen } from "lucide-react";
+import { ChevronLeft, UserPen } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
-import { statusLabel } from "@/common/components/StatusBadge";
+import { Button } from "@/common/components/Button";
+import { SectionHeader } from "@/common/components/SectionHeader";
 import { TextInput } from "@/common/components/TextInput";
 import { useSessionStore } from "@/common/stores/session";
-import { apiRequest, User } from "@/common/lib/api";
+import { usePreferencesStore } from "@/common/stores/preferences";
+import { apiRequest, User, UserRole, UserStatus } from "@/common/lib/api";
 
 export function ProfilePage() {
   const router = useRouter();
   const accessToken = useSessionStore((s) => s.accessToken);
   const user = useSessionStore((s) => s.user);
   const setUser = useSessionStore((s) => s.setUser);
+  const ko = usePreferencesStore((s) => s.language) === "ko";
 
   const [nicknameDraft, setNicknameDraft] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -49,7 +52,11 @@ export function ProfilePage() {
       router.replace("/?notice=profile-updated");
     } catch (profileError) {
       setError(
-        profileError instanceof Error ? profileError.message : "Could not update profile.",
+        profileError instanceof Error
+          ? profileError.message
+          : ko
+            ? "프로필을 수정하지 못했습니다."
+            : "Could not update profile.",
       );
     } finally {
       setLoading(false);
@@ -62,7 +69,9 @@ export function ProfilePage() {
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("New passwords do not match.");
+      setError(
+        ko ? "새 비밀번호가 일치하지 않습니다." : "New passwords do not match.",
+      );
       return;
     }
 
@@ -77,10 +86,18 @@ export function ProfilePage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setMessage("Password changed. Sign in again when this session expires.");
+      setMessage(
+        ko
+          ? "비밀번호를 변경했습니다. 세션이 만료되면 다시 로그인하세요."
+          : "Password changed. Sign in again when this session expires.",
+      );
     } catch (passwordError) {
       setError(
-        passwordError instanceof Error ? passwordError.message : "Could not change password.",
+        passwordError instanceof Error
+          ? passwordError.message
+          : ko
+            ? "비밀번호를 변경하지 못했습니다."
+            : "Could not change password.",
       );
     } finally {
       setLoading(false);
@@ -92,9 +109,10 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="flex-1 py-6">
+    <div className="flex-1 py-4 sm:py-6">
       <ProfilePanel
         user={user}
+        ko={ko}
         nicknameDraft={nicknameDraft}
         setNicknameDraft={setNicknameDraft}
         loading={loading}
@@ -116,6 +134,7 @@ export function ProfilePage() {
 
 function ProfilePanel({
   user,
+  ko,
   nicknameDraft,
   setNicknameDraft,
   loading,
@@ -132,6 +151,7 @@ function ProfilePanel({
   onBack,
 }: {
   user: User;
+  ko: boolean;
   nicknameDraft: string;
   setNicknameDraft: (value: string) => void;
   loading: boolean;
@@ -148,25 +168,22 @@ function ProfilePanel({
   onBack: () => void;
 }) {
   return (
-    <section className="rounded-lg border border-[#d9dee8] bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607086]">
-            Profile
-          </p>
-          <h2 className="mt-1 text-xl font-semibold">Edit profile</h2>
-        </div>
-        <button
-          onClick={onBack}
-          className="cursor-pointer rounded-md border border-[#c7ceda] bg-white px-3 py-2 text-sm font-semibold text-[#344052] transition-colors hover:border-[#1f6f8b] hover:bg-[#eef1f6] hover:text-[#1f6f8b]"
-        >
-          Back
-        </button>
-      </div>
+    <section className="-mx-4 border-y border-border bg-surface p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
+      <SectionHeader
+        eyebrow={ko ? "계정" : "Account"}
+        title={ko ? "프로필 수정" : "Edit profile"}
+        action={
+          <Button variant="secondary" size="sm" leftIcon={<ChevronLeft />} onClick={onBack}>
+            {ko ? "뒤로" : "Back"}
+          </Button>
+        }
+      />
 
       <form onSubmit={onSubmit} className="mt-5 space-y-4">
         <label className="block">
-          <span className="text-sm font-medium text-[#344052]">Nickname</span>
+          <span className="text-sm font-medium text-foreground">
+            {ko ? "닉네임" : "Nickname"}
+          </span>
           <input
             value={nicknameDraft}
             onChange={(event) => setNicknameDraft(event.target.value)}
@@ -174,55 +191,56 @@ function ProfilePanel({
             minLength={2}
             maxLength={24}
             required
-            className="mt-1 h-11 w-full rounded-md border border-[#c7ceda] px-3 outline-none focus:border-[#1f6f8b]"
+            className="mt-1 h-11 w-full rounded-md border border-border-strong bg-surface px-3 text-foreground outline-none transition-colors focus:border-primary"
           />
         </label>
 
         <div className="grid gap-3 md:grid-cols-2">
-          <InfoBox label="Email" value={user.email} />
-          <InfoBox label="Role" value={user.role} />
-          <InfoBox label="Status" value={statusLabel[user.status]} />
-          <InfoBox label="Joined" value={new Date(user.createdAt).toLocaleDateString()} />
+          <InfoBox label={ko ? "이메일" : "Email"} value={user.email} />
+          <InfoBox label={ko ? "권한" : "Role"} value={roleLabel(user.role, ko)} />
+          <InfoBox label={ko ? "상태" : "Status"} value={statusText(user.status, ko)} />
+          <InfoBox
+            label={ko ? "가입일" : "Joined"}
+            value={new Date(user.createdAt).toLocaleDateString(ko ? "ko-KR" : "en-US")}
+          />
         </div>
 
-        <button
-          disabled={loading}
-          className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195b72] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <UserPen size={16} />
-          {loading ? "Saving" : "Save profile"}
-        </button>
+        <Button variant="primary" leftIcon={<UserPen />} loading={loading}>
+          {ko ? "프로필 저장" : "Save profile"}
+        </Button>
       </form>
 
-      <form onSubmit={onPasswordSubmit} className="mt-6 space-y-4 border-t border-[#eef1f6] pt-5">
-        <h3 className="text-base font-semibold">Change password</h3>
+      <form
+        onSubmit={onPasswordSubmit}
+        className="mt-6 space-y-4 border-t border-border pt-5"
+      >
+        <h3 className="text-base font-semibold text-foreground">
+          {ko ? "비밀번호 변경" : "Change password"}
+        </h3>
         <TextInput
-          label="Current password"
+          label={ko ? "현재 비밀번호" : "Current password"}
           value={currentPassword}
           setValue={setCurrentPassword}
           type="password"
           minLength={8}
         />
         <TextInput
-          label="New password"
+          label={ko ? "새 비밀번호" : "New password"}
           value={newPassword}
           setValue={setNewPassword}
           type="password"
           minLength={8}
         />
         <TextInput
-          label="Confirm new password"
+          label={ko ? "새 비밀번호 확인" : "Confirm new password"}
           value={confirmPassword}
           setValue={setConfirmPassword}
           type="password"
           minLength={8}
         />
-        <button
-          disabled={loading}
-          className="inline-flex h-11 cursor-pointer items-center rounded-md bg-[#1f6f8b] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#195b72] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? "Saving" : "Change password"}
-        </button>
+        <Button variant="primary" loading={loading}>
+          {ko ? "비밀번호 변경" : "Change password"}
+        </Button>
       </form>
 
       <Notice message={message} error={error} />
@@ -232,9 +250,23 @@ function ProfilePanel({
 
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3">
-      <p className="text-xs text-[#607086]">{label}</p>
-      <p className="mt-1 text-sm font-semibold">{value}</p>
+    <div className="rounded-md border border-border bg-surface-muted p-3">
+      <p className="text-xs text-muted">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-foreground">{value}</p>
     </div>
   );
+}
+
+function roleLabel(role: UserRole, ko: boolean): string {
+  if (!ko) {
+    return role === "ADMIN" ? "Admin" : "User";
+  }
+  return role === "ADMIN" ? "관리자" : "일반";
+}
+
+function statusText(status: UserStatus, ko: boolean): string {
+  if (!ko) {
+    return status === "APPROVED" ? "Approved" : status === "PENDING" ? "Pending" : "Rejected";
+  }
+  return status === "APPROVED" ? "승인됨" : status === "PENDING" ? "대기중" : "거부됨";
 }

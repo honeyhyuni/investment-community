@@ -2,15 +2,50 @@
 
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
+import { Button } from "@/common/components/Button";
+import { SectionHeader } from "@/common/components/SectionHeader";
+import { SegmentedControl } from "@/common/components/SegmentedControl";
+import { Skeleton } from "@/common/components/Skeleton";
 import { apiRequest } from "@/common/lib/api";
 import { useSessionStore } from "@/common/stores/session";
+import { usePreferencesStore } from "@/common/stores/preferences";
 import { BriefingMarket, MarketBriefing } from "@/domain/market-briefing/types";
 
-const briefingTabs: Array<{ id: BriefingMarket; label: string; caption: string }> = [
-  { id: "KR", label: "한국시황", caption: "오늘장 주식 요약" },
-  { id: "US", label: "미국시황", caption: "전날 미국장 요약" },
+type Lang = "ko" | "en";
+
+const briefingTabs: Array<{
+  id: BriefingMarket;
+  label: Record<Lang, string>;
+  caption: Record<Lang, string>;
+}> = [
+  {
+    id: "KR",
+    label: { ko: "한국시황", en: "KR Market" },
+    caption: { ko: "오늘장 주식 요약", en: "Today's session" },
+  },
+  {
+    id: "US",
+    label: { ko: "미국시황", en: "US Market" },
+    caption: { ko: "전날 미국장 요약", en: "Prev. US session" },
+  },
 ];
+
+// 시장 이름(리스트 카드·상세 헤더에서 공유).
+function marketLabel(market: BriefingMarket, ko: boolean): string {
+  if (market === "KR") {
+    return ko ? "한국시황" : "KR Market";
+  }
+  return ko ? "미국시황" : "US Market";
+}
+
+function marketCaption(market: BriefingMarket, ko: boolean): string {
+  if (market === "KR") {
+    return ko ? "오늘장 주식 요약" : "Today's session recap";
+  }
+  return ko ? "전날 미국장 요약" : "Previous US session recap";
+}
 
 const pageSize = 10;
 const oneDayMs = 24 * 60 * 60 * 1000;
@@ -24,6 +59,8 @@ export function MarketBriefingPage({
   const router = useRouter();
   const accessToken = useSessionStore((s) => s.accessToken);
   const user = useSessionStore((s) => s.user);
+  const ko = usePreferencesStore((s) => s.language) === "ko";
+  const lang: Lang = ko ? "ko" : "en";
   const [market, setMarket] = useState<BriefingMarket>("KR");
   const [briefings, setBriefings] = useState<MarketBriefing[]>([]);
   const [detailBriefing, setDetailBriefing] = useState<MarketBriefing | null>(null);
@@ -82,13 +119,15 @@ export function MarketBriefingPage({
         setError(
           briefingError instanceof Error
             ? briefingError.message
-            : "마켓 브리핑을 불러오지 못했습니다.",
+            : ko
+              ? "마켓 브리핑을 불러오지 못했습니다."
+              : "Could not load market briefings.",
         );
       } finally {
         setLoading(false);
       }
     },
-    [accessToken, briefingId, market],
+    [accessToken, briefingId, market, ko],
   );
 
   useEffect(() => {
@@ -127,7 +166,9 @@ export function MarketBriefingPage({
         setError(
           briefingError instanceof Error
             ? briefingError.message
-            : "마켓 브리핑을 불러오지 못했습니다.",
+            : ko
+              ? "마켓 브리핑을 불러오지 못했습니다."
+              : "Could not load market briefings.",
         );
       })
       .finally(() => {
@@ -139,46 +180,41 @@ export function MarketBriefingPage({
     return () => {
       cancelled = true;
     };
-  }, [accessToken, briefingId]);
+  }, [accessToken, briefingId, ko]);
 
   return (
     <>
       {error ? <Notice message="" error={error} /> : null}
 
       <div className="grid flex-1 gap-4 py-4 sm:gap-6 sm:py-6 lg:grid-cols-[1fr]">
-        <section className="-mx-4 border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#607086]">
-                AI Market Briefing
-              </p>
-              <h2 className="mt-1 text-xl font-semibold text-[#17202e] sm:text-2xl">
-                마켓 브리핑
-              </h2>
-            </div>
-            <span className="rounded-md bg-[#eef3f8] px-2.5 py-1 text-sm font-semibold text-[#344052]">
-              {briefings.length}
-            </span>
-          </div>
+        <section className="-mx-4 border-y border-border bg-surface p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
+          <SectionHeader
+            eyebrow="AI Market Briefing"
+            title={ko ? "마켓 브리핑" : "Market Briefing"}
+            action={
+              <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                {briefings.length}
+              </span>
+            }
+          />
 
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            {briefingTabs.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setMarket(item.id)}
-                className={`cursor-pointer rounded-md px-3 py-2 text-sm font-semibold transition-colors sm:text-base ${
-                  market === item.id
-                    ? "bg-[#1f6f8b] text-white"
-                    : "border border-[#c7ceda] bg-white text-[#344052] hover:bg-[#eef1f6]"
-                }`}
-              >
-                {item.label}
-                <span className="mt-0.5 block text-[11px] font-medium opacity-80 sm:ml-2 sm:mt-0 sm:inline sm:text-xs">
-                  {item.caption}
+          <SegmentedControl
+            className="mt-4 w-full sm:inline-flex sm:w-auto"
+            aria-label={ko ? "시황 시장 선택" : "Briefing market"}
+            options={briefingTabs.map((item) => ({
+              value: item.id,
+              label: (
+                <span className="flex flex-col items-center leading-tight">
+                  <span>{item.label[lang]}</span>
+                  <span className="text-[11px] font-medium opacity-80">
+                    {item.caption[lang]}
+                  </span>
                 </span>
-              </button>
-            ))}
-          </div>
+              ),
+            }))}
+            value={market}
+            onChange={setMarket}
+          />
 
           <div className="mt-5">
             {selectedBriefing ? (
@@ -186,6 +222,7 @@ export function MarketBriefingPage({
                 briefing={selectedBriefing}
                 accessToken={accessToken}
                 isAdmin={isAdmin}
+                ko={ko}
                 onSaved={applyBriefing}
                 onDeleted={(deletedId) => {
                   setBriefings((items) => items.filter((item) => item.id !== deletedId));
@@ -205,6 +242,7 @@ export function MarketBriefingPage({
                 loading={loading}
                 page={safePage}
                 totalPages={totalPages}
+                ko={ko}
                 onPageChange={setPage}
                 onSelect={(nextId) => router.push(`/market-briefing/${nextId}`)}
               />
@@ -221,6 +259,7 @@ function BriefingList({
   loading,
   page,
   totalPages,
+  ko,
   onPageChange,
   onSelect,
 }: {
@@ -228,21 +267,24 @@ function BriefingList({
   loading: boolean;
   page: number;
   totalPages: number;
+  ko: boolean;
   onPageChange: (page: number) => void;
   onSelect: (id: string) => void;
 }) {
   if (loading && briefings.length === 0) {
     return (
-      <p className="rounded-md border border-[#d9dee8] p-6 text-center text-base text-[#607086]">
-        마켓 브리핑을 불러오는 중입니다.
-      </p>
+      <div className="grid gap-3">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <BriefingCardSkeleton key={index} />
+        ))}
+      </div>
     );
   }
 
   if (!briefings.length) {
     return (
-      <p className="rounded-md border border-[#d9dee8] p-6 text-center text-base text-[#607086]">
-        표시할 마켓 브리핑이 없습니다.
+      <p className="rounded-md border border-border p-6 text-center text-base text-muted">
+        {ko ? "표시할 마켓 브리핑이 없습니다." : "No market briefings to show."}
       </p>
     );
   }
@@ -254,21 +296,23 @@ function BriefingList({
           <button
             key={briefing.id}
             onClick={() => onSelect(briefing.id)}
-            className="block cursor-pointer rounded-md border border-[#d9dee8] p-3 text-left transition-colors hover:bg-[#f6f8fb] sm:p-4"
+            className="block cursor-pointer rounded-md border border-border bg-surface p-3 text-left shadow-sm transition-all duration-150 ease-out will-change-transform hover:scale-[1.01] hover:bg-surface-muted hover:shadow-md sm:p-4"
           >
-            <p className="text-xs font-semibold text-[#607086] sm:text-sm">
-              {briefing.market === "KR" ? "한국시황" : "미국시황"} ·{" "}
-              {new Date(briefing.generatedAt * 1000).toLocaleString("ko-KR")}
+            <p className="text-xs font-semibold text-muted sm:text-sm">
+              {marketLabel(briefing.market, ko)} ·{" "}
+              {new Date(briefing.generatedAt * 1000).toLocaleString(
+                ko ? "ko-KR" : "en-US",
+              )}
             </p>
-            <h3 className="mt-1 flex flex-wrap items-center gap-2 text-base font-semibold leading-6 text-[#17202e] sm:text-lg">
+            <h3 className="mt-1 flex flex-wrap items-center gap-2 text-base font-semibold leading-6 text-foreground sm:text-lg">
               <span>{briefing.title}</span>
               {isNewBriefing(briefing) ? (
-                <span className="rounded bg-[#e73843] px-1.5 py-0.5 text-xs font-bold text-white">
+                <span className="rounded bg-primary px-1.5 py-0.5 text-xs font-bold text-on-primary">
                   N
                 </span>
               ) : null}
             </h3>
-            <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#607086] sm:line-clamp-1 sm:text-base sm:leading-7">
+            <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted sm:line-clamp-1 sm:text-base sm:leading-7">
               {briefing.summaryLines[0] ?? briefing.summary}
             </p>
           </button>
@@ -276,27 +320,42 @@ function BriefingList({
       </div>
 
       {totalPages > 1 ? (
-        <div className="mt-4 flex items-center justify-between gap-3 border-t border-[#eef1f6] pt-4">
-          <button
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-4">
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<ChevronLeft />}
             disabled={page === 1}
             onClick={() => onPageChange(Math.max(1, page - 1))}
-            className="h-10 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-sm font-semibold disabled:cursor-default disabled:opacity-50 sm:text-base"
           >
-            이전
-          </button>
-          <span className="text-sm font-medium text-[#607086] sm:text-base">
+            {ko ? "이전" : "Previous"}
+          </Button>
+          <span className="text-sm font-medium text-muted sm:text-base">
             {page} / {totalPages}
           </span>
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
+            rightIcon={<ChevronRight />}
             disabled={page === totalPages}
             onClick={() => onPageChange(Math.min(totalPages, page + 1))}
-            className="h-10 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-sm font-semibold disabled:cursor-default disabled:opacity-50 sm:text-base"
           >
-            다음
-          </button>
+            {ko ? "다음" : "Next"}
+          </Button>
         </div>
       ) : null}
     </>
+  );
+}
+
+// 리스트 항목(메타 1줄 + 제목 + 요약 1줄)과 같은 레이아웃의 로딩 스켈레톤.
+function BriefingCardSkeleton() {
+  return (
+    <div className="rounded-md border border-border bg-surface p-3 shadow-sm sm:p-4">
+      <Skeleton className="h-3 w-40" />
+      <Skeleton className="mt-2 h-5 w-3/4" />
+      <Skeleton className="mt-2.5 h-4 w-full" />
+    </div>
   );
 }
 
@@ -304,6 +363,7 @@ function BriefingDetail({
   briefing,
   accessToken,
   isAdmin,
+  ko,
   onSaved,
   onDeleted,
   onBack,
@@ -311,6 +371,7 @@ function BriefingDetail({
   briefing: MarketBriefing;
   accessToken: string | null;
   isAdmin: boolean;
+  ko: boolean;
   onSaved: (briefing: MarketBriefing) => void;
   onDeleted: (id: string) => void;
   onBack: () => void;
@@ -324,7 +385,11 @@ function BriefingDetail({
     if (!accessToken || deletePending) {
       return;
     }
-    if (!window.confirm("이 마켓 브리핑을 삭제할까요?")) {
+    if (
+      !window.confirm(
+        ko ? "이 마켓 브리핑을 삭제할까요?" : "Delete this market briefing?",
+      )
+    ) {
       return;
     }
 
@@ -336,39 +401,52 @@ function BriefingDetail({
       });
       onDeleted(briefing.id);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "삭제하지 못했습니다.");
+      setFormError(
+        error instanceof Error
+          ? error.message
+          : ko
+            ? "삭제하지 못했습니다."
+            : "Could not delete.",
+      );
     } finally {
       setDeletePending(false);
     }
   };
 
   return (
-    <article className="rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3 sm:p-5">
-      <button
+    <article className="rounded-md border border-border bg-surface-muted p-3 sm:p-5">
+      <Button
+        variant="secondary"
+        size="sm"
+        leftIcon={<ChevronLeft />}
         onClick={onBack}
-        className="mb-4 h-10 cursor-pointer rounded-md border border-[#c7ceda] bg-white px-4 text-sm font-semibold text-[#344052] hover:bg-[#eef1f6] sm:text-base"
+        className="mb-4"
       >
-        목록으로
-      </button>
+        {ko ? "목록으로" : "Back to list"}
+      </Button>
 
       {isAdmin ? (
-        <div className="mb-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
-          <button
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<Pencil />}
             onClick={() => {
               setEditing((value) => !value);
               setFormError("");
             }}
-            className="h-10 cursor-pointer rounded-md border border-[#1f6f8b] bg-white px-4 text-sm font-semibold text-[#1f6f8b] hover:bg-[#eef6f9] sm:text-base"
           >
-            {editing ? "수정 취소" : "수정"}
-          </button>
-          <button
-            disabled={deletePending}
+            {editing ? (ko ? "수정 취소" : "Cancel edit") : ko ? "수정" : "Edit"}
+          </Button>
+          <Button
+            variant="soft-danger"
+            size="sm"
+            leftIcon={<Trash2 />}
+            loading={deletePending}
             onClick={handleDelete}
-            className="h-10 cursor-pointer rounded-md border border-[#d74848] bg-white px-4 text-sm font-semibold text-[#c43232] hover:bg-[#fff1f1] disabled:cursor-default disabled:opacity-50 sm:text-base"
           >
-            {deletePending ? "삭제 중" : "삭제"}
-          </button>
+            {deletePending ? (ko ? "삭제 중" : "Deleting") : ko ? "삭제" : "Delete"}
+          </Button>
         </div>
       ) : null}
 
@@ -378,6 +456,7 @@ function BriefingDetail({
         <BriefingEditForm
           briefing={briefing}
           accessToken={accessToken}
+          ko={ko}
           saving={saving}
           setSaving={setSaving}
           onCancel={() => setEditing(false)}
@@ -389,22 +468,25 @@ function BriefingDetail({
         />
       ) : null}
 
-      <div className="border-b border-[#d9dee8] pb-5">
-        <p className="text-sm font-semibold text-[#607086]">
-          {briefing.market === "KR" ? "한국시황" : "미국시황"} ·{" "}
-          {briefing.market === "KR" ? "오늘장 주식 요약" : "전날 미국장 요약"}
+      <div className="border-b border-border pb-5">
+        <p className="text-sm font-semibold text-muted">
+          {marketLabel(briefing.market, ko)} · {marketCaption(briefing.market, ko)}
         </p>
-        <h3 className="mt-2 text-2xl font-semibold leading-tight text-[#17202e] sm:text-3xl">
+        <h3 className="mt-2 text-2xl font-semibold leading-tight text-foreground sm:text-3xl">
           {briefing.title}
         </h3>
-        <p className="mt-2 text-sm font-medium text-[#607086]">
-          {new Date(briefing.generatedAt * 1000).toLocaleString("ko-KR")}
+        <p className="mt-2 text-sm font-medium text-muted">
+          {new Date(briefing.generatedAt * 1000).toLocaleString(
+            ko ? "ko-KR" : "en-US",
+          )}
         </p>
       </div>
 
-      <section className="mt-5 space-y-4 rounded-md border border-[#d9dee8] bg-white p-4 sm:mt-6 sm:p-5">
-        <h4 className="text-base font-semibold text-[#17202e] sm:text-lg">시장 전체 요약</h4>
-        <div className="space-y-4 text-[15px] leading-7 text-[#344052] sm:space-y-5 sm:text-base sm:leading-8">
+      <section className="mt-5 space-y-4 rounded-md border border-border bg-surface p-4 sm:mt-6 sm:p-5">
+        <h4 className="text-base font-semibold text-foreground sm:text-lg">
+          {ko ? "시장 전체 요약" : "Market overview"}
+        </h4>
+        <div className="space-y-4 text-[15px] leading-7 text-foreground sm:space-y-5 sm:text-base sm:leading-8">
           {(briefing.summaryLines ?? []).map((line) => (
             <p key={line}>{line}</p>
           ))}
@@ -412,9 +494,11 @@ function BriefingDetail({
       </section>
 
       {(briefing.macroLines ?? []).length ? (
-        <section className="mt-5 space-y-4 rounded-md border border-[#d9dee8] bg-white p-4 sm:p-5">
-          <h4 className="text-base font-semibold text-[#17202e] sm:text-lg">매크로 점검</h4>
-          <div className="space-y-4 text-[15px] leading-7 text-[#344052] sm:space-y-5 sm:text-base sm:leading-8">
+        <section className="mt-5 space-y-4 rounded-md border border-border bg-surface p-4 sm:p-5">
+          <h4 className="text-base font-semibold text-foreground sm:text-lg">
+            {ko ? "매크로 점검" : "Macro check"}
+          </h4>
+          <div className="space-y-4 text-[15px] leading-7 text-foreground sm:space-y-5 sm:text-base sm:leading-8">
             {(briefing.macroLines ?? []).map((line, index) => (
               <p key={`${index}-${line}`}>{line}</p>
             ))}
@@ -422,9 +506,9 @@ function BriefingDetail({
         </section>
       ) : null}
 
-      <section className="mt-5 space-y-4 rounded-md border border-[#d9dee8] bg-white p-4 sm:p-5">
-        <h4 className="text-base font-semibold text-[#17202e] sm:text-lg">
-          주요 종목/기업 뉴스
+      <section className="mt-5 space-y-4 rounded-md border border-border bg-surface p-4 sm:p-5">
+        <h4 className="text-base font-semibold text-foreground sm:text-lg">
+          {ko ? "주요 종목/기업 뉴스" : "Key stock & company news"}
         </h4>
         <div className="grid gap-4">
           {(briefing.companyNews ?? []).map((item, index) => {
@@ -441,14 +525,14 @@ function BriefingDetail({
             return (
               <div
                 key={`${ticker || item.symbol || "symbol"}-${item.headline ?? "headline"}-${index}`}
-                className="border-b border-[#eef1f6] pb-4 last:border-0 last:pb-0"
+                className="border-b border-border pb-4 last:border-0 last:pb-0"
               >
-                <h5 className="text-[15px] font-semibold text-[#17202e] sm:text-base">
-                  {companyName || item.symbol || "종목/기업"}{" "}
+                <h5 className="text-[15px] font-semibold text-foreground sm:text-base">
+                  {companyName || item.symbol || (ko ? "종목/기업" : "Stock/Company")}{" "}
                   {ticker ? (
                     <a
                       href={stockHref(ticker, briefing.market)}
-                      className="cursor-pointer text-[#1f6f8b] underline-offset-2 hover:underline"
+                      className="cursor-pointer text-primary underline-offset-2 hover:underline"
                     >
                       #{ticker}
                     </a>
@@ -456,7 +540,7 @@ function BriefingDetail({
                   {change ? (
                     <span
                       className={`ml-1 font-semibold ${
-                        change.startsWith("-") ? "text-[#d74848]" : "text-[#178447]"
+                        change.startsWith("-") ? "text-negative" : "text-positive"
                       }`}
                     >
                       ({change})
@@ -464,11 +548,11 @@ function BriefingDetail({
                   ) : null}
                 </h5>
                 {headline && lines[0] !== item.headline ? (
-                  <p className="mt-1 text-[15px] font-medium text-[#344052] sm:text-base">
+                  <p className="mt-1 text-[15px] font-medium text-foreground sm:text-base">
                     {headline}
                   </p>
                 ) : null}
-                <div className="mt-3 space-y-3 text-[15px] leading-7 text-[#607086] sm:space-y-4 sm:text-base sm:leading-8">
+                <div className="mt-3 space-y-3 text-[15px] leading-7 text-muted sm:space-y-4 sm:text-base sm:leading-8">
                   {lines.map((line, lineIndex) => (
                     <p key={`${lineIndex}-${line}`}>{line}</p>
                   ))}
@@ -477,23 +561,25 @@ function BriefingDetail({
             );
           })}
           {!(briefing.companyNews ?? []).length ? (
-            <p className="text-base leading-8 text-[#607086]">
-              표시할 주요 종목/기업 뉴스가 없습니다.
+            <p className="text-base leading-8 text-muted">
+              {ko
+                ? "표시할 주요 종목/기업 뉴스가 없습니다."
+                : "No key stock/company news to show."}
             </p>
           ) : null}
         </div>
       </section>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <section className="rounded-md border border-[#d9dee8] bg-white p-4 sm:p-5">
-          <h4 className="text-base font-semibold text-[#17202e] sm:text-lg">
-            오늘의 핵심 키워드
+        <section className="rounded-md border border-border bg-surface p-4 sm:p-5">
+          <h4 className="text-base font-semibold text-foreground sm:text-lg">
+            {ko ? "오늘의 핵심 키워드" : "Key keywords"}
           </h4>
           <div className="mt-3 flex flex-wrap gap-2">
             {(briefing.keywords ?? []).map((keyword) => (
               <span
                 key={keyword}
-                className="rounded-md bg-[#eef6f9] px-2.5 py-1 text-sm font-semibold text-[#1f6f8b]"
+                className="rounded-md bg-primary/10 px-2.5 py-1 text-sm font-semibold text-primary"
               >
                 {keyword}
               </span>
@@ -501,11 +587,11 @@ function BriefingDetail({
           </div>
         </section>
 
-        <section className="rounded-md border border-[#d9dee8] bg-white p-4 sm:p-5">
-          <h4 className="text-base font-semibold text-[#17202e] sm:text-lg">
-            단기 관전 포인트
+        <section className="rounded-md border border-border bg-surface p-4 sm:p-5">
+          <h4 className="text-base font-semibold text-foreground sm:text-lg">
+            {ko ? "단기 관전 포인트" : "Short-term watch points"}
           </h4>
-          <div className="mt-3 space-y-3 text-[15px] leading-7 text-[#344052] sm:space-y-4 sm:text-base sm:leading-8">
+          <div className="mt-3 space-y-3 text-[15px] leading-7 text-foreground sm:space-y-4 sm:text-base sm:leading-8">
             {(briefing.watchPoints ?? []).map((point) => (
               <p key={point}>{point}</p>
             ))}
@@ -514,8 +600,10 @@ function BriefingDetail({
       </div>
 
       {briefing.sources?.length ? (
-        <section className="mt-5 rounded-md border border-[#d9dee8] bg-white p-4 sm:p-5">
-          <h4 className="text-base font-semibold text-[#17202e] sm:text-lg">참고 뉴스</h4>
+        <section className="mt-5 rounded-md border border-border bg-surface p-4 sm:p-5">
+          <h4 className="text-base font-semibold text-foreground sm:text-lg">
+            {ko ? "참고 뉴스" : "Reference news"}
+          </h4>
           <div className="mt-3 grid gap-2">
             {briefing.sources.map((item) => (
               <a
@@ -523,14 +611,16 @@ function BriefingDetail({
                 href={item.url}
                 target="_blank"
                 rel="noreferrer"
-                className="block cursor-pointer rounded-md border border-[#eef1f6] px-3 py-2 text-sm hover:bg-[#f6f8fb] sm:text-base"
+                className="block cursor-pointer rounded-md border border-border px-3 py-2 text-sm transition-colors hover:bg-surface-muted sm:text-base"
               >
-                <span className="font-semibold text-[#344052]">
+                <span className="font-semibold text-foreground">
                   {item.headline}
                 </span>
-                <span className="ml-2 text-sm text-[#607086]">
+                <span className="ml-2 text-sm text-muted">
                   {item.source} ·{" "}
-                  {new Date(item.datetime * 1000).toLocaleDateString("ko-KR")}
+                  {new Date(item.datetime * 1000).toLocaleDateString(
+                    ko ? "ko-KR" : "en-US",
+                  )}
                 </span>
               </a>
             ))}
@@ -544,6 +634,7 @@ function BriefingDetail({
 function BriefingEditForm({
   briefing,
   accessToken,
+  ko,
   saving,
   setSaving,
   onCancel,
@@ -552,6 +643,7 @@ function BriefingEditForm({
 }: {
   briefing: MarketBriefing;
   accessToken: string | null;
+  ko: boolean;
   saving: boolean;
   setSaving: (saving: boolean) => void;
   onCancel: () => void;
@@ -580,7 +672,11 @@ function BriefingEditForm({
         throw new Error("companyNews must be an array.");
       }
     } catch {
-      onError("종목/기업 뉴스 JSON 형식이 올바르지 않습니다.");
+      onError(
+        ko
+          ? "종목/기업 뉴스 JSON 형식이 올바르지 않습니다."
+          : "Invalid JSON format for stock/company news.",
+      );
       return;
     }
 
@@ -607,7 +703,13 @@ function BriefingEditForm({
       );
       onSaved(updated);
     } catch (error) {
-      onError(error instanceof Error ? error.message : "저장하지 못했습니다.");
+      onError(
+        error instanceof Error
+          ? error.message
+          : ko
+            ? "저장하지 못했습니다."
+            : "Could not save.",
+      );
     } finally {
       setSaving(false);
     }
@@ -616,41 +718,49 @@ function BriefingEditForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="mb-6 grid gap-4 rounded-md border border-[#c7d6df] bg-white p-4"
+      className="mb-6 grid gap-4 rounded-md border border-border bg-surface p-4"
     >
-      <label className="grid gap-1 text-sm font-semibold text-[#344052]">
-        제목
+      <label className="grid gap-1 text-sm font-semibold text-foreground">
+        {ko ? "제목" : "Title"}
         <input
           value={title}
           onChange={(event) => setTitle(event.target.value)}
-          className="h-11 rounded-md border border-[#c7ceda] px-3 text-base font-medium"
+          className="h-11 rounded-md border border-border-strong bg-surface px-3 text-base font-medium text-foreground outline-none transition-colors focus:border-primary"
         />
       </label>
-      <EditTextarea label="시장 전체 요약" value={summaryLines} onChange={setSummaryLines} />
-      <EditTextarea label="매크로 점검" value={macroLines} onChange={setMacroLines} />
       <EditTextarea
-        label="주요 종목/기업 뉴스 JSON"
+        label={ko ? "시장 전체 요약" : "Market overview"}
+        value={summaryLines}
+        onChange={setSummaryLines}
+      />
+      <EditTextarea
+        label={ko ? "매크로 점검" : "Macro check"}
+        value={macroLines}
+        onChange={setMacroLines}
+      />
+      <EditTextarea
+        label={ko ? "주요 종목/기업 뉴스 JSON" : "Key stock/company news (JSON)"}
         value={companyNews}
         onChange={setCompanyNews}
         minHeight="260px"
       />
-      <EditTextarea label="핵심 키워드" value={keywords} onChange={setKeywords} />
-      <EditTextarea label="단기 관전 포인트" value={watchPoints} onChange={setWatchPoints} />
+      <EditTextarea
+        label={ko ? "핵심 키워드" : "Keywords"}
+        value={keywords}
+        onChange={setKeywords}
+      />
+      <EditTextarea
+        label={ko ? "단기 관전 포인트" : "Watch points"}
+        value={watchPoints}
+        onChange={setWatchPoints}
+      />
       <div className="flex flex-wrap justify-end gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="h-10 cursor-pointer rounded-md border border-[#c7ceda] px-4 text-base font-semibold hover:bg-[#eef1f6]"
-        >
-          취소
-        </button>
-        <button
-          type="submit"
-          disabled={saving}
-          className="h-10 cursor-pointer rounded-md bg-[#1f6f8b] px-4 text-base font-semibold text-white hover:bg-[#185970] disabled:cursor-default disabled:opacity-50"
-        >
-          {saving ? "저장 중" : "저장"}
-        </button>
+        <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
+          {ko ? "취소" : "Cancel"}
+        </Button>
+        <Button type="submit" variant="primary" size="sm" loading={saving}>
+          {saving ? (ko ? "저장 중" : "Saving") : ko ? "저장" : "Save"}
+        </Button>
       </div>
     </form>
   );
@@ -668,13 +778,13 @@ function EditTextarea({
   minHeight?: string;
 }) {
   return (
-    <label className="grid gap-1 text-sm font-semibold text-[#344052]">
+    <label className="grid gap-1 text-sm font-semibold text-foreground">
       {label}
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
         style={{ minHeight }}
-        className="resize-y rounded-md border border-[#c7ceda] px-3 py-2 text-base font-medium leading-7"
+        className="resize-y rounded-md border border-border-strong bg-surface px-3 py-2 text-base font-medium leading-7 text-foreground outline-none transition-colors focus:border-primary"
       />
     </label>
   );
@@ -798,5 +908,6 @@ function escapeRegExp(value: string): string {
 function stockHref(symbol: string, fallbackMarket: BriefingMarket): string {
   const cleanSymbol = extractTickerTag(symbol);
   const market = /^\d{6}$/.test(cleanSymbol) ? "KR" : fallbackMarket;
-  return `/?symbol=${encodeURIComponent(cleanSymbol)}&market=${market}`;
+  const currency = market === "KR" ? "KRW" : "USD";
+  return `/?symbol=${encodeURIComponent(cleanSymbol)}&market=${market}&currency=${currency}`;
 }

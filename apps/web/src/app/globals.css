@@ -29,8 +29,8 @@
   --border-strong: #c7ceda;
   --muted: #607086; /* 보조 텍스트 */
 
-  --primary: #0ea5e9; /* 로고 sky를 라이트 배경 대비용으로 한 단계 진하게 */
-  --primary-hover: #0284c7;
+  --primary: #027cba; /* 로고 sky를 라이트 배경 대비용으로 진하게 (흰 글자 대비 4.56:1, WCAG AA) */
+  --primary-hover: #0369a1;
   --on-primary: #ffffff;
 
   --positive: #16a34a; /* 상승 (로고 그린 계열) */
@@ -89,7 +89,7 @@
   --color-accent-sky: var(--accent-sky);
   --color-accent-green: var(--accent-green);
 
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-sans-base);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -102,7 +102,7 @@ body {
   min-height: 100%;
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans-base), "Apple SD Gothic Neo", "Malgun Gothic", Arial, Helvetica, sans-serif;
   overflow-x: hidden;
   overscroll-behavior-y: none;
   padding-left: env(safe-area-inset-left);
