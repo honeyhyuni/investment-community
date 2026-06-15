@@ -8,6 +8,7 @@ export type ButtonVariant =
   | "outline"
   | "ghost"
   | "ghost-danger"
+  | "soft-danger"
   | "danger"
   | "link";
 /** `icon`/`icon-sm` = 정사각형 아이콘 전용 (아이콘은 `leftIcon`으로 넘기고 children은 비운다). */
@@ -40,6 +41,8 @@ const VARIANT: Record<ButtonVariant, string> = {
   outline: "border border-border bg-surface text-primary enabled:hover:border-primary enabled:hover:bg-surface-muted",
   ghost: "text-foreground enabled:hover:bg-surface-muted",
   "ghost-danger": "text-negative enabled:hover:bg-negative-surface",
+  // 톤다운 빨강 배경(상시 표시). solid danger보다 가볍고 primary와 균형이 맞는다.
+  "soft-danger": "bg-negative/10 text-negative enabled:hover:bg-negative/20",
   danger: "bg-negative text-white enabled:hover:opacity-90",
   link: "text-primary underline-offset-2 enabled:hover:underline",
 };
