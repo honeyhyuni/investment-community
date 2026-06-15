@@ -31,4 +31,7 @@ export type TradeTick = {
   price: number;
   timestamp: number;
   volume: number;
+  change?: number;
+  percentChange?: number;
+  previousClose?: number;
 };

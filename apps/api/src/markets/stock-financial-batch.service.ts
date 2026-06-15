@@ -18,6 +18,15 @@ type DartFinancialResponse = {
   list?: DartFinancialRow[];
 };
 
+type DartStockQuantityResponse = {
+  status?: string;
+  list?: Array<{
+    se?: string;
+    istc_totqy?: string;
+    distb_stock_co?: string;
+  }>;
+};
+
 type ParsedFinancial = {
   revenue: number | null;
   operatingProfit: number | null;
@@ -143,13 +152,27 @@ export class StockFinancialBatchService {
       }
 
       const latestAvailableYear = available[0].fiscalYear;
+      const listedShares = await this.fetchDartListedShares(
+        apiKey,
+        stock.dartCorpCode!,
+        latestAvailableYear,
+      ).catch(() => null);
       const quote = await this.getKisCurrentPrice(stock).catch(() => ({
         currentPrice: null,
         marketCap: null,
       }));
       for (const { fiscalYear, financial } of available) {
         const isLatestYear = fiscalYear === latestAvailableYear;
-        const marketCap = isLatestYear ? quote.marketCap : null;
+        const marketCap = isLatestYear
+          ? quote.marketCap ??
+            (quote.currentPrice !== null && listedShares !== null
+              ? quote.currentPrice * listedShares
+              : null)
+          : null;
+        const eps =
+          isLatestYear && listedShares !== null
+            ? this.safeDivide(financial.netIncome, listedShares)
+            : null;
         entities.push({
           id: `${stock.symbol}:${fiscalYear}`,
           symbol: stock.symbol,
@@ -160,8 +183,8 @@ export class StockFinancialBatchService {
           netIncome: financial.netIncome,
           equity: financial.equity,
           assets: financial.assets,
-          eps: null,
-          listedShares: null,
+          eps,
+          listedShares: isLatestYear ? listedShares : null,
           closePrice: isLatestYear ? quote.currentPrice : null,
           marketCap,
           per: isLatestYear
@@ -302,6 +325,34 @@ export class StockFinancialBatchService {
     }
 
     throw lastError ?? new Error('DART financial request failed.');
+  }
+
+  private async fetchDartListedShares(
+    apiKey: string,
+    corpCode: string,
+    fiscalYear: number,
+  ): Promise<number | null> {
+    const url = new URL('https://opendart.fss.or.kr/api/stockTotqySttus.json');
+    url.searchParams.set('crtfc_key', apiKey);
+    url.searchParams.set('corp_code', corpCode);
+    url.searchParams.set('bsns_year', String(fiscalYear));
+    url.searchParams.set('reprt_code', '11011');
+
+    const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+    if (!response.ok) {
+      return null;
+    }
+    const body = (await response.json()) as DartStockQuantityResponse;
+    if (body.status !== '000' || !body.list?.length) {
+      return null;
+    }
+
+    const common = body.list.find((item) => item.se === '\uBCF4\uD1B5\uC8FC');
+    const total = body.list.find((item) => item.se === '\uD569\uACC4');
+    return (
+      this.toNumber(common?.istc_totqy ?? common?.distb_stock_co) ??
+      this.toNumber(total?.istc_totqy ?? total?.distb_stock_co)
+    );
   }
 
   private parseFinancialRows(

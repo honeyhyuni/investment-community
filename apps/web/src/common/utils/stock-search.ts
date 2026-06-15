@@ -36,7 +36,7 @@ export function mergePrioritySymbols(
     displaySymbol: quote.symbol,
     description: quote.name ?? quote.symbol,
     type: "Common Stock",
-    currency: "USD",
+    currency: quote.currency ?? "USD",
   }));
   const bySymbol = new Map<string, StockSymbol>();
 

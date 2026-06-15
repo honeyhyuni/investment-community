@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { apiRequest } from "@/common/lib/api";
 import { MarketQuote, StockSymbol, TradeTick } from "@/common/types";
 import { mergePrioritySymbols } from "@/common/utils/stock-search";
+import { applyLiveTrade } from "@/common/utils/market";
 
 type MarketDataState = {
   pulse: MarketQuote[];
@@ -149,13 +150,21 @@ export const useMarketDataStore = create<MarketDataState>((set) => ({
   },
 
   applyTrade: (tick) =>
-    set((state) => ({
-      livePrices: { ...state.livePrices, [tick.symbol]: tick },
-      liveSeries: {
-        ...state.liveSeries,
-        [tick.symbol]: [...(state.liveSeries[tick.symbol] ?? []), tick].slice(-40),
-      },
-    })),
+    set((state) => {
+      const applyToQuotes = (quotes: MarketQuote[]) =>
+        quotes.map((quote) =>
+          quote.symbol === tick.symbol ? applyLiveTrade(quote, tick) : quote,
+        );
+      return {
+        usStocks: applyToQuotes(state.usStocks),
+        krStocks: applyToQuotes(state.krStocks),
+        livePrices: { ...state.livePrices, [tick.symbol]: tick },
+        liveSeries: {
+          ...state.liveSeries,
+          [tick.symbol]: [...(state.liveSeries[tick.symbol] ?? []), tick].slice(-40),
+        },
+      };
+    }),
 
   applyPulse: (pulse) => {
     const exchangeRate = pulse.find((quote) => quote.symbol === "KIS_FX:USDKRW")?.current;

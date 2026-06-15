@@ -389,16 +389,6 @@ function BriefingDetail({
         />
       ) : null}
 
-      {briefing.imageUrl ? (
-        <div className="mb-5 overflow-hidden rounded-md border border-[#d9dee8] bg-[#101722] sm:mb-6">
-          <img
-            src={briefing.imageUrl}
-            alt=""
-            className="mx-auto max-h-[280px] w-full object-contain sm:max-h-[460px]"
-          />
-        </div>
-      ) : null}
-
       <div className="border-b border-[#d9dee8] pb-5">
         <p className="text-sm font-semibold text-[#607086]">
           {briefing.market === "KR" ? "한국시황" : "미국시황"} ·{" "}

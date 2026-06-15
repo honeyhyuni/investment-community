@@ -331,10 +331,12 @@ export function PostEditor({
         {suggestions.length ? (
           <div className="mt-2 grid gap-2 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-2">
             {suggestions.map((item) => {
+              const isKoreanStock =
+                item.currency === "KRW" || /^\d{6}$/.test(item.symbol);
               const tag: StockTag = {
                 symbol: item.symbol,
                 name: item.description,
-                market: item.currency === "KRW" ? "KR" : "US",
+                market: isKoreanStock ? "KR" : "US",
               };
               return (
                 <button
@@ -349,8 +351,12 @@ export function PostEditor({
                   }}
                   className="flex cursor-pointer items-center justify-between gap-3 rounded-md bg-white px-3 py-2 text-left text-sm"
                 >
-                  <span className="font-semibold">{item.symbol}</span>
-                  <span className="truncate text-muted">{item.description}</span>
+                  <span className="font-semibold">
+                    #{isKoreanStock ? item.description : item.symbol}
+                  </span>
+                  <span className="truncate text-muted">
+                    {isKoreanStock ? item.symbol : item.description}
+                  </span>
                 </button>
               );
             })}

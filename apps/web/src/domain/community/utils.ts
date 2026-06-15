@@ -41,9 +41,15 @@ export function resolveCommunityStockTag(
   tag: StockTag,
   stockSymbols: StockSymbol[],
 ): StockTag {
-  const exact = stockSymbols.find(
-    (item) => item.symbol.toUpperCase() === tag.symbol.toUpperCase(),
+  const normalizedSymbol = tag.symbol.toUpperCase();
+  const isKoreanSymbol = /^\d{6}$/.test(normalizedSymbol);
+  const exactMatches = stockSymbols.filter(
+    (item) => item.symbol.toUpperCase() === normalizedSymbol,
   );
+  const exact =
+    exactMatches.find((item) =>
+      isKoreanSymbol ? item.currency === "KRW" : item.currency !== "KRW",
+    ) ?? exactMatches[0];
   const resolved =
     exact ??
     stockSymbols
@@ -52,9 +58,14 @@ export function resolveCommunityStockTag(
       .sort((a, b) => b.score - a.score)[0]?.item;
 
   return {
-    symbol: resolved?.symbol ?? tag.symbol.toUpperCase(),
+    symbol: resolved?.symbol ?? normalizedSymbol,
     name: resolved?.description ?? tag.name,
-    market: resolved ? (resolved.currency === "KRW" ? "KR" : "US") : tag.market,
+    market:
+      isKoreanSymbol || resolved?.currency === "KRW"
+        ? "KR"
+        : resolved
+          ? "US"
+          : tag.market,
   };
 }
 
