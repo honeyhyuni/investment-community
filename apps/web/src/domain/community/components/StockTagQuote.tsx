@@ -25,7 +25,10 @@ export function StockTagQuote({
 }: StockTagQuoteProps) {
   const ko = usePreferencesStore((s) => s.language) === "ko";
   const displayCurrency = tag.market === "KR" ? "KRW" : "USD";
-  const displayTag = tag.market === "KR" ? tag.name || tag.symbol : tag.symbol;
+  const displayTag =
+    tag.market === "KR" || /^\d{6}$/.test(tag.symbol)
+      ? tag.name || tag.symbol
+      : tag.symbol;
   const currentQuote = quote ? applyLiveTrade(quote, live) : null;
   const positive = (currentQuote?.change ?? 0) >= 0;
 

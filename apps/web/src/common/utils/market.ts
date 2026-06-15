@@ -5,18 +5,20 @@ export function applyLiveTrade(quote: MarketQuote, tick?: TradeTick): MarketQuot
     return quote;
   }
 
+  const previousClose = tick.previousClose ?? quote.previousClose;
   const change =
-    quote.previousClose > 0 ? tick.price - quote.previousClose : quote.change;
+    tick.change ??
+    (previousClose > 0 ? tick.price - previousClose : quote.change);
   const percentChange =
-    quote.previousClose > 0
-      ? (change / quote.previousClose) * 100
-      : quote.percentChange;
+    tick.percentChange ??
+    (previousClose > 0 ? (change / previousClose) * 100 : quote.percentChange);
 
   return {
     ...quote,
     current: tick.price,
     change,
     percentChange,
+    previousClose,
     timestamp: Math.floor(tick.timestamp / 1000),
   };
 }

@@ -331,7 +331,8 @@ export function PostEditor({
         {suggestions.length ? (
           <div className="mt-2 grid gap-2 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-2">
             {suggestions.map((item) => {
-              const isKoreanStock = item.currency === "KRW";
+              const isKoreanStock =
+                item.currency === "KRW" || /^\d{6}$/.test(item.symbol);
               const tag: StockTag = {
                 symbol: item.symbol,
                 name: item.description,

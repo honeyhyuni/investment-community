@@ -315,6 +315,9 @@ export function StocksPage() {
         price: quote.current,
         timestamp: Date.now(),
         volume: 0,
+        change: quote.change,
+        percentChange: quote.percentChange,
+        previousClose: quote.previousClose,
       });
     };
     void refreshQuote();
