@@ -140,6 +140,7 @@ select {
 
 .dark-app [class*="text-[#161a22]"],
 .dark-app [class*="text-[#151923]"],
+.dark-app [class*="text-[#17202e]"],
 .dark-app [class*="text-[#344052]"] {
   color: #edf1f7 !important;
 }
