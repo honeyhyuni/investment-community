@@ -303,7 +303,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
           {feedList}
         </div>
 
-        <aside className="-mx-4 rounded-none border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border lg:sticky lg:top-4 lg:self-start">
+        <aside className="-mx-4 rounded-none border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border lg:sticky lg:top-[calc(5.5rem+env(safe-area-inset-top))] lg:self-start">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-[#344052]">{ko ? "구독" : "Following"}</h2>
             <Users size={16} className="text-[#607086]" />

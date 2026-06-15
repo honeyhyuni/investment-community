@@ -126,8 +126,9 @@ export function useCommunityPosts() {
 
   function openStock(tag: StockTag) {
     const resolvedTag = resolveCommunityStockTag(tag, stockSymbols);
+    const currency = resolvedTag.market === "KR" ? "KRW" : "USD";
     router.push(
-      `/?symbol=${encodeURIComponent(resolvedTag.symbol)}&market=${resolvedTag.market}`,
+      `/?symbol=${encodeURIComponent(resolvedTag.symbol)}&market=${resolvedTag.market}&currency=${currency}`,
     );
   }
 

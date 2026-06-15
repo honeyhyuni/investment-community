@@ -30,13 +30,14 @@ export function formatMoney(
   if (!Number.isFinite(converted)) {
     return "-";
   }
-  const symbol = displayCurrency === "KRW" ? "원" : "$";
   const fractionDigits = displayCurrency === "KRW" ? 0 : 2;
-
-  return `${symbol}${new Intl.NumberFormat("en-US", {
+  const formatted = new Intl.NumberFormat("en-US", {
     maximumFractionDigits: fractionDigits,
     minimumFractionDigits: fractionDigits,
-  }).format(converted || 0)}`;
+  }).format(converted || 0);
+
+  // 원화는 접미사(70,000원), 달러는 접두사($70,000).
+  return displayCurrency === "KRW" ? `${formatted}원` : `$${formatted}`;
 }
 
 /** 소수 2자리 천단위 포맷. */

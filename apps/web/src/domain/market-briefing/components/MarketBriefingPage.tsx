@@ -908,5 +908,6 @@ function escapeRegExp(value: string): string {
 function stockHref(symbol: string, fallbackMarket: BriefingMarket): string {
   const cleanSymbol = extractTickerTag(symbol);
   const market = /^\d{6}$/.test(cleanSymbol) ? "KR" : fallbackMarket;
-  return `/?symbol=${encodeURIComponent(cleanSymbol)}&market=${market}`;
+  const currency = market === "KR" ? "KRW" : "USD";
+  return `/?symbol=${encodeURIComponent(cleanSymbol)}&market=${market}&currency=${currency}`;
 }

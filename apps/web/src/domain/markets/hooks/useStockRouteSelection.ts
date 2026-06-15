@@ -33,6 +33,12 @@ export function useStockRouteSelection({
   const querySymbol = searchParams.get("symbol")?.trim().toUpperCase() ?? "";
   const queryMarket: StockMarket =
     searchParams.get("market")?.trim().toUpperCase() === "KR" ? "KR" : "US";
+  const queryCurrency: DisplayCurrency =
+    queryMarket === "KR"
+      ? "KRW"
+      : searchParams.get("currency")?.trim().toUpperCase() === "KRW"
+        ? "KRW"
+        : "USD";
 
   useEffect(() => {
     if (!querySymbol) {
@@ -43,11 +49,12 @@ export function useStockRouteSelection({
       openStocksView();
       setStockTab(queryMarket);
       setSelectedSymbol(querySymbol);
-      setPriceCurrency(queryMarket === "KR" ? "KRW" : "USD");
+      setPriceCurrency(queryCurrency);
       setSearch("");
     });
   }, [
     openStocksView,
+    queryCurrency,
     queryMarket,
     querySymbol,
     setPriceCurrency,
@@ -58,9 +65,6 @@ export function useStockRouteSelection({
 
   useEffect(() => {
     if (querySymbol) {
-      queueMicrotask(() => {
-        setPriceCurrency(stockTab === "KR" ? "KRW" : "USD");
-      });
       return;
     }
 
@@ -89,5 +93,5 @@ export function useStockRouteSelection({
     usSymbols,
   ]);
 
-  return { queryMarket, querySymbol };
+  return { queryCurrency, queryMarket, querySymbol };
 }

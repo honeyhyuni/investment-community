@@ -8,9 +8,12 @@ import {
   useState,
 } from "react";
 import {
+  MessageSquareText,
+  Newspaper,
   Search,
   TrendingDown,
   TrendingUp,
+  X,
 } from "lucide-react";
 import {
   BusinessDay,
@@ -24,6 +27,10 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiRequest } from "@/common/lib/api";
 import { Notice } from "@/common/components/Notice";
+import { Button } from "@/common/components/Button";
+import { SectionHeader } from "@/common/components/SectionHeader";
+import { SegmentedControl } from "@/common/components/SegmentedControl";
+import { Skeleton } from "@/common/components/Skeleton";
 import { useSessionStore } from "@/common/stores/session";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { usePreferencesStore } from "@/common/stores/preferences";
@@ -96,16 +103,26 @@ const copy = {
 export function StocksPage() {
   const searchParams = useSearchParams();
   const notice = searchParams.get("notice");
-  const noticeMessage =
-    notice === "profile-updated" ? "저장 완료되었습니다." : "";
   const initialMarket: StockTab =
     searchParams.get("market")?.toUpperCase() === "KR" ? "KR" : "US";
   const initialSymbol =
     searchParams.get("symbol")?.trim().toUpperCase() ||
     (initialMarket === "KR" ? "005930" : "AAPL");
+  const initialCurrency: DisplayCurrency =
+    initialMarket === "KR"
+      ? "KRW"
+      : searchParams.get("currency")?.trim().toUpperCase() === "KRW"
+        ? "KRW"
+        : "USD";
   const [stockTab, setStockTab] = useState<StockTab>(initialMarket);
   const accessToken = useSessionStore((s) => s.accessToken);
   const language = usePreferencesStore((s) => s.language);
+  const noticeMessage =
+    notice === "profile-updated"
+      ? language === "ko"
+        ? "저장 완료되었습니다."
+        : "Saved."
+      : "";
   const usStocks = useMarketDataStore((s) => s.usStocks);
   const usSymbols = useMarketDataStore((s) => s.usSymbols);
   const krStocks = useMarketDataStore((s) => s.krStocks);
@@ -120,14 +137,15 @@ export function StocksPage() {
   const [selectedSymbol, setSelectedSymbol] = useState(initialSymbol);
   const [stockDetail, setStockDetail] = useState<StockDetail | null>(null);
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>("1M");
-  const [priceCurrency, setPriceCurrency] = useState<DisplayCurrency>(
-    initialMarket === "KR" ? "KRW" : "USD",
-  );
+  const [priceCurrency, setPriceCurrency] =
+    useState<DisplayCurrency>(initialCurrency);
   const [candles, setCandles] = useState<CandlePoint[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [error, setError] = useState("");
   const detailRequestIdRef = useRef(0);
+  const debouncedSearch = useDebouncedValue(search, 180);
 
   // 셸(레이아웃)에서 stocks가 곧 기본 라우트라 별도 전환 불필요.
   const openStocksView = useCallback(() => {}, []);
@@ -144,8 +162,26 @@ export function StocksPage() {
     setSearch,
   });
 
+  useEffect(() => {
+    if (!selectedSymbol) {
+      return;
+    }
+
+    const nextCurrency = stockTab === "KR" ? "KRW" : priceCurrency;
+    const params = new URLSearchParams();
+    params.set("symbol", selectedSymbol);
+    params.set("market", stockTab);
+    params.set("currency", nextCurrency);
+    const nextQuery = params.toString();
+    const currentQuery = searchParams.toString();
+
+    if (nextQuery !== currentQuery) {
+      router.replace(`/?${nextQuery}`, { scroll: false });
+    }
+  }, [priceCurrency, router, searchParams, selectedSymbol, stockTab]);
+
   const visibleSymbols = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = debouncedSearch.trim().toLowerCase();
     const source = usSymbols.length
       ? usSymbols
       : usStocks.map((stock) => ({
@@ -165,13 +201,13 @@ export function StocksPage() {
           item.symbol.toLowerCase().includes(query) ||
           item.description.toLowerCase().includes(query),
       )
-      .slice(0, 120);
-  }, [search, usStocks, usSymbols]);
+      .slice(0, 24);
+  }, [debouncedSearch, usStocks, usSymbols]);
 
   const visibleKrSymbols = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = debouncedSearch.trim().toLowerCase();
     if (!query) {
-      return krSymbols.slice(0, 80);
+      return krSymbols.slice(0, 24);
     }
 
     return krSymbols
@@ -180,8 +216,8 @@ export function StocksPage() {
           item.symbol.toLowerCase().includes(query) ||
           item.description.toLowerCase().includes(query),
       )
-      .slice(0, 120);
-  }, [krSymbols, search]);
+      .slice(0, 24);
+  }, [debouncedSearch, krSymbols]);
 
   async function loadRelatedPosts(symbol: string, token = accessToken) {
     if (!token || !symbol) {
@@ -232,7 +268,9 @@ export function StocksPage() {
         setError(
           detailError instanceof Error
             ? detailError.message
-            : "Could not load stock detail.",
+            : language === "ko"
+              ? "종목 정보를 불러오지 못했습니다."
+              : "Could not load stock detail.",
         );
       }
     }
@@ -332,34 +370,37 @@ export function StocksPage() {
     <>
       {noticeMessage ? <Notice message={noticeMessage} error="" /> : null}
       {error ? <Notice message="" error={error} /> : null}
-      <div className="grid flex-1 gap-4 py-4 sm:gap-6 sm:py-6 lg:grid-cols-[1fr]">
-              <StocksView
-                stockTab={stockTab}
-                setStockTab={setStockTab}
-                visibleSymbols={visibleSymbols}
-                usStocks={usStocks}
-                krStocks={krStocks}
-                visibleKrSymbols={visibleKrSymbols}
-                selectedSymbol={selectedSymbol}
-                setSelectedSymbol={setSelectedSymbol}
-                stockDetail={stockDetail}
-                livePrices={livePrices}
-                liveSeries={liveSeries}
-                candles={candles}
-                chartPeriod={chartPeriod}
-                setChartPeriod={setChartPeriod}
-                chartLoading={chartLoading}
-                language={language}
-                search={search}
-                setSearch={setSearch}
-                priceCurrency={priceCurrency}
-                setPriceCurrency={setPriceCurrency}
-                relatedPosts={relatedPosts}
-                stockNews={stockNews}
-                onRelatedPostClick={openRelatedPost}
-                exchangeRate={exchangeRate}
-              />
-            </div>
+      <div className="grid min-w-0 flex-1 gap-4 py-4 sm:gap-6 sm:py-6">
+        <StocksView
+          stockTab={stockTab}
+          setStockTab={setStockTab}
+          visibleSymbols={visibleSymbols}
+          usStocks={usStocks}
+          krStocks={krStocks}
+          visibleKrSymbols={visibleKrSymbols}
+          selectedSymbol={selectedSymbol}
+          setSelectedSymbol={setSelectedSymbol}
+          stockDetail={stockDetail}
+          livePrices={livePrices}
+          liveSeries={liveSeries}
+          candles={candles}
+          chartPeriod={chartPeriod}
+          setChartPeriod={setChartPeriod}
+          chartLoading={chartLoading}
+          language={language}
+          search={search}
+          setSearch={setSearch}
+          searchOpen={searchOpen}
+          setSearchOpen={setSearchOpen}
+          debouncedSearch={debouncedSearch}
+          priceCurrency={priceCurrency}
+          setPriceCurrency={setPriceCurrency}
+          relatedPosts={relatedPosts}
+          stockNews={stockNews}
+          onRelatedPostClick={openRelatedPost}
+          exchangeRate={exchangeRate}
+        />
+      </div>
     </>
   );
 }
@@ -382,6 +423,9 @@ function StocksView({
   chartLoading,
   search,
   setSearch,
+  searchOpen,
+  setSearchOpen,
+  debouncedSearch,
   language,
   priceCurrency,
   setPriceCurrency,
@@ -407,6 +451,9 @@ function StocksView({
   chartLoading: boolean;
   search: string;
   setSearch: (value: string) => void;
+  searchOpen: boolean;
+  setSearchOpen: (value: boolean) => void;
+  debouncedSearch: string;
   language: Language;
   priceCurrency: DisplayCurrency;
   setPriceCurrency: (currency: DisplayCurrency) => void;
@@ -416,88 +463,58 @@ function StocksView({
   exchangeRate: number | null;
 }) {
   return (
-    <section className="-mx-4 border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
-      <div className="flex flex-col gap-3 border-b border-[#eef1f6] pb-4 md:flex-row md:items-center md:justify-between">
+    <section className="-mx-4 min-w-0 border-y border-border bg-surface p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
+      <div className="flex flex-col gap-3 border-b border-border pb-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-lg font-semibold sm:text-xl">{copy[language].stockList}</h2>
-          <p className="mt-1 text-sm text-[#607086]">
-            {copy[language].stockHint}
-          </p>
+          <SectionHeader
+            eyebrow={language === "ko" ? "실시간 시세" : "Live quotes"}
+            title={copy[language].stockList}
+          />
+          <p className="mt-2 text-sm text-muted">{copy[language].stockHint}</p>
         </div>
-        <div className="grid grid-cols-2 rounded-md border border-[#d4dae5] bg-[#f3f5f9] p-1 md:min-w-[240px]">
-          <button
-            onClick={() => {
-              setStockTab("KR");
-              setSelectedSymbol("005930");
-              setPriceCurrency("KRW");
-              setSearch("");
-            }}
-            className={`h-9 rounded px-3 text-sm font-semibold ${
-              stockTab === "KR" ? "bg-white shadow-sm" : "text-[#607086]"
-            }`}
-          >
-            {copy[language].korea}
-          </button>
-          <button
-            onClick={() => {
-              setStockTab("US");
-              setSelectedSymbol("AAPL");
-              setPriceCurrency("USD");
-              setSearch("");
-            }}
-            className={`h-9 rounded px-3 text-sm font-semibold ${
-              stockTab === "US" ? "bg-white shadow-sm" : "text-[#607086]"
-            }`}
-          >
-            {copy[language].us}
-          </button>
-        </div>
+        <SegmentedControl
+          className="w-full md:inline-flex md:w-auto md:min-w-[240px]"
+          buttonClassName="sm:flex-1 md:flex-none"
+          aria-label={copy[language].stockList}
+          options={[
+            { value: "KR", label: copy[language].korea },
+            { value: "US", label: copy[language].us },
+          ]}
+          value={stockTab}
+          onChange={(tab) => {
+            setStockTab(tab as StockTab);
+            setSelectedSymbol(tab === "KR" ? "005930" : "AAPL");
+            setPriceCurrency(tab === "KR" ? "KRW" : "USD");
+            setSearch("");
+          }}
+        />
       </div>
 
       {stockTab === "KR" ? (
-        <div className="mt-4 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[360px_1fr]">
-          <div>
-            <div className="relative">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#607086]"
+        <div className="mt-4 grid min-w-0 gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+          <div className="min-w-0">
+            <StockSearchPopover
+              market="KR"
+              language={language}
+              search={search}
+              setSearch={setSearch}
+              debouncedSearch={debouncedSearch}
+              open={searchOpen}
+              setOpen={setSearchOpen}
+              symbols={visibleKrSymbols}
+              quotes={krStocks}
+              selectedSymbol={selectedSymbol}
+              priceCurrency="KRW"
+              exchangeRate={exchangeRate}
+              onSelect={setSelectedSymbol}
+            />
+            <div className="mt-2 hidden xl:block">
+              <RelatedPosts
+                posts={relatedPosts}
+                onPostClick={onRelatedPostClick}
+                language={language}
               />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={copy[language].search}
-                className="h-11 w-full rounded-md border border-[#c7ceda] pl-9 pr-3 text-base outline-none focus:border-[#1f6f8b] sm:h-10 sm:text-sm"
-              />
-            </div>
-            <div className="mt-3 max-h-[42dvh] overflow-auto rounded-md border border-[#d9dee8] sm:max-h-[560px]">
-              {visibleKrSymbols.map((item) => {
-                  const quote = krStocks.find((stock) => stock.symbol === item.symbol);
-                  return (
-                    <button
-                      key={item.symbol}
-                      onClick={() => setSelectedSymbol(item.symbol)}
-                      className={`block w-full border-b border-[#eef1f6] px-3 py-3 text-left last:border-b-0 hover:bg-[#f6f8fb] ${
-                        selectedSymbol === item.symbol ? "bg-[#eef6f8]" : ""
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold">{item.description}</p>
-                          <p className="truncate text-xs text-[#607086]">{item.symbol}</p>
-                        </div>
-                        <p className="shrink-0 text-sm font-semibold">
-                          {quote
-                            ? formatMoney(quote.current, "KRW", quote.currency, exchangeRate)
-                            : ""}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-            </div>
-            <div className="hidden xl:block">
-              <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
-              <RelatedNews news={stockNews} />
+              <RelatedNews news={stockNews} language={language} />
             </div>
           </div>
           <StockDetailPanel
@@ -513,70 +530,41 @@ function StocksView({
             setPriceCurrency={setPriceCurrency}
             exchangeRate={exchangeRate}
           />
-          <div className="xl:hidden">
-            <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
-            <RelatedNews news={stockNews} />
+          <div className="min-w-0 -mt-2 xl:hidden">
+            <RelatedPosts
+              posts={relatedPosts}
+              onPostClick={onRelatedPostClick}
+              language={language}
+            />
+            <RelatedNews news={stockNews} language={language} />
           </div>
         </div>
       ) : (
-        <div className="mt-4 grid gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[360px_1fr]">
-          <div>
-            <div className="relative">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[#607086]"
+        <div className="mt-4 grid min-w-0 gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+          <div className="min-w-0">
+            <StockSearchPopover
+              market="US"
+              language={language}
+              search={search}
+              setSearch={setSearch}
+              debouncedSearch={debouncedSearch}
+              open={searchOpen}
+              setOpen={setSearchOpen}
+              symbols={visibleSymbols}
+              quotes={usStocks}
+              livePrices={livePrices}
+              selectedSymbol={selectedSymbol}
+              priceCurrency={priceCurrency}
+              exchangeRate={exchangeRate}
+              onSelect={setSelectedSymbol}
+            />
+            <div className="mt-2 hidden xl:block">
+              <RelatedPosts
+                posts={relatedPosts}
+                onPostClick={onRelatedPostClick}
+                language={language}
               />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={copy[language].search}
-                className="h-11 w-full rounded-md border border-[#c7ceda] pl-9 pr-3 text-base outline-none focus:border-[#1f6f8b] sm:h-10 sm:text-sm"
-              />
-            </div>
-            <div className="mt-3 max-h-[42dvh] overflow-auto rounded-md border border-[#d9dee8] sm:max-h-[560px]">
-              {visibleSymbols.map((item) => {
-                const quote = usStocks.find((stock) => stock.symbol === item.symbol);
-                const live = livePrices[item.symbol];
-                return (
-                  <button
-                    key={item.symbol}
-                    onClick={() => setSelectedSymbol(item.symbol)}
-                    className={`block w-full border-b border-[#eef1f6] px-3 py-3 text-left last:border-b-0 hover:bg-[#f6f8fb] ${
-                      selectedSymbol === item.symbol ? "bg-[#eef6f8]" : ""
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold">{item.symbol}</p>
-                        <p className="truncate text-xs text-[#607086]">
-                          {item.description}
-                        </p>
-                      </div>
-                        <p className="shrink-0 text-sm font-semibold">
-                          {live
-                            ? formatMoney(
-                                live.price,
-                                priceCurrency,
-                                item.currency === "KRW" ? "KRW" : "USD",
-                                exchangeRate,
-                              )
-                            : quote
-                              ? formatMoney(
-                                  quote.current,
-                                  priceCurrency,
-                                  quote.currency ?? "USD",
-                                  exchangeRate,
-                                )
-                              : ""}
-                        </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="hidden xl:block">
-              <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
-              <RelatedNews news={stockNews} />
+              <RelatedNews news={stockNews} language={language} />
             </div>
           </div>
           <StockDetailPanel
@@ -592,9 +580,13 @@ function StocksView({
             setPriceCurrency={setPriceCurrency}
             exchangeRate={exchangeRate}
           />
-          <div className="xl:hidden">
-            <RelatedPosts posts={relatedPosts} onPostClick={onRelatedPostClick} />
-            <RelatedNews news={stockNews} />
+          <div className="min-w-0 -mt-2 xl:hidden">
+            <RelatedPosts
+              posts={relatedPosts}
+              onPostClick={onRelatedPostClick}
+              language={language}
+            />
+            <RelatedNews news={stockNews} language={language} />
           </div>
         </div>
       )}
@@ -628,11 +620,7 @@ function StockDetailPanel({
   exchangeRate: number | null;
 }) {
   if (!detail) {
-    return (
-      <div className="flex min-h-[240px] items-center justify-center rounded-md border border-[#d9dee8] text-sm text-[#607086] sm:min-h-[320px]">
-        Select a stock.
-      </div>
-    );
+    return <StockDetailSkeleton />;
   }
 
   const quote = applyLiveTrade(detail.quote, live);
@@ -668,27 +656,28 @@ function StockDetailPanel({
   ];
 
   return (
-    <div className="rounded-md border border-[#d9dee8] p-4 sm:p-5">
+    <div className="min-w-0 rounded-md border border-border p-4 sm:p-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm text-[#607086]">{detail.profile.exchange}</p>
+          <p className="text-sm text-muted">{detail.profile.exchange}</p>
           <h3 className="mt-1 break-words text-xl font-semibold sm:text-2xl">
             {detail.profile.name || detail.symbol}
           </h3>
-          <p className="mt-1 text-sm text-[#607086]">
-            {detail.symbol} · {detail.profile.finnhubIndustry || "Unknown sector"}
+          <p className="mt-1 text-sm text-muted">
+            {detail.symbol} ·{" "}
+            {detail.profile.finnhubIndustry ||
+              (language === "ko" ? "섹터 정보 없음" : "Unknown sector")}
           </p>
         </div>
         <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
           {!isKoreanMarket ? (
-            <button
-              onClick={() =>
-                setPriceCurrency(priceCurrency === "USD" ? "KRW" : "USD")
-              }
-              className="h-10 rounded-md border border-[#c7ceda] bg-white px-3 text-sm font-semibold text-[#344052] hover:bg-[#eef1f6]"
+            <Button
+              variant="secondary"
+              size="icon"
+              onClick={() => setPriceCurrency(priceCurrency === "USD" ? "KRW" : "USD")}
             >
               {priceCurrency === "USD" ? "원" : "$"}
-            </button>
+            </Button>
           ) : null}
           <CompanyIcon
             logoUrl={logoUrl}
@@ -703,28 +692,21 @@ function StockDetailPanel({
           live={!!live}
           displayCurrency={priceCurrency}
           exchangeRate={exchangeRate}
+          language={language}
         />
       </div>
-      <div className="mt-5 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3 sm:p-4">
+      <div className="mt-5 rounded-md border border-border bg-surface-muted p-3 sm:p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm font-semibold text-[#344052]">
+          <p className="text-sm font-semibold text-foreground">
             {translateDetailLabel(language, "realtimeChart")}
           </p>
-          <div className="grid grid-cols-6 gap-1 sm:flex sm:flex-wrap">
-            {chartPeriods.map((period) => (
-              <button
-                key={period}
-                onClick={() => setChartPeriod(period)}
-                className={`h-8 rounded-md px-1 text-xs font-semibold sm:px-2.5 ${
-                  chartPeriod === period
-                    ? "bg-[#1f6f8b] text-white"
-                    : "border border-[#c7ceda] bg-white text-[#344052]"
-                }`}
-              >
-                {period}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            className="w-full sm:w-auto"
+            aria-label={translateDetailLabel(language, "realtimeChart")}
+            options={chartPeriods.map((period) => ({ value: period, label: period }))}
+            value={chartPeriod}
+            onChange={setChartPeriod}
+          />
         </div>
         <>
           <RealtimeChart
@@ -732,21 +714,26 @@ function StockDetailPanel({
             live={live}
             loading={chartLoading}
             period={chartPeriod}
+            language={language}
           />
-          <p className="mt-2 text-xs text-[#607086]">
+          <p className="mt-2 text-xs text-muted">
             {series.length
-              ? `${series.length} live ticks received`
-              : "Live ticks update the last candle when available."}
+              ? language === "ko"
+                ? `실시간 체결 ${series.length}건 수신`
+                : `${series.length} live ticks received`
+              : language === "ko"
+                ? "실시간 체결 시 마지막 봉이 갱신됩니다."
+                : "Live ticks update the last candle when available."}
           </p>
         </>
       </div>
-       <div className="mt-5 rounded-md border border-[#d9dee8] p-3 sm:p-4">
+       <div className="mt-5 rounded-md border border-border p-3 sm:p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-[#344052]">
+            <p className="text-sm font-semibold text-foreground">
               {translateDetailLabel(language, "companyOverview")}
             </p>
-            <p className="mt-1 text-xs text-[#607086]">
+            <p className="mt-1 text-xs text-muted">
               {translateDetailLabel(language, "source")}: {detail.overview.source}
               {detail.overview.fetchedAt
                 ? ` · ${new Date(detail.overview.fetchedAt).toLocaleDateString()}`
@@ -754,7 +741,7 @@ function StockDetailPanel({
             </p>
           </div>
         </div>
-        <p className="mt-4 text-sm leading-6 text-[#344052]">
+        <p className="mt-4 text-sm leading-6 text-foreground">
           {language === "en" ? detail.overview.en : detail.overview.ko}
         </p>
          <div className="mt-3 grid gap-2 sm:gap-3 md:grid-cols-2">
@@ -795,11 +782,11 @@ function StockDetailPanel({
             />
         </div>
       </div>
-      <div className="mt-5 rounded-md border border-[#d9dee8] p-3 sm:p-4">
-        <p className="text-sm font-semibold text-[#344052]">
+      <div className="mt-5 rounded-md border border-border p-3 sm:p-4">
+        <p className="text-sm font-semibold text-foreground">
           {translateDetailLabel(language, "metrics")}
         </p>
-        <div className="mt-3 grid gap-2 sm:gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-3">
           {valuationItems.map((item) => (
             <InfoBox key={item.label} label={item.label} value={item.value} />
           ))}
@@ -810,16 +797,181 @@ function StockDetailPanel({
   );
 }
 
+function StockSearchPopover({
+  market,
+  language,
+  search,
+  setSearch,
+  debouncedSearch,
+  open,
+  setOpen,
+  symbols,
+  quotes,
+  livePrices = {},
+  selectedSymbol,
+  priceCurrency,
+  exchangeRate,
+  onSelect,
+}: {
+  market: StockTab;
+  language: Language;
+  search: string;
+  setSearch: (value: string) => void;
+  debouncedSearch: string;
+  open: boolean;
+  setOpen: (value: boolean) => void;
+  symbols: StockSymbol[];
+  quotes: MarketQuote[];
+  livePrices?: Record<string, TradeTick>;
+  selectedSymbol: string;
+  priceCurrency: DisplayCurrency;
+  exchangeRate: number | null;
+  onSelect: (symbol: string) => void;
+}) {
+  const quoteBySymbol = useMemo(
+    () => new Map(quotes.map((quote) => [quote.symbol, quote])),
+    [quotes],
+  );
+  const query = debouncedSearch.trim();
+  const isDebouncing = search.trim() !== query;
+  const showPopover = open && (search.trim().length > 0 || symbols.length > 0);
+  const resultLabel =
+    language === "ko"
+      ? query
+        ? "검색 결과"
+        : "추천 종목"
+      : query
+        ? "Search results"
+        : "Suggested";
+
+  function selectSymbol(symbol: string) {
+    onSelect(symbol);
+    setSearch("");
+    setOpen(false);
+  }
+
+  return (
+    <div
+      className="relative"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setOpen(false);
+        }
+      }}
+    >
+      <div
+        className={`group flex h-12 items-center gap-2 rounded-md border bg-surface px-3 shadow-sm transition-all sm:h-11 ${
+          open
+            ? "border-primary ring-4 ring-primary/10"
+            : "border-border-strong hover:border-primary/60"
+        }`}
+      >
+        <div className="grid size-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+          <Search size={17} />
+        </div>
+        <input
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          placeholder={copy[language].search}
+          className="min-w-0 flex-1 bg-transparent text-base font-semibold text-foreground outline-none placeholder:font-medium placeholder:text-muted sm:text-sm"
+        />
+        {isDebouncing ? (
+          <span className="size-2 shrink-0 rounded-full bg-primary/70" aria-hidden />
+        ) : null}
+        {search ? (
+          <button
+            type="button"
+            onClick={() => {
+              setSearch("");
+              setOpen(true);
+            }}
+            className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-md text-muted transition-colors hover:bg-surface-muted hover:text-foreground"
+            aria-label={language === "ko" ? "검색어 지우기" : "Clear search"}
+          >
+            <X size={16} />
+          </button>
+        ) : null}
+      </div>
+
+      {showPopover ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-30 overflow-hidden rounded-md border border-border bg-surface shadow-xl shadow-[#152033]/10">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
+            <p className="text-xs font-semibold text-muted">{resultLabel}</p>
+            <p className="text-xs font-semibold text-muted">{symbols.length}</p>
+          </div>
+          <div className="max-h-[min(360px,52dvh)] overflow-auto p-1">
+            {symbols.length ? (
+              symbols.map((item) => {
+                const quote = quoteBySymbol.get(item.symbol);
+                const live = livePrices[item.symbol];
+                const displayPrice = live
+                  ? formatMoney(
+                      live.price,
+                      priceCurrency,
+                      item.currency === "KRW" ? "KRW" : "USD",
+                      exchangeRate,
+                    )
+                  : quote
+                    ? formatMoney(
+                        quote.current,
+                        priceCurrency,
+                        quote.currency ?? (market === "KR" ? "KRW" : "USD"),
+                        exchangeRate,
+                      )
+                    : "";
+                const primary = market === "KR" ? item.description : item.symbol;
+                const secondary = market === "KR" ? item.symbol : item.description;
+
+                return (
+                  <button
+                    key={item.symbol}
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectSymbol(item.symbol)}
+                    className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-surface-muted ${
+                      selectedSymbol === item.symbol ? "bg-primary/10" : ""
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {primary}
+                      </p>
+                      <p className="truncate text-xs text-muted">{secondary}</p>
+                    </div>
+                    <p className="shrink-0 text-sm font-semibold text-foreground">
+                      {displayPrice}
+                    </p>
+                  </button>
+                );
+              })
+            ) : (
+              <p className="px-3 py-6 text-center text-sm text-muted">
+                {language === "ko" ? "검색 결과가 없습니다." : "No matches found."}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function RealtimeChart({
   candles,
   live,
   loading,
   period,
+  language,
 }: {
   candles: CandlePoint[];
   live?: TradeTick;
   loading: boolean;
   period: ChartPeriod;
+  language: Language;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -831,7 +983,8 @@ function RealtimeChart({
     }
 
     const chart = createChart(containerRef.current, {
-      height: 220,
+      width: containerRef.current.clientWidth,
+      height: containerRef.current.clientHeight,
       layout: {
         background: { color: "#f9fafc" },
         textColor: "#344052",
@@ -860,20 +1013,17 @@ function RealtimeChart({
     chartRef.current = chart;
     seriesRef.current = series;
 
-    const resize = () => {
-      if (containerRef.current) {
-        chart.applyOptions({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
-        });
+    const resizeObserver = new ResizeObserver(([entry]) => {
+      const width = Math.floor(entry.contentRect.width);
+      const height = Math.floor(entry.contentRect.height);
+      if (width > 0 && height > 0) {
+        chart.applyOptions({ width, height });
       }
-    };
-
-    resize();
-    window.addEventListener("resize", resize);
+    });
+    resizeObserver.observe(containerRef.current);
 
     return () => {
-      window.removeEventListener("resize", resize);
+      resizeObserver.disconnect();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -923,8 +1073,8 @@ function RealtimeChart({
   return (
     <div className="relative mt-3">
       {loading ? (
-        <div className="absolute right-3 top-3 z-10 rounded-md bg-white/90 px-2 py-1 text-xs font-semibold text-[#607086]">
-          Loading
+        <div className="absolute right-3 top-3 z-10 rounded-md bg-surface/90 px-2 py-1 text-xs font-semibold text-muted">
+          {language === "ko" ? "불러오는 중" : "Loading"}
         </div>
       ) : null}
       <div ref={containerRef} className="h-[220px] w-full sm:h-[260px]" />
@@ -951,12 +1101,14 @@ function QuoteCard({
   live = false,
   displayCurrency = "USD",
   exchangeRate,
+  language = "ko",
 }: {
   quote: MarketQuote;
   compact?: boolean;
   live?: boolean;
   displayCurrency?: DisplayCurrency;
   exchangeRate?: number | null;
+  language?: Language;
 }) {
   const positive = quote.change >= 0;
   const isIndex = quote.symbol.startsWith("KIS_INDEX:");
@@ -967,15 +1119,15 @@ function QuoteCard({
     ? formatNumber(quote.change)
     : formatMoney(quote.change, displayCurrency, quote.currency, exchangeRate);
   return (
-    <div className="rounded-md border border-[#d9dee8] bg-[#f9fafc] p-4">
+    <div className="rounded-md border border-border bg-surface-muted p-4">
       <div className="flex items-center justify-between">
         <div>
           <p className="font-semibold">{quote.name || quote.symbol}</p>
         </div>
         {positive ? (
-          <TrendingUp size={18} className="text-[#2e7d4f]" />
+          <TrendingUp size={18} className="text-positive" />
         ) : (
-          <TrendingDown size={18} className="text-[#b64242]" />
+          <TrendingDown size={18} className="text-negative" />
         )}
       </div>
       <p className={compact ? "mt-2 text-xl font-semibold" : "mt-3 text-2xl font-semibold sm:text-3xl"}>
@@ -983,7 +1135,7 @@ function QuoteCard({
       </p>
       <p
         className={`mt-1 text-sm font-medium ${
-          positive ? "text-[#2e7d4f]" : "text-[#b64242]"
+          positive ? "text-positive" : "text-negative"
         }`}
       >
         {positive ? "+" : ""}
@@ -991,7 +1143,9 @@ function QuoteCard({
         {formatNumber(quote.percentChange)}%)
       </p>
       {live ? (
-        <p className="mt-2 text-xs font-medium text-[#1f6f8b]">Live tick</p>
+        <p className="mt-2 text-xs font-medium text-primary">
+          {language === "ko" ? "실시간" : "Live tick"}
+        </p>
       ) : null}
     </div>
   );
@@ -1000,13 +1154,18 @@ function QuoteCard({
 function RelatedPosts({
   posts,
   onPostClick,
+  language,
 }: {
   posts: CommunityPost[];
   onPostClick: (postId: string) => void;
+  language: Language;
 }) {
   return (
-    <div className="mt-3 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3">
-      <p className="text-xs font-semibold text-[#344052]">이 종목과 관련된 피드</p>
+    <div className="rounded-md border border-border bg-surface-muted p-3">
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+        <MessageSquareText size={14} className="text-primary" />
+        {language === "ko" ? "이 종목과 관련된 피드" : "Related community posts"}
+      </p>
       <div className="mt-2 space-y-2">
         {posts.length ? (
           posts.slice(0, 3).map((post) => {
@@ -1015,24 +1174,26 @@ function RelatedPosts({
               <button
                 key={post.id}
                 onClick={() => onPostClick(post.id)}
-                className="block w-full cursor-pointer border-t border-[#eef1f6] pt-2 text-left first:border-0 first:pt-0"
+                className="block w-full cursor-pointer border-t border-border pt-2 text-left first:border-0 first:pt-0"
               >
                 <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
                   <p className="truncate text-sm font-semibold sm:max-w-[45%]">
                     {post.title || post.content}
                   </p>
-                  <p className="min-w-0 flex-1 truncate text-[11px] text-[#607086]">
+                  <p className="min-w-0 flex-1 truncate text-[11px] text-muted">
                     {preview}
                   </p>
                 </div>
-                <p className="mt-0.5 text-xs text-[#607086]">
+                <p className="mt-0.5 text-xs text-muted">
                   {post.author.nickname} · {new Date(post.createdAt).toLocaleDateString()}
                 </p>
               </button>
             );
           })
         ) : (
-          <p className="text-xs text-[#607086]">아직 관련 게시글이 없습니다.</p>
+          <p className="text-xs text-muted">
+            {language === "ko" ? "아직 관련 게시글이 없습니다." : "No related posts yet."}
+          </p>
         )}
       </div>
     </div>
@@ -1056,7 +1217,7 @@ function CompanyIcon({
       <img
         src={logoUrl}
         alt=""
-        className="h-10 w-10 rounded-md border border-[#d9dee8] bg-white object-contain sm:h-12 sm:w-12"
+        className="size-11 rounded-md border border-border bg-surface object-contain sm:size-10"
         onError={() => setLogoFailed(true)}
       />
     );
@@ -1067,7 +1228,7 @@ function CompanyIcon({
 
 function FallbackCompanyIcon({ initials }: { initials: string }) {
   return (
-    <div className="grid h-10 w-10 place-items-center rounded-md border border-[#d9dee8] bg-[#eef6f9] text-sm font-bold text-[#1f6f8b] sm:h-12 sm:w-12">
+    <div className="grid size-11 place-items-center rounded-md border border-border bg-primary/10 text-sm font-bold text-primary sm:size-10">
       {initials}
     </div>
   );
@@ -1109,10 +1270,13 @@ function getRelatedPostPreview(post: CommunityPost): string {
   return text || "본문 글 없음";
 }
 
-function RelatedNews({ news }: { news: MarketNews[] }) {
+function RelatedNews({ news, language }: { news: MarketNews[]; language: Language }) {
   return (
-    <div className="mt-3 rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3">
-      <p className="text-xs font-semibold text-[#344052]">이 종목의 최신 뉴스</p>
+    <div className="mt-2 rounded-md border border-border bg-surface-muted p-3">
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+        <Newspaper size={14} className="text-primary" />
+        {language === "ko" ? "이 종목의 최신 뉴스" : "Latest news for this stock"}
+      </p>
       <div className="mt-2 space-y-2">
         {news.length ? (
           news.slice(0, 5).map((item) => (
@@ -1121,18 +1285,20 @@ function RelatedNews({ news }: { news: MarketNews[] }) {
               href={item.url}
               target="_blank"
               rel="noreferrer"
-              className="block border-t border-[#eef1f6] pt-2 first:border-0 first:pt-0 hover:text-[#1f6f8b]"
+              className="block border-t border-border pt-2 first:border-0 first:pt-0 hover:text-primary"
             >
               <p className="line-clamp-2 text-sm font-semibold">
                 {item.translatedHeadline || item.headline}
               </p>
-              <p className="mt-0.5 text-xs text-[#607086]">
+              <p className="mt-0.5 text-xs text-muted">
                 {item.source} · {new Date(item.datetime * 1000).toLocaleDateString()}
               </p>
             </a>
           ))
         ) : (
-          <p className="text-xs text-[#607086]">관련 최신 뉴스가 없습니다.</p>
+          <p className="text-xs text-muted">
+            {language === "ko" ? "관련 최신 뉴스가 없습니다." : "No related news."}
+          </p>
         )}
       </div>
     </div>
@@ -1168,16 +1334,16 @@ function FinancialBarChart({
     language === "ko" ? "영업이익" : "Operating profit";
 
   return (
-    <div className="mt-5 rounded-md border border-[#d9dee8] p-3 sm:p-4">
+    <div className="mt-5 rounded-md border border-border p-3 sm:p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm font-semibold text-[#344052]">{title}</p>
-        <div className="flex gap-3 text-xs text-[#607086]">
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <div className="flex gap-3 text-xs text-muted">
           <span className="flex items-center gap-1">
-            <span className="h-2 w-2 rounded-sm bg-[#1f6f8b]" />
+            <span className="h-2 w-2 rounded-sm bg-primary" />
             {revenueLabel}
           </span>
           <span className="flex items-center gap-1">
-            <span className="h-2 w-2 rounded-sm bg-[#2e7d4f]" />
+            <span className="h-2 w-2 rounded-sm bg-positive" />
             {operatingProfitLabel}
           </span>
         </div>
@@ -1192,24 +1358,24 @@ function FinancialBarChart({
 
           return (
             <div key={item.fiscalYear} className="min-w-0">
-              <div className="flex h-32 items-end justify-center gap-1 rounded-md bg-[#f9fafc] px-2 py-2">
+              <div className="flex h-32 items-end justify-center gap-1 rounded-md bg-surface-muted px-2 py-2">
                 <div
-                  className="w-4 rounded-t-sm bg-[#1f6f8b] sm:w-5"
+                  className="w-4 rounded-t-sm bg-primary sm:w-5"
                   style={{ height: `${revenueHeight}%` }}
                   title={`${revenueLabel}: ${formatFinancialAmount(item.revenue)}`}
                 />
                 <div
-                  className="w-4 rounded-t-sm bg-[#2e7d4f] sm:w-5"
+                  className="w-4 rounded-t-sm bg-positive sm:w-5"
                   style={{ height: `${operatingProfitHeight}%` }}
                   title={`${operatingProfitLabel}: ${formatFinancialAmount(
                     item.operatingProfit,
                   )}`}
                 />
               </div>
-              <p className="mt-2 text-center text-xs font-semibold text-[#344052]">
+              <p className="mt-2 text-center text-xs font-semibold text-foreground">
                 {item.fiscalYear}
               </p>
-              <p className="mt-1 truncate text-center text-[11px] text-[#607086]">
+              <p className="mt-1 truncate text-center text-[11px] text-muted">
                 {formatFinancialAmount(item.revenue)}
               </p>
             </div>
@@ -1254,12 +1420,42 @@ function formatFinancialDecimal(value: number) {
   }).format(value);
 }
 
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timeout);
+  }, [delayMs, value]);
+
+  return debounced;
+}
+
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-[#d9dee8] bg-[#f9fafc] p-3">
-      <p className="text-xs text-[#607086]">{label}</p>
-      <p className="mt-1 text-sm font-semibold">{value}</p>
+    <div className="min-w-0 rounded-md border border-border bg-surface-muted p-3">
+      <p className="text-xs text-muted">{label}</p>
+      <p className="mt-1 break-words text-sm font-semibold text-foreground">
+        {value}
+      </p>
     </div>
   );
 }
 
+// 종목 상세 로딩 자리(종목 선택/전환 시). 실제 상세 레이아웃과 비슷한 높이로 시프트 방지.
+function StockDetailSkeleton() {
+  return (
+    <div className="rounded-md border border-border p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-7 w-2/3" />
+          <Skeleton className="h-3 w-40" />
+        </div>
+        <Skeleton className="size-10 shrink-0 sm:size-12" />
+      </div>
+      <Skeleton className="mt-6 h-28 w-full" />
+      <Skeleton className="mt-5 h-[260px] w-full" />
+    </div>
+  );
+}

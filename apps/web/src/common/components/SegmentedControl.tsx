@@ -15,6 +15,8 @@ export interface SegmentedControlProps<T extends string> {
   "aria-label"?: string;
   /** 컨테이너에 덧붙일 클래스 (반응형 폭 등). 기본은 모바일 풀폭, 데스크톱은 `sm:inline-flex`로 콘텐츠 폭. */
   className?: string;
+  /** 각 탭 버튼에 덧붙일 클래스. 특정 화면의 breakpoint 폭 보정에 사용한다. */
+  buttonClassName?: string;
 }
 
 /**
@@ -26,6 +28,7 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
   className,
+  buttonClassName,
   ...rest
 }: SegmentedControlProps<T>) {
   return (
@@ -49,6 +52,7 @@ export function SegmentedControl<T extends string>({
               active
                 ? "bg-surface text-primary shadow-sm"
                 : "text-muted hover:bg-surface/60",
+              buttonClassName,
             )}
           >
             {option.label}
