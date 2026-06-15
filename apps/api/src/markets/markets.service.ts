@@ -192,6 +192,10 @@ export class MarketsService {
   private kisTokenPromise: Promise<string> | null = null;
   private kisRequestQueue: Promise<void> = Promise.resolve();
   private lastKisRequestAt = 0;
+  private readonly koreanPriceRefreshes = new Map<
+    string,
+    Promise<Record<string, string | undefined>>
+  >();
   private readonly redis: Redis;
 
   constructor(
@@ -266,11 +270,13 @@ export class MarketsService {
       const masterStock = await this.stockMasterRepository.findOne({
         where: { symbol: normalizedSymbol, active: true },
       });
-      return this.getKoreanQuote({
+      const stock: KisStock = {
         symbol: normalizedSymbol,
         name: masterStock?.name ?? normalizedSymbol,
         marketDiv: masterStock?.market === 'KR:KOSDAQ' ? 'Q' : 'J',
-      });
+      };
+      const output = await this.getKoreanPriceOutputCached(stock, 5_000, true);
+      return this.buildKoreanQuote(stock, output);
     }
 
     const masterStock = await this.stockMasterRepository.findOne({
@@ -1272,7 +1278,7 @@ export class MarketsService {
   ): Promise<MarketNews[]> {
     const normalizedSymbol = symbol.toUpperCase().trim();
     const normalizedMarket = market.toUpperCase() === 'KR' ? 'KR' : 'US';
-    const cacheKey = `market:stock-news:v6:${normalizedMarket}:${normalizedSymbol}`;
+    const cacheKey = `market:stock-news:v7:${normalizedMarket}:${normalizedSymbol}`;
     const cached = await this.redis.get(cacheKey).catch(() => null);
 
     if (cached) {
@@ -1301,7 +1307,10 @@ export class MarketsService {
         where: { symbol: normalizedSymbol },
       }),
     ]);
-    let companyName = profile?.name || master?.name || normalizedSymbol;
+    let companyName =
+      normalizedMarket === 'KR'
+        ? master?.name || profile?.name || normalizedSymbol
+        : profile?.name || master?.name || normalizedSymbol;
     if (
       normalizedMarket === 'KR' &&
       master?.dartCorpCode &&
@@ -1344,20 +1353,27 @@ export class MarketsService {
       );
     }
     if (normalizedMarket === 'KR') {
-      const financeNews = await this.getNaverStockNews(
-        normalizedSymbol,
-        newsCompanyName,
-      ).catch(
-        (error) => {
+      const [financeNews, mobileFinanceNews] = await Promise.all([
+        this.getNaverStockNews(normalizedSymbol, newsCompanyName).catch(
+          (error) => {
+            this.logger.warn(
+              `Naver Finance stock news request failed for ${normalizedSymbol}: ${
+                error instanceof Error ? error.message : 'unknown error'
+              }`,
+            );
+            return [] as MarketNews[];
+          },
+        ),
+        this.getNaverMobileStockNews(normalizedSymbol).catch((error) => {
           this.logger.warn(
-            `Naver Finance stock news request failed for ${normalizedSymbol}: ${
+            `Naver mobile stock news request failed for ${normalizedSymbol}: ${
               error instanceof Error ? error.message : 'unknown error'
             }`,
           );
           return [] as MarketNews[];
-        },
-      );
-      news = [...news, ...financeNews];
+        }),
+      ]);
+      news = [...news, ...financeNews, ...mobileFinanceNews];
       news = news.filter(
         (item) =>
           item.related === normalizedSymbol ||
@@ -1730,6 +1746,59 @@ export class MarketsService {
     const byUrl = new Map<string, MarketNews>();
     articles.forEach((item) => byUrl.set(item.url, item));
     return [...byUrl.values()].slice(0, 5);
+  }
+
+  private async getNaverMobileStockNews(symbol: string): Promise<MarketNews[]> {
+    const url = new URL(`https://m.stock.naver.com/api/news/stock/${symbol}`);
+    url.searchParams.set('page', '1');
+    url.searchParams.set('pageSize', '20');
+    const response = await fetch(url, {
+      headers: {
+        referer: `https://m.stock.naver.com/domestic/stock/${symbol}/news`,
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+    });
+    if (!response.ok) {
+      throw new ServiceUnavailableException(
+        'Naver mobile stock news request failed.',
+      );
+    }
+
+    const groups = (await response.json()) as Array<{
+      items?: Array<{
+        id?: string;
+        officeName?: string;
+        datetime?: string;
+        title?: string;
+        titleFull?: string;
+        body?: string;
+        imageOriginLink?: string;
+        mobileNewsUrl?: string;
+      }>;
+    }>;
+    return groups
+      .flatMap((group) => group.items ?? [])
+      .map((item, index) => {
+        const itemUrl = item.mobileNewsUrl ?? '';
+        const headline = this.decodeHtml(item.titleFull || item.title || '');
+        const datetime = item.datetime ?? '';
+        const formattedDate = /^\d{12}$/.test(datetime)
+          ? `${datetime.slice(0, 4)}-${datetime.slice(4, 6)}-${datetime.slice(6, 8)} ${datetime.slice(8, 10)}:${datetime.slice(10, 12)}`
+          : datetime;
+        return {
+          category: 'kr',
+          datetime: this.parseNaverNewsDate(formattedDate),
+          headline,
+          id: this.numericId(item.id || itemUrl || `${symbol}:${index}`),
+          image: item.imageOriginLink ?? '',
+          related: symbol,
+          source: item.officeName || 'Naver Finance',
+          summary: this.decodeHtml(item.body || '') || headline,
+          url: itemUrl,
+        };
+      })
+      .filter((item) => item.headline && item.url);
   }
 
   private async getNaverSearchNews(query: string): Promise<MarketNews[]> {
@@ -3302,20 +3371,7 @@ export class MarketsService {
   private async getKoreanQuote(stock: KisStock): Promise<MarketQuote> {
     try {
       const output = await this.getKoreanPriceOutputCached(stock);
-
-      return {
-        symbol: stock.symbol,
-        name: stock.name,
-        currency: 'KRW',
-        current: this.toNumber(output.stck_prpr),
-        change: this.toNumber(output.prdy_vrss),
-        percentChange: this.toNumber(output.prdy_ctrt),
-        high: this.toNumber(output.stck_hgpr),
-        low: this.toNumber(output.stck_lwpr),
-        open: this.toNumber(output.stck_oprc),
-        previousClose: this.toNumber(output.prdy_clpr ?? output.stck_prpr),
-        timestamp: Math.floor(Date.now() / 1000),
-      };
+      return this.buildKoreanQuote(stock, output);
     } catch (error) {
       this.logger.warn(
         `KIS quote fallback used for ${stock.symbol}: ${
@@ -3336,6 +3392,25 @@ export class MarketsService {
         timestamp: Math.floor(Date.now() / 1000),
       };
     }
+  }
+
+  private buildKoreanQuote(
+    stock: KisStock,
+    output: Record<string, string | undefined>,
+  ): MarketQuote {
+    return {
+      symbol: stock.symbol,
+      name: stock.name,
+      currency: 'KRW',
+      current: this.toNumber(output.stck_prpr),
+      change: this.toNumber(output.prdy_vrss),
+      percentChange: this.toNumber(output.prdy_ctrt),
+      high: this.toNumber(output.stck_hgpr),
+      low: this.toNumber(output.stck_lwpr),
+      open: this.toNumber(output.stck_oprc),
+      previousClose: this.toNumber(output.prdy_clpr ?? output.stck_prpr),
+      timestamp: Math.floor(Date.now() / 1000),
+    };
   }
 
   private async getKoreanMetrics(
@@ -3526,6 +3601,8 @@ export class MarketsService {
 
   private async getKoreanPriceOutputCached(
     stock: KisStock,
+    maxAgeMs = 20_000,
+    waitForRefresh = false,
   ): Promise<Record<string, string | undefined>> {
     const key = `market:price:kr:${stock.symbol}`;
     const cached = await this.redis
@@ -3541,8 +3618,12 @@ export class MarketsService {
       .catch(() => null);
 
     if (cached?.output) {
-      if (Date.now() - cached.updatedAt > 20_000) {
-        void this.refreshKoreanPriceOutput(key, stock).catch((error) => {
+      if (Date.now() - cached.updatedAt > maxAgeMs) {
+        const refresh = this.refreshKoreanPriceOutputDeduped(key, stock);
+        if (waitForRefresh) {
+          return refresh;
+        }
+        void refresh.catch((error) => {
           this.logger.warn(
             `Background KIS price refresh failed for ${stock.symbol}: ${
               error instanceof Error ? error.message : 'unknown error'
@@ -3553,7 +3634,23 @@ export class MarketsService {
       return cached.output;
     }
 
-    return this.refreshKoreanPriceOutput(key, stock);
+    return this.refreshKoreanPriceOutputDeduped(key, stock);
+  }
+
+  private refreshKoreanPriceOutputDeduped(
+    key: string,
+    stock: KisStock,
+  ): Promise<Record<string, string | undefined>> {
+    const existing = this.koreanPriceRefreshes.get(stock.symbol);
+    if (existing) {
+      return existing;
+    }
+
+    const refresh = this.refreshKoreanPriceOutput(key, stock).finally(() => {
+      this.koreanPriceRefreshes.delete(stock.symbol);
+    });
+    this.koreanPriceRefreshes.set(stock.symbol, refresh);
+    return refresh;
   }
 
   private async refreshKoreanPriceOutput(
