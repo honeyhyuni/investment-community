@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { Button } from "@/common/components/Button";
+import { SectionHeader } from "@/common/components/SectionHeader";
 import { DisplayCurrency, MarketQuote, TradeTick } from "@/common/types";
 import { formatMoney, formatNumber } from "@/common/utils/format";
 import { applyLiveTrade } from "@/common/utils/market";
@@ -54,25 +55,22 @@ export function MarketPulse({
 
   return (
     <section className="-mx-4 mt-4 border-y border-border bg-surface p-3 shadow-sm sm:mx-0 sm:mt-5 sm:rounded-lg sm:border sm:p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
-            {eyebrow}
-          </p>
-          <h2 className="mt-0.5 text-base font-semibold text-foreground">
-            {title}
-          </h2>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={refresh}
-          loading={loading}
-          className="shrink-0"
-        >
-          {refreshLabel}
-        </Button>
-      </div>
+      <SectionHeader
+        className="mb-3"
+        eyebrow={eyebrow}
+        title={title}
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refresh}
+            loading={loading}
+            className="shrink-0"
+          >
+            {refreshLabel}
+          </Button>
+        }
+      />
       <div className="relative">
         <div
           ref={scrollRef}

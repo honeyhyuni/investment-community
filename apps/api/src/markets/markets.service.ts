@@ -892,10 +892,35 @@ export class MarketsService {
     } else if (category === 'crypto') {
       news = await this.getYahooSearchNews('bitcoin ethereum crypto market');
     } else {
-      news = await this.getYahooSearchNews('stock market');
+      news = await this.getYahooMarketNews();
     }
 
     return this.localizeNewsHeadlines(news, language);
+  }
+
+  // Yahoo search는 쿼리당 뉴스를 10건으로 고정 반환하고, 긴 구문/지수명 쿼리는
+  // 일반 뉴스로 뭉개거나 거의 비어서 나온다(실측). 한국(getNaverFinanceNews)의
+  // [증시 / 핫섹터(반도체)] 테마에 맞추되 실제 yield가 나오는 단일 키워드를 쓴다.
+  // 세 쿼리를 합쳐 URL 기준 dedup → 최신순 상위 60(실측 ~30건).
+  private async getYahooMarketNews(): Promise<MarketNews[]> {
+    const groups = await Promise.all([
+      this.getYahooSearchNews('stock market').catch(() => [] as MarketNews[]),
+      this.getYahooSearchNews('semiconductor').catch(() => [] as MarketNews[]),
+      this.getYahooSearchNews('Federal Reserve').catch(
+        () => [] as MarketNews[],
+      ),
+    ]);
+
+    const byUrl = new Map<string, MarketNews>();
+    groups.flat().forEach((item) => {
+      if (item.url && !byUrl.has(item.url)) {
+        byUrl.set(item.url, item);
+      }
+    });
+
+    return [...byUrl.values()]
+      .sort((a, b) => b.datetime - a.datetime)
+      .slice(0, 60);
   }
 
   async getLatestMarketBriefing(

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, Plus, Users } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
 import { Button } from "@/common/components/Button";
+import { SegmentedControl } from "@/common/components/SegmentedControl";
 import { cn } from "@/common/utils/cn";
 import { apiRequest } from "@/common/lib/api";
 import { resolveCommunityStockTag } from "@/domain/community/utils";
@@ -246,44 +247,29 @@ export function CommunityPage({ userId }: { userId?: string }) {
       <div className="grid flex-1 gap-4 py-4 sm:gap-5 sm:py-6 lg:grid-cols-[1fr_320px]">
         <div className="flex flex-col gap-4">
           {/* 피드 툴바 (탭 + 정렬 + 글쓰기) */}
-          <div className="-mx-4 flex items-center gap-2 border-y border-[#d9dee8] bg-white p-3 shadow-sm sm:mx-0 sm:rounded-lg sm:border">
+          <div className="-mx-4 flex items-center gap-2 border-y border-[#d9dee8] bg-surface p-3 shadow-sm sm:mx-0 sm:rounded-lg sm:border">
             {/* 스코프 탭 (세그먼티드 컨트롤) */}
-            <div
-              role="tablist"
-              className="flex flex-1 gap-1 rounded-xl bg-surface-subtle p-1 sm:inline-flex sm:flex-none"
-            >
-              {(["all", "subscribed", "mine"] as CommunityScope[]).map((item) => {
-                const active = scope === item;
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    onClick={() => setScope(item)}
-                    className={cn(
-                      "flex-1 cursor-pointer whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold transition-all sm:flex-none",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 focus-visible:ring-offset-surface-subtle",
-                      active
-                        ? "bg-surface text-primary shadow-sm"
-                        : "text-muted hover:bg-surface/60",
-                    )}
-                  >
-                    {item === "all"
+            <SegmentedControl
+              className="flex-1 sm:inline-flex sm:flex-none"
+              aria-label={ko ? "피드 범위" : "Feed scope"}
+              options={(["all", "subscribed", "mine"] as CommunityScope[]).map((item) => ({
+                value: item,
+                label:
+                  item === "all"
+                    ? ko
+                      ? "전체 피드"
+                      : "All"
+                    : item === "subscribed"
                       ? ko
-                        ? "전체 피드"
-                        : "All"
-                      : item === "subscribed"
-                        ? ko
-                          ? "구독 피드"
-                          : "Following"
-                        : ko
-                          ? "내 피드"
-                          : "Mine"}
-                  </button>
-                );
-              })}
-            </div>
+                        ? "구독 피드"
+                        : "Following"
+                      : ko
+                        ? "내 피드"
+                        : "Mine",
+              }))}
+              value={scope}
+              onChange={setScope}
+            />
 
             {/* 정렬 필터 (최신순 / 인기순) — 데스크톱에서만 툴바 안에 표시 */}
             <div className="hidden shrink-0 gap-1.5 sm:flex">{sortButtons}</div>

@@ -1,15 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
+import { Button } from "@/common/components/Button";
+import { SegmentedControl } from "@/common/components/SegmentedControl";
+import { SectionHeader } from "@/common/components/SectionHeader";
+import { Skeleton } from "@/common/components/Skeleton";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { useSessionStore } from "@/common/stores/session";
 import { apiRequest } from "@/common/lib/api";
 import { MarketNews, NewsCategory } from "@/domain/news/types";
 
-const newsCategories: Array<{ id: NewsCategory; label: string }> = [
-  { id: "us", label: "미국뉴스" },
-  { id: "kr", label: "한국뉴스" },
+const newsCategories: Array<{ id: NewsCategory; label: Record<"en" | "ko", string> }> = [
+  { id: "us", label: { ko: "미국뉴스", en: "US News" } },
+  { id: "kr", label: { ko: "한국뉴스", en: "Korea News" } },
 ];
 
 export function NewsPage() {
@@ -67,7 +72,6 @@ export function NewsPage() {
           category={category}
           setCategory={setCategory}
           language={language}
-          title={language === "ko" ? "뉴스" : "News"}
         />
       </div>
     </>
@@ -82,7 +86,6 @@ function NewsList({
   category,
   setCategory,
   language,
-  title,
 }: {
   news: MarketNews[];
   loading: boolean;
@@ -91,7 +94,6 @@ function NewsList({
   category: NewsCategory;
   setCategory: (category: NewsCategory) => void;
   language: "en" | "ko";
-  title: string;
 }) {
   const pageSize = 10;
   const totalPages = Math.max(1, Math.ceil(news.length / pageSize));
@@ -99,37 +101,33 @@ function NewsList({
   const visibleNews = news.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   return (
-    <section className="-mx-4 border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold sm:text-xl">{title}</h2>
-        <span className="rounded-md bg-[#eef3f8] px-2.5 py-1 text-xs font-semibold text-[#344052]">
-          {news.length}
-        </span>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:flex">
-        {newsCategories.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setCategory(item.id)}
-            className={`h-10 rounded-md px-3 text-sm font-semibold sm:h-9 ${
-              category === item.id
-                ? "bg-[#1f6f8b] text-white"
-                : "border border-[#c7ceda] bg-white text-[#344052]"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+    <section className="-mx-4 border-y border-[#d9dee8] bg-surface p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
+      <SectionHeader
+        eyebrow={language === "ko" ? "미국 · 한국 증시" : "US & Korea markets"}
+        title={language === "ko" ? "뉴스" : "News"}
+        action={
+          <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+            {news.length}
+          </span>
+        }
+      />
+      <SegmentedControl
+        className="mt-4 sm:inline-flex"
+        aria-label={language === "ko" ? "뉴스 지역" : "News region"}
+        options={newsCategories.map((item) => ({ value: item.id, label: item.label[language] }))}
+        value={category}
+        onChange={setCategory}
+      />
       <div className="mt-4 grid gap-3">
-        {loading && news.length === 0 ? (
+        {loading ? (
+          // 탭 전환·첫 로드 모두 카드와 동일한 크기의 스켈레톤을 한 페이지 분량 렌더해
+          // 레이아웃 시프트와 이전 탭 잔상 노출을 막는다.
+          Array.from({ length: pageSize }).map((_, index) => (
+            <NewsCardSkeleton key={index} />
+          ))
+        ) : news.length === 0 ? (
           <p className="rounded-md border border-[#d9dee8] p-6 text-center text-sm text-[#607086]">
-            불러오는 중입니다.
-          </p>
-        ) : null}
-        {!loading && news.length === 0 ? (
-          <p className="rounded-md border border-[#d9dee8] p-6 text-center text-sm text-[#607086]">
-            No news loaded.
+            {language === "ko" ? "표시할 뉴스가 없습니다." : "No news loaded."}
           </p>
         ) : (
           visibleNews.map((item) => (
@@ -138,7 +136,7 @@ function NewsList({
               href={item.url}
               target="_blank"
               rel="noreferrer"
-              className="block rounded-md border border-[#d9dee8] p-3 hover:bg-[#f6f8fb] sm:p-4"
+              className="block rounded-md border border-[#d9dee8] p-3 shadow-sm transition-all duration-150 ease-out will-change-transform hover:scale-[1.01] hover:bg-[#f6f8fb] hover:shadow-md sm:p-4"
             >
               <div className="flex gap-3 sm:gap-4">
                 {item.image ? (
@@ -164,27 +162,49 @@ function NewsList({
           ))
         )}
       </div>
-      {news.length > pageSize ? (
+      {!loading && news.length > pageSize ? (
         <div className="mt-4 flex items-center justify-between gap-3 border-t border-[#eef1f6] pt-4">
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<ChevronLeft />}
             disabled={safePage === 1}
             onClick={() => setPage(Math.max(1, safePage - 1))}
-            className="h-10 rounded-md border border-[#c7ceda] px-3 text-sm font-semibold disabled:opacity-50 sm:h-9"
           >
-            Previous
-          </button>
+            {language === "ko" ? "이전" : "Previous"}
+          </Button>
           <span className="text-sm font-medium text-[#607086]">
             {safePage} / {totalPages}
           </span>
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
+            rightIcon={<ChevronRight />}
             disabled={safePage === totalPages}
             onClick={() => setPage(Math.min(totalPages, safePage + 1))}
-            className="h-10 rounded-md border border-[#c7ceda] px-3 text-sm font-semibold disabled:opacity-50 sm:h-9"
           >
-            Next
-          </button>
+            {language === "ko" ? "다음" : "Next"}
+          </Button>
         </div>
       ) : null}
     </section>
+  );
+}
+
+// 실제 뉴스 카드(이미지 h-20 + 제목 2줄 + 요약 2줄)와 같은 크기·보더로 맞춰
+// 스켈레톤 → 실제 카드 전환 시 높이 점프가 없게 한다.
+function NewsCardSkeleton() {
+  return (
+    <div className="rounded-md border border-border bg-surface p-3 sm:p-4">
+      <div className="flex gap-3 sm:gap-4">
+        <Skeleton className="h-20 w-24 shrink-0 sm:w-28" />
+        <div className="min-w-0 flex-1">
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="mt-2 h-4 w-full" />
+          <Skeleton className="mt-1.5 h-4 w-11/12" />
+          <Skeleton className="mt-2 h-3 w-2/3" />
+        </div>
+      </div>
+    </div>
   );
 }
