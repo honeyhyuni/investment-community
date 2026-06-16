@@ -30,6 +30,7 @@ services:
     image: ${API_IMAGE}
     environment:
       NODE_ENV: production
+      ENABLE_SCHEDULED_JOBS: ${ENABLE_SCHEDULED_JOBS:-true}
       PORT: 4000
       WEB_ORIGIN: ${WEB_ORIGIN}
       DATABASE_URL: ${DATABASE_URL}

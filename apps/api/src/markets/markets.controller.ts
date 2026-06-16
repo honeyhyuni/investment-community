@@ -1,10 +1,13 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { AuthUser } from '../auth/auth-user.type';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { UserRole } from '../users/user-role.enum';
 import {
   CandlePoint,
+  FavoriteStock,
   MarketNews,
   MarketBriefing,
   MarketQuote,
@@ -58,6 +61,29 @@ export class MarketsController {
   @Get('symbols/kr')
   getKrSymbols(): Promise<StockSymbol[]> {
     return this.marketsService.getKrSymbols();
+  }
+
+  @Get('favorites')
+  getFavoriteStocks(@CurrentUser() user: AuthUser): Promise<FavoriteStock[]> {
+    return this.marketsService.getFavoriteStocks(user.sub);
+  }
+
+  @Post('favorites')
+  addFavoriteStock(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { symbol?: string; market?: string; name?: string },
+  ): Promise<FavoriteStock> {
+    return this.marketsService.addFavoriteStock(user.sub, body);
+  }
+
+  @Delete('favorites/:market/:symbol')
+  async removeFavoriteStock(
+    @CurrentUser() user: AuthUser,
+    @Param('market') market: string,
+    @Param('symbol') symbol: string,
+  ): Promise<{ ok: true }> {
+    await this.marketsService.removeFavoriteStock(user.sub, market, symbol);
+    return { ok: true };
   }
 
   @Get('stocks/detail')

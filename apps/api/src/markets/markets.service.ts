@@ -15,6 +15,7 @@ import {
   CompanyProfile,
   CompanyMetrics,
   FinnhubQuote,
+  FavoriteStock,
   MarketQuote,
   StockDetail,
   StockSymbol,
@@ -26,6 +27,7 @@ import { StockProfileEntity } from './stock-profile.entity';
 import { StockMasterEntity } from './stock-master.entity';
 import { MarketBriefingEntity } from './market-briefing.entity';
 import { StockFinancialEntity } from './stock-financial.entity';
+import { FavoriteStockEntity } from './favorite-stock.entity';
 
 const MARKET_PULSE = [
   { symbol: '^IXIC', name: 'Nasdaq Composite' },
@@ -208,6 +210,8 @@ export class MarketsService {
     private readonly stockFinancialRepository: Repository<StockFinancialEntity>,
     @InjectRepository(MarketBriefingEntity)
     private readonly marketBriefingsRepository: Repository<MarketBriefingEntity>,
+    @InjectRepository(FavoriteStockEntity)
+    private readonly favoriteStocksRepository: Repository<FavoriteStockEntity>,
   ) {
     this.redis = new Redis(
       this.configService.get<string>('REDIS_URL') ?? 'redis://redis:6379',
@@ -589,6 +593,126 @@ export class MarketsService {
       ...symbol,
       description: bySymbol.get(symbol.symbol)?.name ?? symbol.description,
     }));
+  }
+
+  async getFavoriteStocks(userId: string): Promise<FavoriteStock[]> {
+    const rows = await this.favoriteStocksRepository.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+
+    return Promise.all(
+      rows.map(async (row) => {
+        const quote = await this.getStockQuote(row.symbol, row.market).catch(
+          () =>
+            ({
+              symbol: row.symbol,
+              name: row.name ?? row.symbol,
+              currency: row.market === 'KR' ? 'KRW' : 'USD',
+              current: 0,
+              change: 0,
+              percentChange: 0,
+              high: 0,
+              low: 0,
+              open: 0,
+              previousClose: 0,
+              timestamp: Math.floor(Date.now() / 1000),
+            }) satisfies MarketQuote,
+        );
+
+        return {
+          ...quote,
+          name: quote.name || row.name || row.symbol,
+          market: row.market,
+          favoriteId: row.id,
+          addedAt: row.createdAt.toISOString(),
+        };
+      }),
+    );
+  }
+
+  async addFavoriteStock(
+    userId: string,
+    body: { symbol?: string; market?: string; name?: string },
+  ): Promise<FavoriteStock> {
+    const symbol = body.symbol?.trim().toUpperCase();
+    const market = body.market?.toUpperCase() === 'KR' ? 'KR' : 'US';
+    if (!symbol) {
+      throw new NotFoundException('Stock symbol is required.');
+    }
+
+    const master = await this.findStockMaster(symbol, market);
+    const name = body.name?.trim() || master?.name || symbol;
+    let favorite = await this.favoriteStocksRepository.findOne({
+      where: { userId, symbol, market },
+    });
+
+    if (!favorite) {
+      favorite = await this.favoriteStocksRepository.save(
+        this.favoriteStocksRepository.create({
+          userId,
+          symbol,
+          market,
+          name,
+        }),
+      );
+    }
+
+    const quote = await this.getStockQuote(symbol, market).catch(
+      () =>
+        ({
+          symbol,
+          name,
+          currency: market === 'KR' ? 'KRW' : 'USD',
+          current: 0,
+          change: 0,
+          percentChange: 0,
+          high: 0,
+          low: 0,
+          open: 0,
+          previousClose: 0,
+          timestamp: Math.floor(Date.now() / 1000),
+        }) satisfies MarketQuote,
+    );
+
+    return {
+      ...quote,
+      name: quote.name || name,
+      market,
+      favoriteId: favorite.id,
+      addedAt: favorite.createdAt.toISOString(),
+    };
+  }
+
+  async removeFavoriteStock(
+    userId: string,
+    market: string,
+    symbol: string,
+  ): Promise<void> {
+    await this.favoriteStocksRepository.delete({
+      userId,
+      market: market.toUpperCase() === 'KR' ? 'KR' : 'US',
+      symbol: symbol.trim().toUpperCase(),
+    });
+  }
+
+  private async findStockMaster(
+    symbol: string,
+    market: 'US' | 'KR',
+  ): Promise<StockMasterEntity | null> {
+    if (market === 'KR') {
+      return this.stockMasterRepository.findOne({
+        where: {
+          symbol,
+          active: true,
+          market: In(['KR:KOSPI', 'KR:KOSDAQ']),
+        },
+      });
+    }
+
+    return this.stockMasterRepository.findOne({
+      where: { symbol, active: true, market: 'US' },
+    });
   }
 
   async getStockDetail(symbol: string): Promise<StockDetail> {
@@ -1009,11 +1133,19 @@ export class MarketsService {
 
   @Cron('0 25 8 * * 2-6', { timeZone: 'Asia/Seoul' })
   async runScheduledUsMarketBriefing(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) {
+      this.logger.log('Scheduled US market briefing disabled.');
+      return;
+    }
     await this.runScheduledMarketBriefing('US');
   }
 
   @Cron('0 55 15 * * 1-5', { timeZone: 'Asia/Seoul' })
   async runScheduledKrMarketBriefing(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) {
+      this.logger.log('Scheduled KR market briefing disabled.');
+      return;
+    }
     await this.runScheduledMarketBriefing('KR');
   }
 
@@ -3093,6 +3225,15 @@ export class MarketsService {
         }`,
       );
     }
+  }
+
+  private isScheduledJobsEnabled(): boolean {
+    const explicitValue = this.configService.get<string>('ENABLE_SCHEDULED_JOBS');
+    if (explicitValue !== undefined) {
+      return explicitValue === 'true';
+    }
+
+    return this.configService.get<string>('NODE_ENV') === 'production';
   }
 
   private toKoreanDateKey(date: Date): string {

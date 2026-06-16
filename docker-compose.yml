@@ -22,6 +22,7 @@ services:
       dockerfile: Dockerfile.dev
     environment:
       NODE_ENV: ${NODE_ENV:-development}
+      ENABLE_SCHEDULED_JOBS: ${ENABLE_SCHEDULED_JOBS:-false}
       PORT: 4000
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
       DATABASE_URL: ${DATABASE_URL:-postgresql://invest:change-me@postgres:5432/invest}
