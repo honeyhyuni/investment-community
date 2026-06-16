@@ -18,6 +18,12 @@ export type MarketQuote = {
   timestamp: number;
 };
 
+export type FavoriteStock = MarketQuote & {
+  market: "US" | "KR";
+  favoriteId: string;
+  addedAt: string;
+};
+
 export type StockSymbol = {
   symbol: string;
   displaySymbol: string;

@@ -4,6 +4,7 @@ import { MarketsController } from './markets.controller';
 import { MarketsGateway } from './markets.gateway';
 import { MarketsProfileBatchService } from './markets-profile-batch.service';
 import { MarketsService } from './markets.service';
+import { FavoriteStockEntity } from './favorite-stock.entity';
 import { MarketBriefingEntity } from './market-briefing.entity';
 import { StockFinancialBatchService } from './stock-financial-batch.service';
 import { StockFinancialEntity } from './stock-financial.entity';
@@ -18,6 +19,7 @@ import { StockProfileEntity } from './stock-profile.entity';
       StockMasterEntity,
       StockFinancialEntity,
       MarketBriefingEntity,
+      FavoriteStockEntity,
     ]),
   ],
   controllers: [MarketsController],
@@ -29,4 +31,5 @@ import { StockProfileEntity } from './stock-profile.entity';
     StockFinancialBatchService,
   ],
 })
+/** Wires market quotes, stock metadata, financial batches, briefings, and sockets. */
 export class MarketsModule {}

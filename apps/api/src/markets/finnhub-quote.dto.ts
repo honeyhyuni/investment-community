@@ -31,6 +31,12 @@ export type StockSymbol = {
   currency?: string;
 };
 
+export type FavoriteStock = MarketQuote & {
+  market: 'US' | 'KR';
+  favoriteId: string;
+  addedAt: string;
+};
+
 export type CompanyProfile = {
   country?: string;
   currency?: string;

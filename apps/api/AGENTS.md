@@ -41,6 +41,8 @@ In(['KR:KOSPI', 'KR:KOSDAQ'])
 
 Production sets TypeORM `synchronize: false`. Entity changes require an explicit production migration/manual schema update.
 
+`favorite_stocks` stores each user's watchlist. It is keyed by `(user_id, market, symbol)` and uses public market values `US` and `KR`. Keep this table as user-owned metadata only; live prices still come from quote APIs/Redis when the watchlist is read.
+
 ## Korean Quote Contract
 
 - Korean current price/change/percent change come from Naver/KIS quote output.
@@ -100,6 +102,8 @@ Keys must remain in environment variables. Never commit `.env`, credentials, tok
 
 All cron times use `Asia/Seoul`.
 
+Scheduled market-briefing cron jobs must not run in local/dev containers. `ENABLE_SCHEDULED_JOBS=false` is the local default. Production should set `ENABLE_SCHEDULED_JOBS=true`; if the flag is absent, `MarketsService` enables schedules only when `NODE_ENV=production`.
+
 - Daily `01:00`: refresh Korean/US stock master and DART profile mapping.
 - Daily `02:00`: refresh default stock profiles.
 - Tue-Sat `08:25`: previous US-session market briefing.
@@ -137,11 +141,11 @@ Useful authenticated test sequence:
 2. Send both the returned access token and session cookie.
 3. Test health, quote, news, and relevant feature endpoints.
 
-Local dev uses `docker-compose.yml`; the operating VM uses `docker-compose.vm.yml`.
+Local dev uses `docker-compose.yml`. The current operating VM deploy directory also has its own `/home/ncloud/investment-community/docker-compose.yml`, so do not assume local compose files are automatically reflected there.
 
 ## Deployment
 
-- Working branch for requested changes: `LSH`.
+- Working branch for requested changes: `LSH2`.
 - Docker Hub images:
   - `honeyhyuni12/investment-community-api:latest`
   - `honeyhyuni12/investment-community-web:latest`
@@ -150,3 +154,7 @@ Local dev uses `docker-compose.yml`; the operating VM uses `docker-compose.vm.ym
 - Public site: `https://15f.kro.kr/`
 
 Never place SSH passwords or environment secrets in this file. Build, push, pull, recreate only changed services, then verify `/api/health` and HTTP status through the gateway.
+
+## Markets Service Maintenance
+
+`src/markets/markets.service.ts` is still intentionally broad and contains provider calls, Redis caching, briefings, and quote normalization. Prefer extracting low-risk pure helpers or new provider-specific services gradually, with an API build after each small step. Avoid large mechanical rewrites in this file unless tests/builds are run immediately afterward.

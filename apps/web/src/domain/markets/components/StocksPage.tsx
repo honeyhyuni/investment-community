@@ -11,6 +11,7 @@ import {
   MessageSquareText,
   Newspaper,
   Search,
+  Star,
   TrendingDown,
   TrendingUp,
   X,
@@ -38,6 +39,7 @@ import { formatMoney, formatNumber } from "@/common/utils/format";
 import { applyLiveTrade } from "@/common/utils/market";
 import {
   DisplayCurrency,
+  FavoriteStock,
   Language,
   MarketQuote,
   StockSymbol,
@@ -134,6 +136,8 @@ export function StocksPage() {
   const router = useRouter();
   const [relatedPosts, setRelatedPosts] = useState<CommunityPost[]>([]);
   const [stockNews, setStockNews] = useState<MarketNews[]>([]);
+  const [favoriteStocks, setFavoriteStocks] = useState<FavoriteStock[]>([]);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [selectedSymbol, setSelectedSymbol] = useState(initialSymbol);
   const [stockDetail, setStockDetail] = useState<StockDetail | null>(null);
   const [chartPeriod, setChartPeriod] = useState<ChartPeriod>("1M");
@@ -146,6 +150,13 @@ export function StocksPage() {
   const [error, setError] = useState("");
   const detailRequestIdRef = useRef(0);
   const debouncedSearch = useDebouncedValue(search, 180);
+  const selectedFavorite = useMemo(
+    () =>
+      favoriteStocks.some(
+        (stock) => stock.symbol === selectedSymbol && stock.market === stockTab,
+      ),
+    [favoriteStocks, selectedSymbol, stockTab],
+  );
 
   // 셸(레이아웃)에서 stocks가 곧 기본 라우트라 별도 전환 불필요.
   const openStocksView = useCallback(() => {}, []);
@@ -243,6 +254,62 @@ export function StocksPage() {
     setStockNews(news);
   }
 
+  async function loadFavoriteStocks(token = accessToken) {
+    if (!token) {
+      return;
+    }
+
+    const favorites = await apiRequest<FavoriteStock[]>(
+      "/markets/favorites",
+      "GET",
+      { accessToken: token },
+    ).catch(() => []);
+    setFavoriteStocks(favorites);
+  }
+
+  async function toggleFavoriteStock() {
+    if (!accessToken || !selectedSymbol || favoriteBusy) {
+      return;
+    }
+
+    setFavoriteBusy(true);
+    try {
+      if (selectedFavorite) {
+        await apiRequest<{ ok: true }>(
+          `/markets/favorites/${stockTab}/${encodeURIComponent(selectedSymbol)}`,
+          "DELETE",
+          { accessToken },
+        );
+        setFavoriteStocks((items) =>
+          items.filter(
+            (item) => !(item.symbol === selectedSymbol && item.market === stockTab),
+          ),
+        );
+      } else {
+        const favorite = await apiRequest<FavoriteStock>(
+          "/markets/favorites",
+          "POST",
+          {
+            accessToken,
+            body: {
+              symbol: selectedSymbol,
+              market: stockTab,
+              name: stockDetail?.profile.name,
+            },
+          },
+        );
+        setFavoriteStocks((items) => [
+          favorite,
+          ...items.filter(
+            (item) => !(item.symbol === favorite.symbol && item.market === favorite.market),
+          ),
+        ]);
+      }
+    } finally {
+      setFavoriteBusy(false);
+    }
+  }
+
   function openRelatedPost(postId: string) {
     router.push(`/community/${encodeURIComponent(postId)}`);
   }
@@ -317,6 +384,16 @@ export function StocksPage() {
   }, [accessToken, selectedSymbol, stockTab]);
 
   useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+
+    queueMicrotask(() => {
+      loadFavoriteStocks(accessToken);
+    });
+  }, [accessToken]);
+
+  useEffect(() => {
     if (!accessToken || !selectedSymbol) {
       return;
     }
@@ -374,6 +451,7 @@ export function StocksPage() {
         <StocksView
           stockTab={stockTab}
           setStockTab={setStockTab}
+          favoriteStocks={favoriteStocks}
           visibleSymbols={visibleSymbols}
           usStocks={usStocks}
           krStocks={krStocks}
@@ -399,6 +477,9 @@ export function StocksPage() {
           stockNews={stockNews}
           onRelatedPostClick={openRelatedPost}
           exchangeRate={exchangeRate}
+          selectedFavorite={selectedFavorite}
+          favoriteBusy={favoriteBusy}
+          onToggleFavorite={toggleFavoriteStock}
         />
       </div>
     </>
@@ -408,6 +489,7 @@ export function StocksPage() {
 function StocksView({
   stockTab,
   setStockTab,
+  favoriteStocks,
   visibleSymbols,
   usStocks,
   krStocks,
@@ -433,9 +515,13 @@ function StocksView({
   stockNews,
   onRelatedPostClick,
   exchangeRate,
+  selectedFavorite,
+  favoriteBusy,
+  onToggleFavorite,
 }: {
   stockTab: StockTab;
   setStockTab: (tab: StockTab) => void;
+  favoriteStocks: FavoriteStock[];
   visibleSymbols: StockSymbol[];
   usStocks: MarketQuote[];
   krStocks: MarketQuote[];
@@ -461,7 +547,19 @@ function StocksView({
   stockNews: MarketNews[];
   onRelatedPostClick: (postId: string) => void;
   exchangeRate: number | null;
+  selectedFavorite: boolean;
+  favoriteBusy: boolean;
+  onToggleFavorite: () => void;
 }) {
+  const selectStock = (symbol: string, market: StockTab = stockTab) => {
+    if (market !== stockTab) {
+      setStockTab(market);
+      setPriceCurrency(market === "KR" ? "KRW" : "USD");
+    }
+    setSelectedSymbol(symbol);
+    setSearch("");
+  };
+
   return (
     <section className="-mx-4 min-w-0 border-y border-border bg-surface p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
       <div className="flex flex-col gap-3 border-b border-border pb-4 md:flex-row md:items-center md:justify-between">
@@ -506,7 +604,7 @@ function StocksView({
               selectedSymbol={selectedSymbol}
               priceCurrency="KRW"
               exchangeRate={exchangeRate}
-              onSelect={setSelectedSymbol}
+              onSelect={(symbol) => selectStock(symbol, "KR")}
             />
             <div className="mt-2 hidden xl:block">
               <RelatedPosts
@@ -529,6 +627,9 @@ function StocksView({
             priceCurrency="KRW"
             setPriceCurrency={setPriceCurrency}
             exchangeRate={exchangeRate}
+            selectedFavorite={selectedFavorite}
+            favoriteBusy={favoriteBusy}
+            onToggleFavorite={onToggleFavorite}
           />
           <div className="min-w-0 -mt-2 xl:hidden">
             <RelatedPosts
@@ -556,7 +657,7 @@ function StocksView({
               selectedSymbol={selectedSymbol}
               priceCurrency={priceCurrency}
               exchangeRate={exchangeRate}
-              onSelect={setSelectedSymbol}
+              onSelect={(symbol) => selectStock(symbol, "US")}
             />
             <div className="mt-2 hidden xl:block">
               <RelatedPosts
@@ -579,6 +680,9 @@ function StocksView({
             priceCurrency={priceCurrency}
             setPriceCurrency={setPriceCurrency}
             exchangeRate={exchangeRate}
+            selectedFavorite={selectedFavorite}
+            favoriteBusy={favoriteBusy}
+            onToggleFavorite={onToggleFavorite}
           />
           <div className="min-w-0 -mt-2 xl:hidden">
             <RelatedPosts
@@ -606,6 +710,9 @@ function StockDetailPanel({
   priceCurrency,
   setPriceCurrency,
   exchangeRate,
+  selectedFavorite,
+  favoriteBusy,
+  onToggleFavorite,
 }: {
   detail: StockDetail | null;
   live?: TradeTick;
@@ -618,6 +725,9 @@ function StockDetailPanel({
   priceCurrency: DisplayCurrency;
   setPriceCurrency: (currency: DisplayCurrency) => void;
   exchangeRate: number | null;
+  selectedFavorite: boolean;
+  favoriteBusy: boolean;
+  onToggleFavorite: () => void;
 }) {
   if (!detail) {
     return <StockDetailSkeleton />;
@@ -670,6 +780,36 @@ function StockDetailPanel({
           </p>
         </div>
         <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
+          <Button
+            variant="secondary"
+            size="icon"
+            onClick={onToggleFavorite}
+            disabled={favoriteBusy}
+            title={
+              selectedFavorite
+                ? language === "ko"
+                  ? "관심종목 제거"
+                  : "Remove from watchlist"
+                : language === "ko"
+                  ? "관심종목 추가"
+                  : "Add to watchlist"
+            }
+            aria-label={
+              selectedFavorite
+                ? language === "ko"
+                  ? "관심종목 제거"
+                  : "Remove from watchlist"
+                : language === "ko"
+                  ? "관심종목 추가"
+                  : "Add to watchlist"
+            }
+          >
+            <Star
+              size={18}
+              className={selectedFavorite ? "text-[#f4b400]" : "text-muted"}
+              fill={selectedFavorite ? "currentColor" : "none"}
+            />
+          </Button>
           {!isKoreanMarket ? (
             <Button
               variant="secondary"
@@ -956,6 +1096,106 @@ function StockSearchPopover({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function FavoriteStockList({
+  favorites,
+  selectedSymbol,
+  selectedMarket,
+  language,
+  priceCurrency,
+  exchangeRate,
+  onSelect,
+}: {
+  favorites: FavoriteStock[];
+  selectedSymbol: string;
+  selectedMarket: StockTab;
+  language: Language;
+  priceCurrency: DisplayCurrency;
+  exchangeRate: number | null;
+  onSelect: (symbol: string, market: StockTab) => void;
+}) {
+  return (
+    <div className="rounded-md border border-border bg-surface-muted p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+          <Star size={15} className="text-[#f4b400]" fill="currentColor" />
+          {language === "ko" ? "내관심종목" : "Watchlist"}
+        </p>
+        <p className="text-xs font-semibold text-muted">{favorites.length}</p>
+      </div>
+      <div className="mt-3 space-y-1.5">
+        {favorites.length ? (
+          favorites.map((favorite) => {
+            const sourceCurrency =
+              favorite.currency ?? (favorite.market === "KR" ? "KRW" : "USD");
+            const displayCurrency =
+              favorite.market === "KR" ? "KRW" : priceCurrency;
+            const active =
+              favorite.symbol === selectedSymbol && favorite.market === selectedMarket;
+            const primary =
+              favorite.market === "KR"
+                ? favorite.name || favorite.symbol
+                : favorite.symbol;
+            const secondary =
+              favorite.market === "KR"
+                ? favorite.symbol
+                : favorite.name || favorite.symbol;
+            const positive = favorite.change >= 0;
+
+            return (
+              <button
+                key={`${favorite.market}-${favorite.symbol}`}
+                type="button"
+                onClick={() => onSelect(favorite.symbol, favorite.market)}
+                className={`flex w-full cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-surface ${
+                  active ? "bg-primary/10" : ""
+                }`}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {primary}
+                  </p>
+                  <p className="truncate text-xs text-muted">
+                    {favorite.market} · {secondary}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-semibold text-foreground">
+                    {formatMoney(
+                      favorite.current,
+                      displayCurrency,
+                      sourceCurrency,
+                      exchangeRate,
+                    )}
+                  </p>
+                  <p
+                    className={`text-xs font-semibold ${
+                      positive ? "text-positive" : "text-negative"
+                    }`}
+                  >
+                    {positive ? "+" : ""}
+                    {formatNumber(favorite.percentChange)}%
+                  </p>
+                </div>
+              </button>
+            );
+          })
+        ) : (
+          <div className="rounded-md border border-dashed border-border px-3 py-8 text-center">
+            <p className="text-sm font-semibold text-foreground">
+              {language === "ko" ? "아직 관심종목이 없습니다." : "No favorites yet."}
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              {language === "ko"
+                ? "종목 상세의 별 아이콘을 눌러 추가하세요."
+                : "Use the star button on a stock detail page."}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

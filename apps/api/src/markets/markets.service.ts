@@ -15,6 +15,7 @@ import {
   CompanyProfile,
   CompanyMetrics,
   FinnhubQuote,
+  FavoriteStock,
   MarketQuote,
   StockDetail,
   StockSymbol,
@@ -26,6 +27,7 @@ import { StockProfileEntity } from './stock-profile.entity';
 import { StockMasterEntity } from './stock-master.entity';
 import { MarketBriefingEntity } from './market-briefing.entity';
 import { StockFinancialEntity } from './stock-financial.entity';
+import { FavoriteStockEntity } from './favorite-stock.entity';
 
 const MARKET_PULSE = [
   { symbol: '^IXIC', name: 'Nasdaq Composite' },
@@ -185,6 +187,11 @@ type KisIndexChartPriceResponse = {
 };
 
 @Injectable()
+/**
+ * Market domain orchestration service.
+ * Keeps volatile quote/news data in Redis, persistent master/profile/financial data in PostgreSQL,
+ * and external provider details behind a single controller-facing API.
+ */
 export class MarketsService {
   private readonly logger = new Logger(MarketsService.name);
   private readonly finnhubBaseUrl = 'https://finnhub.io/api/v1';
@@ -208,6 +215,8 @@ export class MarketsService {
     private readonly stockFinancialRepository: Repository<StockFinancialEntity>,
     @InjectRepository(MarketBriefingEntity)
     private readonly marketBriefingsRepository: Repository<MarketBriefingEntity>,
+    @InjectRepository(FavoriteStockEntity)
+    private readonly favoriteStocksRepository: Repository<FavoriteStockEntity>,
   ) {
     this.redis = new Redis(
       this.configService.get<string>('REDIS_URL') ?? 'redis://redis:6379',
@@ -233,6 +242,7 @@ export class MarketsService {
     );
   }
 
+  // 상단 시장 지표를 Redis 캐시 우선으로 조회하고, 오래된 캐시는 백그라운드로 갱신한다.
   async getMarketPulse(): Promise<MarketQuote[]> {
     return this.getCachedQuotes(
       'market:pulse:v4',
@@ -264,6 +274,7 @@ export class MarketsService {
     );
   }
 
+  // 개별 종목 현재가를 조회한다. 한국장은 KIS/Naver 경로, 미국장은 Finnhub/Yahoo 경로를 사용한다.
   async getStockQuote(symbol: string, market = 'US'): Promise<MarketQuote> {
     const normalizedSymbol = symbol.toUpperCase().trim();
     if (market === 'KR') {
@@ -336,6 +347,7 @@ export class MarketsService {
     return quote;
   }
 
+  // 미국 종목 리스트는 DB 기본정보를 먼저 내려주고 변동 가격만 캐시/외부 API로 보강한다.
   async getDefaultUsStocks(): Promise<MarketQuote[]> {
     return this.getCachedQuotes(
       'market:stocks:us',
@@ -345,6 +357,7 @@ export class MarketsService {
     );
   }
 
+  // 한국 종목 리스트는 DB 기본정보를 먼저 내려주고 현재가/등락률은 한국 시세 경로로 보강한다.
   async getDefaultKrStocks(): Promise<MarketQuote[]> {
     return this.getCachedQuotes(
       'market:stocks:kr',
@@ -354,6 +367,7 @@ export class MarketsService {
     );
   }
 
+  // 한국 종목 검색용 심볼 목록을 stock_master 기준으로 반환한다.
   async getKrSymbols(): Promise<StockSymbol[]> {
     const master = await this.stockMasterRepository.find({
       where: {
@@ -549,6 +563,7 @@ export class MarketsService {
     };
   }
 
+  // 미국 종목 검색용 심볼 목록을 DB 우선으로 반환하고 없으면 기본 종목으로 fallback 한다.
   async getUsSymbols(): Promise<StockSymbol[]> {
     const master = await this.stockMasterRepository.find({
       where: { active: true, market: 'US' },
@@ -591,6 +606,130 @@ export class MarketsService {
     }));
   }
 
+  // 로그인한 사용자의 관심종목 목록을 읽고 각 종목의 현재가 스냅샷을 붙여 반환한다.
+  async getFavoriteStocks(userId: string): Promise<FavoriteStock[]> {
+    const rows = await this.favoriteStocksRepository.find({
+      where: { userId },
+      order: { createdAt: 'DESC' },
+    });
+
+    return Promise.all(
+      rows.map(async (row) => {
+        const quote = await this.getStockQuote(row.symbol, row.market).catch(
+          () =>
+            ({
+              symbol: row.symbol,
+              name: row.name ?? row.symbol,
+              currency: row.market === 'KR' ? 'KRW' : 'USD',
+              current: 0,
+              change: 0,
+              percentChange: 0,
+              high: 0,
+              low: 0,
+              open: 0,
+              previousClose: 0,
+              timestamp: Math.floor(Date.now() / 1000),
+            }) satisfies MarketQuote,
+        );
+
+        return {
+          ...quote,
+          name: quote.name || row.name || row.symbol,
+          market: row.market,
+          favoriteId: row.id,
+          addedAt: row.createdAt.toISOString(),
+        };
+      }),
+    );
+  }
+
+  // 관심종목을 추가한다. 같은 사용자/시장/심볼 조합은 중복 저장하지 않는다.
+  async addFavoriteStock(
+    userId: string,
+    body: { symbol?: string; market?: string; name?: string },
+  ): Promise<FavoriteStock> {
+    const symbol = body.symbol?.trim().toUpperCase();
+    const market = body.market?.toUpperCase() === 'KR' ? 'KR' : 'US';
+    if (!symbol) {
+      throw new NotFoundException('Stock symbol is required.');
+    }
+
+    const master = await this.findStockMaster(symbol, market);
+    const name = body.name?.trim() || master?.name || symbol;
+    let favorite = await this.favoriteStocksRepository.findOne({
+      where: { userId, symbol, market },
+    });
+
+    if (!favorite) {
+      favorite = await this.favoriteStocksRepository.save(
+        this.favoriteStocksRepository.create({
+          userId,
+          symbol,
+          market,
+          name,
+        }),
+      );
+    }
+
+    const quote = await this.getStockQuote(symbol, market).catch(
+      () =>
+        ({
+          symbol,
+          name,
+          currency: market === 'KR' ? 'KRW' : 'USD',
+          current: 0,
+          change: 0,
+          percentChange: 0,
+          high: 0,
+          low: 0,
+          open: 0,
+          previousClose: 0,
+          timestamp: Math.floor(Date.now() / 1000),
+        }) satisfies MarketQuote,
+    );
+
+    return {
+      ...quote,
+      name: quote.name || name,
+      market,
+      favoriteId: favorite.id,
+      addedAt: favorite.createdAt.toISOString(),
+    };
+  }
+
+  // 관심종목을 제거한다. 이미 없어도 실패시키지 않고 삭제 요청을 완료한다.
+  async removeFavoriteStock(
+    userId: string,
+    market: string,
+    symbol: string,
+  ): Promise<void> {
+    await this.favoriteStocksRepository.delete({
+      userId,
+      market: market.toUpperCase() === 'KR' ? 'KR' : 'US',
+      symbol: symbol.trim().toUpperCase(),
+    });
+  }
+
+  private async findStockMaster(
+    symbol: string,
+    market: 'US' | 'KR',
+  ): Promise<StockMasterEntity | null> {
+    if (market === 'KR') {
+      return this.stockMasterRepository.findOne({
+        where: {
+          symbol,
+          active: true,
+          market: In(['KR:KOSPI', 'KR:KOSDAQ']),
+        },
+      });
+    }
+
+    return this.stockMasterRepository.findOne({
+      where: { symbol, active: true, market: 'US' },
+    });
+  }
+
+  // 미국 종목 상세를 프로필 DB, 현재가, 재무지표, 회사개요를 조합해서 만든다.
   async getStockDetail(symbol: string): Promise<StockDetail> {
     const normalizedSymbol = symbol.toUpperCase().trim();
     const [cachedProfile, quote] = await Promise.all([
@@ -716,6 +855,7 @@ export class MarketsService {
     }
   }
 
+  // 한국 종목 상세를 stock_master, DART 프로필/재무, 한국 현재가 데이터로 조합한다.
   async getKoreanStockDetail(symbol: string): Promise<StockDetail> {
     const normalizedSymbol = symbol.toUpperCase().trim();
     const stock = DEFAULT_KR_STOCKS_CLEAN.find(
@@ -877,6 +1017,7 @@ export class MarketsService {
     return { updated };
   }
 
+  // 뉴스 메뉴용 시장 뉴스를 시장/언어에 맞춰 Yahoo/Finnhub/Naver 경로에서 가져온다.
   async getMarketNews(
     category = 'general',
     market = 'US',
@@ -1007,16 +1148,27 @@ export class MarketsService {
     }
   }
 
+  // 미국장 마켓브리핑 cron. 개발환경에서는 ENABLE_SCHEDULED_JOBS=false로 실행을 막는다.
   @Cron('0 25 8 * * 2-6', { timeZone: 'Asia/Seoul' })
   async runScheduledUsMarketBriefing(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) {
+      this.logger.log('Scheduled US market briefing disabled.');
+      return;
+    }
     await this.runScheduledMarketBriefing('US');
   }
 
+  // 한국장 마켓브리핑 cron. 운영환경에서 장 마감 후 오늘장 요약을 생성한다.
   @Cron('0 55 15 * * 1-5', { timeZone: 'Asia/Seoul' })
   async runScheduledKrMarketBriefing(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) {
+      this.logger.log('Scheduled KR market briefing disabled.');
+      return;
+    }
     await this.runScheduledMarketBriefing('KR');
   }
 
+  // 수동/cron 공통 마켓브리핑 생성 흐름. 뉴스와 시장지표를 모아 OpenAI 결과를 DB에 저장한다.
   async runMarketBriefing(
     market = 'US',
     language = 'ko',
@@ -1296,6 +1448,7 @@ export class MarketsService {
     return score;
   }
 
+  // 개별 종목 최신 뉴스 조회. 한국장은 Naver Search/Finance/mobile fallback을 같이 사용한다.
   async getStockNews(
     symbol: string,
     market = 'US',
@@ -1488,6 +1641,7 @@ export class MarketsService {
       .trim();
   }
 
+  // 차트 캔들 데이터 조회. 기간/시장에 따라 Yahoo 또는 KIS 차트 데이터를 사용한다.
   async getCandles(
     symbol: string,
     period: ChartPeriod,
@@ -2144,6 +2298,7 @@ export class MarketsService {
                 'Do not mention internal input section names such as Core macro event candidates, Macro events, High priority, or Priority note in the final Korean report.',
                 'If the market was closed, return exactly "휴장이었습니다." and nothing else.',
                 'Otherwise, return only valid JSON. Do not include markdown fences or extra commentary.',
+                'Because the Responses API is using JSON schema, closed-market output must also be JSON: set marketClosed=true and leave report arrays empty.',
               ].join('\n'),
             },
             {
@@ -2317,6 +2472,75 @@ export class MarketsService {
               ].join('\n\n'),
             },
           ],
+          text: {
+            format: {
+              type: 'json_schema',
+              name: 'market_briefing',
+              strict: true,
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  marketClosed: { type: 'boolean' },
+                  titleCandidates: {
+                    type: 'array',
+                    maxItems: 3,
+                    items: { type: 'string' },
+                  },
+                  title: { type: 'string' },
+                  summaryLines: {
+                    type: 'array',
+                    maxItems: 8,
+                    items: { type: 'string' },
+                  },
+                  macroLines: {
+                    type: 'array',
+                    maxItems: 12,
+                    items: { type: 'string' },
+                  },
+                  companyNews: {
+                    type: 'array',
+                    maxItems: 10,
+                    items: {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: {
+                        symbol: { type: 'string' },
+                        name: { type: 'string' },
+                        headline: { type: 'string' },
+                        lines: {
+                          type: 'array',
+                          maxItems: 5,
+                          items: { type: 'string' },
+                        },
+                      },
+                      required: ['symbol', 'name', 'headline', 'lines'],
+                    },
+                  },
+                  keywords: {
+                    type: 'array',
+                    maxItems: 5,
+                    items: { type: 'string' },
+                  },
+                  watchPoints: {
+                    type: 'array',
+                    maxItems: 3,
+                    items: { type: 'string' },
+                  },
+                },
+                required: [
+                  'marketClosed',
+                  'titleCandidates',
+                  'title',
+                  'summaryLines',
+                  'macroLines',
+                  'companyNews',
+                  'keywords',
+                  'watchPoints',
+                ],
+              },
+            },
+          },
           max_output_tokens: 5000,
         }),
       },
@@ -2354,19 +2578,14 @@ export class MarketsService {
     }
 
     const jsonText = this.extractJsonObject(trimmedOutput);
-    const parsed = JSON.parse(jsonText) as Pick<
-      MarketBriefing,
-      | 'titleCandidates'
-      | 'title'
-      | 'summaryLines'
-      | 'macroLines'
-      | 'companyNews'
-      | 'keywords'
-      | 'watchPoints'
-    >;
+    const parsed = this.parseMarketBriefingJson(jsonText, trimmedOutput);
     const parsedRecord = parsed as typeof parsed & {
       company_news?: unknown;
+      marketClosed?: unknown;
     };
+    if (parsedRecord.marketClosed === true) {
+      return null;
+    }
     const companyNewsInput =
       parsedRecord.companyNews ?? parsedRecord.company_news;
     return {
@@ -2642,6 +2861,98 @@ export class MarketsService {
       return value.slice(start, end + 1);
     }
     return value;
+  }
+
+  private parseMarketBriefingJson(
+    jsonText: string,
+    rawOutput: string,
+  ): Pick<
+    MarketBriefing,
+    | 'titleCandidates'
+    | 'title'
+    | 'summaryLines'
+    | 'macroLines'
+    | 'companyNews'
+    | 'keywords'
+    | 'watchPoints'
+  > {
+    try {
+      return JSON.parse(jsonText) as Pick<
+        MarketBriefing,
+        | 'titleCandidates'
+        | 'title'
+        | 'summaryLines'
+        | 'macroLines'
+        | 'companyNews'
+        | 'keywords'
+        | 'watchPoints'
+      >;
+    } catch (firstError) {
+      const repaired = this.repairJsonText(jsonText);
+      if (repaired !== jsonText) {
+        try {
+          return JSON.parse(repaired) as Pick<
+            MarketBriefing,
+            | 'titleCandidates'
+            | 'title'
+            | 'summaryLines'
+            | 'macroLines'
+            | 'companyNews'
+            | 'keywords'
+            | 'watchPoints'
+          >;
+        } catch {
+          // Throw the original parse error below with a useful response preview.
+        }
+      }
+
+      const preview = rawOutput.replace(/\s+/g, ' ').slice(0, 600);
+      this.logger.warn(`OpenAI briefing JSON parse failed. Preview: ${preview}`);
+      throw firstError;
+    }
+  }
+
+  private repairJsonText(value: string): string {
+    const withoutBom = value.replace(/^\uFEFF/, '').trim();
+    const withoutTrailingCommas = withoutBom.replace(/,\s*([}\]])/g, '$1');
+    return this.balanceJsonClosers(withoutTrailingCommas);
+  }
+
+  private balanceJsonClosers(value: string): string {
+    const stack: string[] = [];
+    let inString = false;
+    let escaped = false;
+
+    for (const char of value) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\' && inString) {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) {
+        continue;
+      }
+      if (char === '{') {
+        stack.push('}');
+      } else if (char === '[') {
+        stack.push(']');
+      } else if ((char === '}' || char === ']') && stack.at(-1) === char) {
+        stack.pop();
+      }
+    }
+
+    if (!stack.length) {
+      return value;
+    }
+
+    return `${value}${stack.reverse().join('')}`;
   }
 
   private withKoreanDatePrefix(title: string): string {
@@ -2936,6 +3247,15 @@ export class MarketsService {
         }`,
       );
     }
+  }
+
+  private isScheduledJobsEnabled(): boolean {
+    const explicitValue = this.configService.get<string>('ENABLE_SCHEDULED_JOBS');
+    if (explicitValue !== undefined) {
+      return explicitValue === 'true';
+    }
+
+    return this.configService.get<string>('NODE_ENV') === 'production';
   }
 
   private toKoreanDateKey(date: Date): string {

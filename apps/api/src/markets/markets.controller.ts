@@ -1,10 +1,13 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { AuthUser } from '../auth/auth-user.type';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { UserRole } from '../users/user-role.enum';
 import {
   CandlePoint,
+  FavoriteStock,
   MarketNews,
   MarketBriefing,
   MarketQuote,
@@ -18,6 +21,7 @@ import { StockMasterBatchService } from './stock-master-batch.service';
 
 @Controller('markets')
 @UseGuards(JwtAuthGuard)
+/** Authenticated market API boundary; delegates provider/cache logic to MarketsService. */
 export class MarketsController {
   constructor(
     private readonly marketsService: MarketsService,
@@ -60,7 +64,34 @@ export class MarketsController {
     return this.marketsService.getKrSymbols();
   }
 
+  @Get('favorites')
+  // 내관심종목 화면에서 사용자 관심종목 목록과 현재가 스냅샷을 받는다.
+  getFavoriteStocks(@CurrentUser() user: AuthUser): Promise<FavoriteStock[]> {
+    return this.marketsService.getFavoriteStocks(user.sub);
+  }
+
+  @Post('favorites')
+  // 종목 상세의 별 아이콘을 눌렀을 때 관심종목을 추가한다.
+  addFavoriteStock(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { symbol?: string; market?: string; name?: string },
+  ): Promise<FavoriteStock> {
+    return this.marketsService.addFavoriteStock(user.sub, body);
+  }
+
+  @Delete('favorites/:market/:symbol')
+  // 종목 상세 또는 관심종목 화면에서 별/삭제 버튼을 눌렀을 때 관심종목을 제거한다.
+  async removeFavoriteStock(
+    @CurrentUser() user: AuthUser,
+    @Param('market') market: string,
+    @Param('symbol') symbol: string,
+  ): Promise<{ ok: true }> {
+    await this.marketsService.removeFavoriteStock(user.sub, market, symbol);
+    return { ok: true };
+  }
+
   @Get('stocks/detail')
+  // 종목 상세 패널 진입 시 호출된다. 한국장은 getKoreanStockDetail로 분기한다.
   getStockDetail(
     @Query('symbol') symbol: string,
     @Query('market') market?: string,
@@ -73,6 +104,7 @@ export class MarketsController {
   }
 
   @Get('stocks/quote')
+  // 선택된 종목의 현재가 polling 또는 관심종목 현재가 보강에 사용한다.
   getStockQuote(
     @Query('symbol') symbol: string,
     @Query('market') market = 'US',
@@ -81,6 +113,7 @@ export class MarketsController {
   }
 
   @Get('stocks/news')
+  // 종목 상세 하단의 "이 종목의 최신 뉴스" 목록을 조회한다.
   getStockNews(
     @Query('symbol') symbol: string,
     @Query('market') market = 'US',
@@ -90,6 +123,7 @@ export class MarketsController {
   }
 
   @Get('news')
+  // 뉴스 메뉴의 한국/미국 시장 뉴스 목록을 조회한다.
   getMarketNews(
     @Query('category') category = 'general',
     @Query('market') market = 'US',
@@ -99,6 +133,7 @@ export class MarketsController {
   }
 
   @Get('briefing')
+  // 마켓브리핑 메뉴에서 시장별 최신 브리핑 하나를 조회한다.
   getMarketBriefing(
     @Query('market') market = 'US',
     @Query('language') language = 'ko',
@@ -107,6 +142,7 @@ export class MarketsController {
   }
 
   @Get('briefings')
+  // 마켓브리핑 목록 화면에서 시장별 브리핑 리스트를 조회한다.
   getMarketBriefings(
     @Query('market') market = 'US',
   ): Promise<MarketBriefing[]> {
@@ -114,6 +150,7 @@ export class MarketsController {
   }
 
   @Get('briefings/:id')
+  // 공유 가능한 마켓브리핑 상세 URL에서 단일 브리핑을 조회한다.
   getMarketBriefingById(@Param('id') id: string): Promise<MarketBriefing> {
     return this.marketsService.getMarketBriefingById(id);
   }

@@ -13,6 +13,7 @@ import {
   Moon,
   Newspaper,
   ShieldCheck,
+  Star,
   Sun,
   UserPen,
 } from "lucide-react";
@@ -23,7 +24,7 @@ import { useMarketDataStore } from "@/common/stores/market-data";
 import { MarketPulse } from "@/domain/markets/components/MarketPulse";
 
 const NAV_ITEMS: Array<{
-  id: "stocks" | "news" | "marketBriefing" | "community" | "admin";
+  id: "stocks" | "favorites" | "news" | "marketBriefing" | "community" | "admin";
   href: string;
   label: { en: string; ko: string };
   icon: typeof BarChart3;
@@ -31,6 +32,7 @@ const NAV_ITEMS: Array<{
 }> = [
   { id: "marketBriefing", href: "/market-briefing", label: { en: "Briefing", ko: "마켓" }, icon: FileText },
   { id: "stocks", href: "/", label: { en: "Stocks", ko: "종목" }, icon: BarChart3 },
+  { id: "favorites", href: "/favorites", label: { en: "Watchlist", ko: "내관심종목" }, icon: Star },
   { id: "news", href: "/news", label: { en: "News", ko: "뉴스" }, icon: Newspaper },
   { id: "community", href: "/community", label: { en: "Community", ko: "피드" }, icon: MessageSquareText },
   { id: "admin", href: "/admin", label: { en: "Admin", ko: "관리" }, icon: ShieldCheck, adminOnly: true },
@@ -293,8 +295,10 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         <nav className="mt-4 hidden gap-2 overflow-x-auto border-b border-border sm:flex">
           {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
             const active =
-              pathname === item.href ||
-              (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+              item.id === "stocks"
+                ? pathname === "/"
+                : pathname === item.href ||
+                  (item.href !== "/" && pathname.startsWith(`${item.href}/`));
 
             return (
               <Link
@@ -315,22 +319,20 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         {children}
       </section>
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(21,25,35,0.08)] backdrop-blur sm:hidden">
-        <div
-          className={`mx-auto grid h-16 max-w-md ${
-            isAdmin ? "grid-cols-5" : "grid-cols-4"
-          }`}
-        >
+        <div className="mx-auto flex h-16 max-w-md gap-1 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
             const active =
-              pathname === item.href ||
-              (item.href !== "/" && pathname.startsWith(`${item.href}/`));
+              item.id === "stocks"
+                ? pathname === "/"
+                : pathname === item.href ||
+                  (item.href !== "/" && pathname.startsWith(`${item.href}/`));
             const Icon = item.icon;
 
             return (
               <Link
                 key={item.id}
                 href={item.href}
-                className={`flex flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors ${
+                className={`flex min-w-[72px] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors ${
                   active
                     ? "text-primary"
                     : "text-muted hover:text-primary"
