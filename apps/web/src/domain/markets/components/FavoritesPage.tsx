@@ -62,9 +62,8 @@ export function FavoritesPage() {
 
   function openStock(stock: FavoriteStock) {
     const currency = stock.market === "KR" ? "KRW" : "USD";
-    router.push(
-      `/?symbol=${encodeURIComponent(stock.symbol)}&market=${stock.market}&currency=${currency}`,
-    );
+    const nextUrl = `/?symbol=${encodeURIComponent(stock.symbol)}&market=${stock.market}&currency=${currency}`;
+    window.location.assign(nextUrl);
   }
 
   async function removeFavorite(stock: FavoriteStock) {
