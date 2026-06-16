@@ -2144,6 +2144,7 @@ export class MarketsService {
                 'Do not mention internal input section names such as Core macro event candidates, Macro events, High priority, or Priority note in the final Korean report.',
                 'If the market was closed, return exactly "휴장이었습니다." and nothing else.',
                 'Otherwise, return only valid JSON. Do not include markdown fences or extra commentary.',
+                'Because the Responses API is using JSON schema, closed-market output must also be JSON: set marketClosed=true and leave report arrays empty.',
               ].join('\n'),
             },
             {
@@ -2317,6 +2318,75 @@ export class MarketsService {
               ].join('\n\n'),
             },
           ],
+          text: {
+            format: {
+              type: 'json_schema',
+              name: 'market_briefing',
+              strict: true,
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  marketClosed: { type: 'boolean' },
+                  titleCandidates: {
+                    type: 'array',
+                    maxItems: 3,
+                    items: { type: 'string' },
+                  },
+                  title: { type: 'string' },
+                  summaryLines: {
+                    type: 'array',
+                    maxItems: 8,
+                    items: { type: 'string' },
+                  },
+                  macroLines: {
+                    type: 'array',
+                    maxItems: 12,
+                    items: { type: 'string' },
+                  },
+                  companyNews: {
+                    type: 'array',
+                    maxItems: 10,
+                    items: {
+                      type: 'object',
+                      additionalProperties: false,
+                      properties: {
+                        symbol: { type: 'string' },
+                        name: { type: 'string' },
+                        headline: { type: 'string' },
+                        lines: {
+                          type: 'array',
+                          maxItems: 5,
+                          items: { type: 'string' },
+                        },
+                      },
+                      required: ['symbol', 'name', 'headline', 'lines'],
+                    },
+                  },
+                  keywords: {
+                    type: 'array',
+                    maxItems: 5,
+                    items: { type: 'string' },
+                  },
+                  watchPoints: {
+                    type: 'array',
+                    maxItems: 3,
+                    items: { type: 'string' },
+                  },
+                },
+                required: [
+                  'marketClosed',
+                  'titleCandidates',
+                  'title',
+                  'summaryLines',
+                  'macroLines',
+                  'companyNews',
+                  'keywords',
+                  'watchPoints',
+                ],
+              },
+            },
+          },
           max_output_tokens: 5000,
         }),
       },
@@ -2354,19 +2424,14 @@ export class MarketsService {
     }
 
     const jsonText = this.extractJsonObject(trimmedOutput);
-    const parsed = JSON.parse(jsonText) as Pick<
-      MarketBriefing,
-      | 'titleCandidates'
-      | 'title'
-      | 'summaryLines'
-      | 'macroLines'
-      | 'companyNews'
-      | 'keywords'
-      | 'watchPoints'
-    >;
+    const parsed = this.parseMarketBriefingJson(jsonText, trimmedOutput);
     const parsedRecord = parsed as typeof parsed & {
       company_news?: unknown;
+      marketClosed?: unknown;
     };
+    if (parsedRecord.marketClosed === true) {
+      return null;
+    }
     const companyNewsInput =
       parsedRecord.companyNews ?? parsedRecord.company_news;
     return {
@@ -2642,6 +2707,98 @@ export class MarketsService {
       return value.slice(start, end + 1);
     }
     return value;
+  }
+
+  private parseMarketBriefingJson(
+    jsonText: string,
+    rawOutput: string,
+  ): Pick<
+    MarketBriefing,
+    | 'titleCandidates'
+    | 'title'
+    | 'summaryLines'
+    | 'macroLines'
+    | 'companyNews'
+    | 'keywords'
+    | 'watchPoints'
+  > {
+    try {
+      return JSON.parse(jsonText) as Pick<
+        MarketBriefing,
+        | 'titleCandidates'
+        | 'title'
+        | 'summaryLines'
+        | 'macroLines'
+        | 'companyNews'
+        | 'keywords'
+        | 'watchPoints'
+      >;
+    } catch (firstError) {
+      const repaired = this.repairJsonText(jsonText);
+      if (repaired !== jsonText) {
+        try {
+          return JSON.parse(repaired) as Pick<
+            MarketBriefing,
+            | 'titleCandidates'
+            | 'title'
+            | 'summaryLines'
+            | 'macroLines'
+            | 'companyNews'
+            | 'keywords'
+            | 'watchPoints'
+          >;
+        } catch {
+          // Throw the original parse error below with a useful response preview.
+        }
+      }
+
+      const preview = rawOutput.replace(/\s+/g, ' ').slice(0, 600);
+      this.logger.warn(`OpenAI briefing JSON parse failed. Preview: ${preview}`);
+      throw firstError;
+    }
+  }
+
+  private repairJsonText(value: string): string {
+    const withoutBom = value.replace(/^\uFEFF/, '').trim();
+    const withoutTrailingCommas = withoutBom.replace(/,\s*([}\]])/g, '$1');
+    return this.balanceJsonClosers(withoutTrailingCommas);
+  }
+
+  private balanceJsonClosers(value: string): string {
+    const stack: string[] = [];
+    let inString = false;
+    let escaped = false;
+
+    for (const char of value) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\' && inString) {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) {
+        continue;
+      }
+      if (char === '{') {
+        stack.push('}');
+      } else if (char === '[') {
+        stack.push(']');
+      } else if ((char === '}' || char === ']') && stack.at(-1) === char) {
+        stack.pop();
+      }
+    }
+
+    if (!stack.length) {
+      return value;
+    }
+
+    return `${value}${stack.reverse().join('')}`;
   }
 
   private withKoreanDatePrefix(title: string): string {
