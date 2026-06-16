@@ -116,7 +116,6 @@ export function StocksPage() {
       : searchParams.get("currency")?.trim().toUpperCase() === "KRW"
         ? "KRW"
         : "USD";
-  const favoritesMode = searchParams.get("mode") === "favorites";
   const [stockTab, setStockTab] = useState<StockTab>(initialMarket);
   const accessToken = useSessionStore((s) => s.accessToken);
   const language = usePreferencesStore((s) => s.language);
@@ -184,16 +183,13 @@ export function StocksPage() {
     params.set("symbol", selectedSymbol);
     params.set("market", stockTab);
     params.set("currency", nextCurrency);
-    if (favoritesMode) {
-      params.set("mode", "favorites");
-    }
     const nextQuery = params.toString();
     const currentQuery = searchParams.toString();
 
     if (nextQuery !== currentQuery) {
       router.replace(`/?${nextQuery}`, { scroll: false });
     }
-  }, [favoritesMode, priceCurrency, router, searchParams, selectedSymbol, stockTab]);
+  }, [priceCurrency, router, searchParams, selectedSymbol, stockTab]);
 
   const visibleSymbols = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
@@ -455,7 +451,6 @@ export function StocksPage() {
         <StocksView
           stockTab={stockTab}
           setStockTab={setStockTab}
-          favoritesMode={favoritesMode}
           favoriteStocks={favoriteStocks}
           visibleSymbols={visibleSymbols}
           usStocks={usStocks}
@@ -494,7 +489,6 @@ export function StocksPage() {
 function StocksView({
   stockTab,
   setStockTab,
-  favoritesMode,
   favoriteStocks,
   visibleSymbols,
   usStocks,
@@ -527,7 +521,6 @@ function StocksView({
 }: {
   stockTab: StockTab;
   setStockTab: (tab: StockTab) => void;
-  favoritesMode: boolean;
   favoriteStocks: FavoriteStock[];
   visibleSymbols: StockSymbol[];
   usStocks: MarketQuote[];
@@ -595,53 +588,7 @@ function StocksView({
         />
       </div>
 
-      {favoritesMode ? (
-        <div className="mt-4 grid min-w-0 gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
-          <div className="min-w-0">
-            <FavoriteStockList
-              favorites={favoriteStocks}
-              selectedSymbol={selectedSymbol}
-              selectedMarket={stockTab}
-              language={language}
-              priceCurrency={priceCurrency}
-              exchangeRate={exchangeRate}
-              onSelect={selectStock}
-            />
-            <div className="mt-2 hidden xl:block">
-              <RelatedPosts
-                posts={relatedPosts}
-                onPostClick={onRelatedPostClick}
-                language={language}
-              />
-              <RelatedNews news={stockNews} language={language} />
-            </div>
-          </div>
-          <StockDetailPanel
-            detail={stockDetail}
-            live={livePrices[selectedSymbol]}
-            series={liveSeries[selectedSymbol] ?? []}
-            candles={candles}
-            chartPeriod={chartPeriod}
-            setChartPeriod={setChartPeriod}
-            chartLoading={chartLoading}
-            language={language}
-            priceCurrency={stockTab === "KR" ? "KRW" : priceCurrency}
-            setPriceCurrency={setPriceCurrency}
-            exchangeRate={exchangeRate}
-            selectedFavorite={selectedFavorite}
-            favoriteBusy={favoriteBusy}
-            onToggleFavorite={onToggleFavorite}
-          />
-          <div className="min-w-0 -mt-2 xl:hidden">
-            <RelatedPosts
-              posts={relatedPosts}
-              onPostClick={onRelatedPostClick}
-              language={language}
-            />
-            <RelatedNews news={stockNews} language={language} />
-          </div>
-        </div>
-      ) : stockTab === "KR" ? (
+      {stockTab === "KR" ? (
         <div className="mt-4 grid min-w-0 gap-4 sm:mt-5 sm:gap-5 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
           <div className="min-w-0">
             <StockSearchPopover

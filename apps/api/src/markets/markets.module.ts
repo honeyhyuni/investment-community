@@ -31,4 +31,5 @@ import { StockProfileEntity } from './stock-profile.entity';
     StockFinancialBatchService,
   ],
 })
+/** Wires market quotes, stock metadata, financial batches, briefings, and sockets. */
 export class MarketsModule {}
