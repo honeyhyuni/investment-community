@@ -38,6 +38,7 @@ export type CommunityUserDto = {
   isSubscribed: boolean;
   subscriberCount: number;
   followingCount: number;
+  postCount: number;
 };
 
 export type CommunityCommentDto = {
@@ -98,31 +99,38 @@ export class CommunityService {
     scope: FeedScope = 'all',
     userId?: string,
     sort: 'latest' | 'popular' = 'latest',
+    page?: { limit?: number; offset?: number },
   ): Promise<CommunityPostDto[]> {
-    const authorIds = await this.resolveFeedAuthorIds(currentUserId, scope, userId);
+    const authorIds = await this.resolveFeedAuthorIds(
+      currentUserId,
+      scope,
+      userId,
+    );
     if (authorIds.length === 0) {
       return [];
     }
 
-    const posts = await this.postsRepository.find({
-      where: {
-        author: { id: In(authorIds) },
-        ...(sort === 'popular'
-          ? {
-              createdAt: MoreThanOrEqual(
-                new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-              ),
-            }
-          : {}),
-      },
-      order: { createdAt: 'DESC' },
-      take: sort === 'popular' ? 500 : 100,
-    });
+    const limit =
+      page?.limit !== undefined && Number.isFinite(page.limit)
+        ? Math.min(Math.max(Math.trunc(page.limit), 1), 50)
+        : undefined;
+    const offset =
+      page?.offset !== undefined && Number.isFinite(page.offset)
+        ? Math.max(Math.trunc(page.offset), 0)
+        : 0;
 
-    const dtos = await this.toPostDtos(posts, currentUserId);
     if (sort === 'popular') {
+      // 인기순은 점수 기반 정렬이라 후보를 모아 정렬한 뒤 페이지 구간을 잘라낸다.
       const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-      return dtos
+      const posts = await this.postsRepository.find({
+        where: {
+          author: { id: In(authorIds) },
+          createdAt: MoreThanOrEqual(new Date(cutoff)),
+        },
+        order: { createdAt: 'DESC' },
+        take: 500,
+      });
+      const sorted = (await this.toPostDtos(posts, currentUserId))
         .filter((post) => new Date(post.createdAt).getTime() >= cutoff)
         .sort(
           (a, b) =>
@@ -131,8 +139,18 @@ export class CommunityService {
               (a.likeCount * 0.7 + a.commentCount * 0.3) ||
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         );
+      return limit !== undefined
+        ? sorted.slice(offset, offset + limit)
+        : sorted;
     }
-    return dtos;
+
+    // 최신순은 DB 레벨에서 skip/take로 페이지네이션한다.
+    const posts = await this.postsRepository.find({
+      where: { author: { id: In(authorIds) } },
+      order: { createdAt: 'DESC' },
+      ...(limit !== undefined ? { skip: offset, take: limit } : { take: 100 }),
+    });
+    return this.toPostDtos(posts, currentUserId);
   }
 
   async createPost(
@@ -141,14 +159,22 @@ export class CommunityService {
   ): Promise<CommunityPostDto> {
     const content = input.content?.trim();
     const title = input.title?.trim().slice(0, 160) || null;
-    const contentBlocks = this.normalizeContentBlocks(input.contentBlocks ?? []);
+    const contentBlocks = this.normalizeContentBlocks(
+      input.contentBlocks ?? [],
+    );
     const imageUrls = (input.imageUrls ?? [])
       .filter((url) => typeof url === 'string' && url.startsWith('data:image/'))
       .slice(0, 4);
     const caption = input.caption?.trim().slice(0, 2000) ?? '';
     const stockTags = this.normalizeStockTags(input.stockTags ?? []);
 
-    if (!title && !content && !caption && imageUrls.length === 0 && contentBlocks.length === 0) {
+    if (
+      !title &&
+      !content &&
+      !caption &&
+      imageUrls.length === 0 &&
+      contentBlocks.length === 0
+    ) {
       throw new BadRequestException('Post content or image is required.');
     }
 
@@ -168,7 +194,10 @@ export class CommunityService {
     return (await this.toPostDtos([post], currentUserId))[0];
   }
 
-  async getPost(currentUserId: string, postId: string): Promise<CommunityPostDto> {
+  async getPost(
+    currentUserId: string,
+    postId: string,
+  ): Promise<CommunityPostDto> {
     const post = await this.findPost(postId);
     return (await this.toPostDtos([post], currentUserId))[0];
   }
@@ -180,9 +209,12 @@ export class CommunityService {
   ): Promise<CommunityPostDto> {
     const post = await this.findPost(postId);
     this.assertOwner(post.author.id, currentUserId);
-    const contentBlocks = this.normalizeContentBlocks(input.contentBlocks ?? []);
+    const contentBlocks = this.normalizeContentBlocks(
+      input.contentBlocks ?? [],
+    );
     post.title = input.title?.trim().slice(0, 160) || null;
-    post.content = input.content?.trim() || this.blocksToPlainText(contentBlocks);
+    post.content =
+      input.content?.trim() || this.blocksToPlainText(contentBlocks);
     post.contentBlocks = contentBlocks;
     post.imageUrls = (input.imageUrls ?? [])
       .filter((url) => typeof url === 'string' && url.startsWith('data:image/'))
@@ -193,7 +225,10 @@ export class CommunityService {
     return (await this.toPostDtos([post], currentUserId))[0];
   }
 
-  async deletePost(currentUserId: string, postId: string): Promise<{ ok: true }> {
+  async deletePost(
+    currentUserId: string,
+    postId: string,
+  ): Promise<{ ok: true }> {
     const post = await this.findPost(postId);
     await this.assertOwnerOrAdmin(post.author.id, currentUserId);
     await this.postsRepository.remove(post);
@@ -324,22 +359,59 @@ export class CommunityService {
 
     return Promise.all(
       users
-        .filter((user) => user.id !== currentUserId && !subscribedIds.has(user.id))
+        .filter(
+          (user) => user.id !== currentUserId && !subscribedIds.has(user.id),
+        )
         .slice(0, 3)
         .map(async (user) => ({
-        id: user.id,
-        nickname: user.nickname,
-        email: user.email,
-        isMe: user.id === currentUserId,
-        isSubscribed: subscribedIds.has(user.id),
-        subscriberCount: await this.subscriptionsRepository.count({
-          where: { creator: { id: user.id } },
-        }),
-        followingCount: await this.subscriptionsRepository.count({
-          where: { subscriber: { id: user.id } },
-        }),
-      })),
+          id: user.id,
+          nickname: user.nickname,
+          email: user.email,
+          isMe: user.id === currentUserId,
+          isSubscribed: subscribedIds.has(user.id),
+          subscriberCount: await this.subscriptionsRepository.count({
+            where: { creator: { id: user.id } },
+          }),
+          followingCount: await this.subscriptionsRepository.count({
+            where: { subscriber: { id: user.id } },
+          }),
+          postCount: await this.postsRepository.count({
+            where: { author: { id: user.id } },
+          }),
+        })),
     );
+  }
+
+  async getUser(
+    currentUserId: string,
+    targetId: string,
+  ): Promise<CommunityUserDto> {
+    const user = await this.usersRepository.findOne({
+      where: { id: targetId, status: UserStatus.Approved },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+    const isSubscribed =
+      (await this.subscriptionsRepository.count({
+        where: { subscriber: { id: currentUserId }, creator: { id: targetId } },
+      })) > 0;
+    return {
+      id: user.id,
+      nickname: user.nickname,
+      email: user.email,
+      isMe: user.id === currentUserId,
+      isSubscribed,
+      subscriberCount: await this.subscriptionsRepository.count({
+        where: { creator: { id: targetId } },
+      }),
+      followingCount: await this.subscriptionsRepository.count({
+        where: { subscriber: { id: targetId } },
+      }),
+      postCount: await this.postsRepository.count({
+        where: { author: { id: targetId } },
+      }),
+    };
   }
 
   async toggleSubscription(
@@ -486,7 +558,9 @@ export class CommunityService {
     }));
   }
 
-  private normalizeContentBlocks(blocks: CommunityContentBlock[]): CommunityContentBlock[] {
+  private normalizeContentBlocks(
+    blocks: CommunityContentBlock[],
+  ): CommunityContentBlock[] {
     const normalized: CommunityContentBlock[] = [];
 
     blocks.forEach((block, index) => {
@@ -496,9 +570,9 @@ export class CommunityService {
 
       if (block.type === 'image' && block.url?.startsWith('data:image/')) {
         normalized.push({
-            id: block.id || `image-${index}`,
-            type: 'image' as const,
-            url: block.url,
+          id: block.id || `image-${index}`,
+          type: 'image' as const,
+          url: block.url,
         });
         return;
       }
@@ -598,7 +672,10 @@ export class CommunityService {
     }
   }
 
-  private async assertOwnerOrAdmin(ownerId: string, currentUserId: string): Promise<void> {
+  private async assertOwnerOrAdmin(
+    ownerId: string,
+    currentUserId: string,
+  ): Promise<void> {
     if (ownerId === currentUserId) {
       return;
     }
@@ -607,7 +684,9 @@ export class CommunityService {
       select: { id: true, role: true },
     });
     if (currentUser?.role !== UserRole.Admin) {
-      throw new ForbiddenException('Only the author or an admin can delete this content.');
+      throw new ForbiddenException(
+        'Only the author or an admin can delete this content.',
+      );
     }
   }
 }
