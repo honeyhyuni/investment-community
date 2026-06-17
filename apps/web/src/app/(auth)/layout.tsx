@@ -294,7 +294,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           }
         />
 
-        <nav className="mt-4 hidden gap-2 overflow-x-auto border-b border-border sm:flex">
+        <nav className="relative z-50 mt-4 hidden gap-2 overflow-x-auto border-b border-border sm:flex">
           {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
             const active =
               item.id === "stocks"
@@ -320,7 +320,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
         {children}
       </section>
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(21,25,35,0.08)] backdrop-blur sm:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(21,25,35,0.08)] backdrop-blur sm:hidden">
         <div className="mx-auto flex h-16 max-w-md gap-1 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
             const active =
