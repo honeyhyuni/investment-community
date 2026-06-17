@@ -8,12 +8,14 @@ import { UserRole } from '../users/user-role.enum';
 import {
   CandlePoint,
   FavoriteStock,
+  IpoCalendarItem,
   MarketNews,
   MarketBriefing,
   MarketQuote,
   StockDetail,
   StockSymbol,
 } from './finnhub-quote.dto';
+import { IpoCalendarBatchService } from './ipo-calendar-batch.service';
 import type { ChartPeriod } from './finnhub-quote.dto';
 import { MarketsService } from './markets.service';
 import { StockFinancialBatchService } from './stock-financial-batch.service';
@@ -27,6 +29,7 @@ export class MarketsController {
     private readonly marketsService: MarketsService,
     private readonly stockMasterBatchService: StockMasterBatchService,
     private readonly stockFinancialBatchService: StockFinancialBatchService,
+    private readonly ipoCalendarBatchService: IpoCalendarBatchService,
   ) {}
 
   @Get('quotes')
@@ -132,6 +135,11 @@ export class MarketsController {
     return this.marketsService.getMarketNews(category, market, language);
   }
 
+  @Get('ipos')
+  getIpoCalendar(): Promise<IpoCalendarItem[]> {
+    return this.ipoCalendarBatchService.getUpcomingIpos();
+  }
+
   @Get('briefing')
   // 마켓브리핑 메뉴에서 시장별 최신 브리핑 하나를 조회한다.
   getMarketBriefing(
@@ -214,5 +222,16 @@ export class MarketsController {
     return this.stockFinancialBatchService.refreshRecentFinancials(
       limit ? Number(limit) : undefined,
     );
+  }
+
+  @Post('ipos/batch')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  refreshIpoCalendar(): Promise<{
+    scanned: number;
+    updated: number;
+    failed: number;
+  }> {
+    return this.ipoCalendarBatchService.refreshUpcomingIpos();
   }
 }
