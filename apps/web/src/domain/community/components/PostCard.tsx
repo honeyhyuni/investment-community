@@ -1,7 +1,7 @@
 "use client";
 
 import { Dispatch, MouseEvent, SetStateAction, useState } from "react";
-import { Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
+import { ChevronRight, Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { RichContent } from "@/common/components/RichContent";
 import { Button } from "@/common/components/Button";
 import { cn } from "@/common/utils/cn";
@@ -62,13 +62,17 @@ export function PostCard({
   canModerate?: boolean;
 }) {
   const ko = usePreferencesStore((s) => s.language) === "ko";
-  const [expanded, setExpanded] = useState(forceExpanded);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const html = getPostHtml(post);
-  const showFull = forceExpanded || expanded || html.length < 1200;
+  const showFull = forceExpanded || html.length < 1200;
   // 리스트(카드) 모드에서는 onOpenPost가 있어 카운트만 보여주고,
   // 상세 모드(onOpenPost 없음)에서만 좋아요/댓글 인터랙션을 허용한다.
   const interactive = !onOpenPost;
+  const edited =
+    new Date(post.updatedAt).getTime() - new Date(post.createdAt).getTime() > 1000;
+  const dateLabel = new Date(
+    edited ? post.updatedAt : post.createdAt,
+  ).toLocaleString();
 
   function openPostFromCard(event: MouseEvent<HTMLElement>) {
     if (!onOpenPost) {
@@ -96,10 +100,10 @@ export function PostCard({
 
   return (
     <article
-      onDoubleClick={openPostFromCard}
+      onClick={openPostFromCard}
       className={`-mx-4 rounded-none border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border ${
         onOpenPost
-          ? "cursor-pointer transition-all duration-150 ease-out will-change-transform hover:scale-[1.01] hover:shadow-md"
+          ? "cursor-pointer transition-all duration-150 ease-out hover:scale-[1.01] hover:shadow-md hover:will-change-transform"
           : ""
       }`}
     >
@@ -108,39 +112,65 @@ export function PostCard({
           <h3 className="line-clamp-2 text-xl font-semibold leading-snug text-foreground sm:truncate sm:text-2xl">
             {post.title || post.content || (ko ? "제목 없음" : "Untitled")}
           </h3>
-          <div className="mt-1.5 flex items-center gap-2">
-            <span
-              aria-hidden
-              className="grid size-6 shrink-0 place-items-center rounded-full bg-surface-subtle text-[10px] font-semibold uppercase text-muted"
-            >
-              {post.author.nickname.charAt(0)}
-            </span>
-            <p className="min-w-0 truncate text-[11px] font-semibold text-muted sm:text-xs">
-              <Button
-                variant="link"
+          {forceExpanded ? (
+            <>
+              {/* 상세: 제목 아래 날짜, 그리고 프로필+이름은 별도 버튼으로 분리(유저 피드로 이동) */}
+              <p className="mt-1.5 text-[11px] font-semibold text-muted sm:text-xs">
+                {dateLabel}
+                {edited ? (
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-surface-subtle px-1.5 py-0.5 text-[10px] font-semibold text-muted">
+                    {ko ? "수정됨" : "Edited"}
+                  </span>
+                ) : null}
+              </p>
+              <button
+                type="button"
                 onClick={(event) => {
                   event.stopPropagation();
                   onAuthorClick?.(post.author.id);
                 }}
+                className="mt-2 inline-flex max-w-full items-center gap-2 text-xs font-semibold text-foreground transition-colors hover:text-primary focus-visible:text-primary focus-visible:outline-none"
               >
-                {post.author.nickname}
-              </Button>{" "}
-              {(() => {
-                const edited =
-                  new Date(post.updatedAt).getTime() - new Date(post.createdAt).getTime() > 1000;
-                return (
-                  <>
-                    · {new Date(edited ? post.updatedAt : post.createdAt).toLocaleString()}
-                    {edited ? (
-                      <span className="ml-1.5 inline-flex items-center rounded-full bg-surface-subtle px-1.5 py-0.5 text-[10px] font-semibold text-muted">
-                        {ko ? "수정됨" : "Edited"}
-                      </span>
-                    ) : null}
-                  </>
-                );
-              })()}
-            </p>
-          </div>
+                <span
+                  aria-hidden
+                  className="grid size-6 shrink-0 place-items-center rounded-full bg-surface-subtle text-[10px] font-semibold uppercase text-muted"
+                >
+                  {post.author.nickname.charAt(0)}
+                </span>
+                <span className="truncate">{post.author.nickname}</span>
+                <span className="inline-flex shrink-0 items-center gap-0.5 text-primary">
+                  {ko ? "피드로 가기" : "View feed"}
+                  <ChevronRight className="size-3.5" />
+                </span>
+              </button>
+            </>
+          ) : (
+            <div className="mt-1.5 flex items-center gap-2">
+              <span
+                aria-hidden
+                className="grid size-6 shrink-0 place-items-center rounded-full bg-surface-subtle text-[10px] font-semibold uppercase text-muted"
+              >
+                {post.author.nickname.charAt(0)}
+              </span>
+              <p className="min-w-0 truncate text-[11px] font-semibold text-muted sm:text-xs">
+                <Button
+                  variant="link"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onAuthorClick?.(post.author.id);
+                  }}
+                >
+                  {post.author.nickname}
+                </Button>{" "}
+                · {dateLabel}
+                {edited ? (
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-surface-subtle px-1.5 py-0.5 text-[10px] font-semibold text-muted">
+                    {ko ? "수정됨" : "Edited"}
+                  </span>
+                ) : null}
+              </p>
+            </div>
+          )}
         </div>
         {post.author.id === currentUserId || canModerate ? (
           <div className="flex gap-1">
@@ -187,7 +217,7 @@ export function PostCard({
           variant="link"
           onClick={(event) => {
             event.stopPropagation();
-            setExpanded(true);
+            onOpenPost?.(post.id);
           }}
           className="mt-3 text-sm"
         >
