@@ -5,6 +5,8 @@ import { MarketsGateway } from './markets.gateway';
 import { MarketsProfileBatchService } from './markets-profile-batch.service';
 import { MarketsService } from './markets.service';
 import { FavoriteStockEntity } from './favorite-stock.entity';
+import { IpoCalendarBatchService } from './ipo-calendar-batch.service';
+import { IpoCalendarEntity } from './ipo-calendar.entity';
 import { MarketBriefingEntity } from './market-briefing.entity';
 import { StockFinancialBatchService } from './stock-financial-batch.service';
 import { StockFinancialEntity } from './stock-financial.entity';
@@ -20,6 +22,7 @@ import { StockProfileEntity } from './stock-profile.entity';
       StockFinancialEntity,
       MarketBriefingEntity,
       FavoriteStockEntity,
+      IpoCalendarEntity,
     ]),
   ],
   controllers: [MarketsController],
@@ -29,6 +32,7 @@ import { StockProfileEntity } from './stock-profile.entity';
     MarketsProfileBatchService,
     StockMasterBatchService,
     StockFinancialBatchService,
+    IpoCalendarBatchService,
   ],
 })
 /** Wires market quotes, stock metadata, financial batches, briefings, and sockets. */

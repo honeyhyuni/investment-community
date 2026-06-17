@@ -1,6 +1,6 @@
 "use client";
 
-import { Dispatch, SetStateAction, useState } from "react";
+import { Dispatch, MouseEvent, SetStateAction, useState } from "react";
 import { Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { RichContent } from "@/common/components/RichContent";
 import { Button } from "@/common/components/Button";
@@ -70,6 +70,22 @@ export function PostCard({
   // 상세 모드(onOpenPost 없음)에서만 좋아요/댓글 인터랙션을 허용한다.
   const interactive = !onOpenPost;
 
+  function openPostFromCard(event: MouseEvent<HTMLElement>) {
+    if (!onOpenPost) {
+      return;
+    }
+    const target = event.target;
+    if (
+      target instanceof Element &&
+      target.closest(
+        'a,button,input,textarea,select,[role="button"],[contenteditable="true"]',
+      )
+    ) {
+      return;
+    }
+    onOpenPost(post.id);
+  }
+
   function getTagQuote(tag: StockTag) {
     return (
       (tag.market === "KR" ? krStocks : usStocks).find(
@@ -80,7 +96,7 @@ export function PostCard({
 
   return (
     <article
-      onClick={() => onOpenPost?.(post.id)}
+      onDoubleClick={openPostFromCard}
       className={`-mx-4 rounded-none border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border ${
         onOpenPost
           ? "cursor-pointer transition-all duration-150 ease-out will-change-transform hover:scale-[1.01] hover:shadow-md"
