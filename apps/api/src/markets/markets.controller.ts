@@ -82,6 +82,19 @@ export class MarketsController {
     return this.marketsService.addFavoriteStock(user.sub, body);
   }
 
+  @Patch('favorites/reorder')
+  // 내관심종목 화면의 편집 모드에서 드래그로 바꾼 표시 순서를 일괄 저장한다.
+  async reorderFavoriteStocks(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { favoriteIds?: string[] },
+  ): Promise<{ ok: true }> {
+    await this.marketsService.reorderFavoriteStocks(
+      user.sub,
+      body.favoriteIds ?? [],
+    );
+    return { ok: true };
+  }
+
   @Delete('favorites/:market/:symbol')
   // 종목 상세 또는 관심종목 화면에서 별/삭제 버튼을 눌렀을 때 관심종목을 제거한다.
   async removeFavoriteStock(

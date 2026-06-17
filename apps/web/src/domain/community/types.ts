@@ -16,6 +16,7 @@ export type CommunityUser = {
   isSubscribed: boolean;
   subscriberCount: number;
   followingCount: number;
+  postCount: number;
 };
 
 export type CommunityComment = {

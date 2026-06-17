@@ -28,17 +28,44 @@ export function useCommunityPosts() {
 
   const stockSymbols = useMemo(() => [...krSymbols, ...usSymbols], [krSymbols, usSymbols]);
 
+  // 게시글의 종목 태그를 시장:심볼 기준으로 중복 제거한다.
+  const taggedStocks = useMemo(() => {
+    const unique = new Map<string, StockTag>();
+    for (const post of posts) {
+      for (const tag of post.stockTags) {
+        const resolved = resolveCommunityStockTag(tag, stockSymbols);
+        unique.set(`${resolved.market}:${resolved.symbol.toUpperCase()}`, resolved);
+      }
+    }
+    return unique;
+  }, [posts, stockSymbols]);
+
+  // 태그 구성이 실제로 바뀔 때만 effect를 재실행하기 위한 안정적인 키.
+  const taggedStocksKey = useMemo(
+    () => [...taggedStocks.keys()].sort().join(","),
+    [taggedStocks],
+  );
+
   useEffect(() => {
     if (!accessToken) {
       return;
     }
-    const tags = posts
-      .flatMap((post) => post.stockTags)
-      .map((tag) => resolveCommunityStockTag(tag, stockSymbols));
+    // 이미 보유한 시세(목록/추가 시세)는 건너뛰고 없는 종목만 조회한다.
+    const { extraQuotes, krStocks, usStocks } = useMarketDataStore.getState();
+    const tags = [...taggedStocks.values()].filter((tag) => {
+      const symbol = tag.symbol.toUpperCase();
+      if (symbol in extraQuotes) {
+        return false;
+      }
+      const list = tag.market === "KR" ? krStocks : usStocks;
+      return !list.some((quote) => quote.symbol.toUpperCase() === symbol);
+    });
     if (tags.length > 0) {
       loadStockQuotes(tags, accessToken);
     }
-  }, [accessToken, loadStockQuotes, posts, stockSymbols]);
+    // taggedStocks는 taggedStocksKey로 변경을 감지한다(중복 조회 방지).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, loadStockQuotes, taggedStocksKey]);
 
   async function toggleLike(postId: string) {
     if (!accessToken) {

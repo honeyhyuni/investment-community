@@ -610,7 +610,8 @@ export class MarketsService {
   async getFavoriteStocks(userId: string): Promise<FavoriteStock[]> {
     const rows = await this.favoriteStocksRepository.find({
       where: { userId },
-      order: { createdAt: 'DESC' },
+      // 사용자가 지정한 순서를 우선하고, 같은 순서 안에서는 최근 추가가 위로 온다.
+      order: { sortOrder: 'ASC', createdAt: 'DESC' },
     });
 
     return Promise.all(
@@ -661,12 +662,21 @@ export class MarketsService {
     });
 
     if (!favorite) {
+      // 새 관심종목은 기존 최소 sortOrder보다 작게 잡아 항상 맨 위에 노출한다.
+      const minSortOrder = await this.favoriteStocksRepository
+        .createQueryBuilder('favorite')
+        .select('MIN(favorite.sortOrder)', 'min')
+        .where('favorite.userId = :userId', { userId })
+        .getRawOne<{ min: number | null }>();
+      const nextSortOrder = (minSortOrder?.min ?? 0) - 1;
+
       favorite = await this.favoriteStocksRepository.save(
         this.favoriteStocksRepository.create({
           userId,
           symbol,
           market,
           name,
+          sortOrder: nextSortOrder,
         }),
       );
     }
@@ -707,6 +717,38 @@ export class MarketsService {
       userId,
       market: market.toUpperCase() === 'KR' ? 'KR' : 'US',
       symbol: symbol.trim().toUpperCase(),
+    });
+  }
+
+  // 관심종목 표시 순서를 일괄 저장한다. 전달된 순서대로 sortOrder를 0,1,2...로 다시 매긴다.
+  // 본인 소유 행만 갱신하며, 목록에 없는 id는 무시한다.
+  async reorderFavoriteStocks(
+    userId: string,
+    favoriteIds: string[],
+  ): Promise<void> {
+    if (!Array.isArray(favoriteIds) || favoriteIds.length === 0) {
+      return;
+    }
+
+    const owned = await this.favoriteStocksRepository.find({
+      where: { userId },
+      select: { id: true },
+    });
+    const ownedIds = new Set(owned.map((row) => row.id));
+
+    await this.favoriteStocksRepository.manager.transaction(async (manager) => {
+      let position = 0;
+      for (const favoriteId of favoriteIds) {
+        if (!ownedIds.has(favoriteId)) {
+          continue;
+        }
+        await manager.update(
+          FavoriteStockEntity,
+          { id: favoriteId, userId },
+          { sortOrder: position },
+        );
+        position += 1;
+      }
     });
   }
 

@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { IsArray, IsOptional, IsString, MaxLength } from 'class-validator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -67,8 +77,13 @@ export class CommunityController {
     @Query('scope') scope: 'all' | 'subscribed' | 'mine' | 'user' = 'all',
     @Query('userId') userId?: string,
     @Query('sort') sort: 'latest' | 'popular' = 'latest',
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ): Promise<CommunityPostDto[]> {
-    return this.communityService.getFeed(currentUser.sub, scope, userId, sort);
+    return this.communityService.getFeed(currentUser.sub, scope, userId, sort, {
+      limit: limit !== undefined ? Number(limit) : undefined,
+      offset: offset !== undefined ? Number(offset) : undefined,
+    });
   }
 
   @Get('related')
@@ -135,7 +150,11 @@ export class CommunityController {
     @Param('id') id: string,
     @Body() body: CreateCommentDto,
   ): Promise<CommunityPostDto> {
-    return this.communityService.updateComment(currentUser.sub, id, body.content);
+    return this.communityService.updateComment(
+      currentUser.sub,
+      id,
+      body.content,
+    );
   }
 
   @Delete('comments/:id')
@@ -149,6 +168,14 @@ export class CommunityController {
   @Get('users')
   getUsers(@CurrentUser() currentUser: AuthUser): Promise<CommunityUserDto[]> {
     return this.communityService.getUsers(currentUser.sub);
+  }
+
+  @Get('users/:id')
+  getUser(
+    @CurrentUser() currentUser: AuthUser,
+    @Param('id') id: string,
+  ): Promise<CommunityUserDto> {
+    return this.communityService.getUser(currentUser.sub, id);
   }
 
   @Post('users/:id/subscribe')

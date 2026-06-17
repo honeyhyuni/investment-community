@@ -88,7 +88,7 @@ function CommentRow({
                 title={ko ? "삭제" : "Delete"}
                 aria-label={ko ? "삭제" : "Delete"}
                 leftIcon={<Trash2 />}
-                className="size-7 text-muted hover:text-negative"
+                className="size-7 text-muted hover:text-negative sm:size-7"
               />
             </div>
           ) : null}
