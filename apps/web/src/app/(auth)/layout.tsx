@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
+  CalendarDays,
   ChevronDown,
   FileText,
   LogOut,
@@ -24,7 +25,7 @@ import { useMarketDataStore } from "@/common/stores/market-data";
 import { MarketPulse } from "@/domain/markets/components/MarketPulse";
 
 const NAV_ITEMS: Array<{
-  id: "stocks" | "favorites" | "news" | "marketBriefing" | "community" | "admin";
+  id: "stocks" | "favorites" | "news" | "marketBriefing" | "community" | "ipo" | "admin";
   href: string;
   label: { en: string; ko: string };
   icon: typeof BarChart3;
@@ -35,6 +36,7 @@ const NAV_ITEMS: Array<{
   { id: "favorites", href: "/favorites", label: { en: "Watchlist", ko: "내관심종목" }, icon: Star },
   { id: "news", href: "/news", label: { en: "News", ko: "뉴스" }, icon: Newspaper },
   { id: "community", href: "/community", label: { en: "Community", ko: "피드" }, icon: MessageSquareText },
+  { id: "ipo", href: "/ipo", label: { en: "IPO", ko: "공모주" }, icon: CalendarDays },
   { id: "admin", href: "/admin", label: { en: "Admin", ko: "관리" }, icon: ShieldCheck, adminOnly: true },
 ];
 
