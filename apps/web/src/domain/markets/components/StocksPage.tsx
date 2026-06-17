@@ -572,7 +572,7 @@ function StocksView({
         </div>
         <SegmentedControl
           className="w-full md:inline-flex md:w-auto md:min-w-[240px]"
-          buttonClassName="sm:flex-1 md:flex-none"
+          buttonClassName="sm:flex-1"
           aria-label={copy[language].stockList}
           options={[
             { value: "KR", label: copy[language].korea },

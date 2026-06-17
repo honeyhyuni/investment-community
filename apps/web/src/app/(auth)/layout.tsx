@@ -294,7 +294,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           }
         />
 
-        <nav className="relative z-50 mt-4 hidden gap-2 overflow-x-auto border-b border-border sm:flex">
+        <nav className="mt-4 hidden gap-2 overflow-x-auto border-b border-border sm:flex">
           {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
             const active =
               item.id === "stocks"
