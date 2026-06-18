@@ -54,6 +54,13 @@ type KindListingSchedule = {
   listingDateText: string;
 };
 
+type ThirtyEightIpoListItem = {
+  corpName: string;
+  detailUrl: string;
+  subscriptionStartDate: string;
+  subscriptionEndDate: string;
+};
+
 @Injectable()
 export class IpoCalendarBatchService {
   private readonly logger = new Logger(IpoCalendarBatchService.name);
@@ -231,8 +238,15 @@ export class IpoCalendarBatchService {
       listingSchedules,
       retentionStart,
       windowEnd,
+      'kind_pubofrschdl',
+      false,
     );
     updated += listingUpdated;
+
+    const thirtyEightUpdated = await this.applyThirtyEightTodayListingSchedules(
+      windowStart,
+    );
+    updated += thirtyEightUpdated;
 
     await this.removeStaleUpcomingRows(windowStart, windowEnd, activeReceiptNos);
 
@@ -833,6 +847,186 @@ export class IpoCalendarBatchService {
     );
   }
 
+  private async applyThirtyEightTodayListingSchedules(today: string): Promise<number> {
+    try {
+      return await this.applyThirtyEightTodayListingSchedulesUnsafe(today);
+    } catch (error) {
+      this.logger.warn(
+        `38 IPO listing schedule fallback skipped: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+      return 0;
+    }
+  }
+
+  private async applyThirtyEightTodayListingSchedulesUnsafe(
+    today: string,
+  ): Promise<number> {
+    const rows = await this.ipoRepository
+      .createQueryBuilder('ipo')
+      .where('ipo.subscription_start_date <= :today', { today })
+      .andWhere(
+        'coalesce(ipo.subscription_end_date, ipo.subscription_start_date) >= :today',
+        { today },
+      )
+      .andWhere('ipo.listing_date is null')
+      .getMany();
+    if (!rows.length) {
+      return 0;
+    }
+
+    const todayDate = new Date(`${today}T12:00:00`);
+    const listItems = await this.fetchThirtyEightIpoListItems(todayDate, todayDate);
+    const byName = new Map(
+      listItems.map((item) => [this.normalizeCorpName(item.corpName), item]),
+    );
+
+    let updated = 0;
+    for (const row of rows) {
+      const item = byName.get(this.normalizeCorpName(row.corpName));
+      if (!item) {
+        continue;
+      }
+      const listingDate = await this.fetchThirtyEightListingDate(item.detailUrl).catch(
+        (error) => {
+          this.logger.warn(
+            `38 IPO detail request failed for ${row.corpName}: ${
+              error instanceof Error ? error.message : 'unknown error'
+            }`,
+          );
+          return null;
+        },
+      );
+      if (!listingDate) {
+        continue;
+      }
+      row.listingDate = listingDate;
+      row.listingDateText = this.formatKoreanDateLabel(listingDate);
+      row.raw = {
+        ...(row.raw ?? {}),
+        listingSource: '38_communications',
+        thirtyEightCorpName: item.corpName,
+      };
+      await this.ipoRepository.save(row);
+      updated += 1;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    return updated;
+  }
+
+  private async fetchThirtyEightIpoListItems(
+    fromDate: Date,
+    toDate: Date,
+  ): Promise<ThirtyEightIpoListItem[]> {
+    const html = await this.fetchThirtyEightHtml('http://www.38.co.kr/html/fund/?o=k');
+    const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+    const items: ThirtyEightIpoListItem[] = [];
+    const from = this.formatDate(fromDate);
+    const to = this.formatDate(toDate);
+    for (const rowMatch of rows) {
+      const row = rowMatch[1] ?? '';
+      const linkMatch = /<a[^>]+href=["']([^"']*\/html\/fund\/\?o=v[^"']*)["'][^>]*>([\s\S]*?)<\/a>/i.exec(
+        row,
+      );
+      if (!linkMatch?.[1] || !linkMatch[2]) {
+        continue;
+      }
+      const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((match) =>
+        this.cleanHtmlText(match[1] ?? ''),
+      );
+      const subscription = this.parseThirtyEightDateRange(cells[1] ?? '');
+      if (!subscription.startDate) {
+        continue;
+      }
+      const subscriptionEndDate = subscription.endDate ?? subscription.startDate;
+      if (subscription.startDate > to || subscriptionEndDate < from) {
+        continue;
+      }
+      items.push({
+        corpName: this.cleanHtmlText(linkMatch[2]),
+        detailUrl: this.absoluteThirtyEightUrl(linkMatch[1]),
+        subscriptionStartDate: subscription.startDate,
+        subscriptionEndDate,
+      });
+    }
+    return items;
+  }
+
+  private async fetchThirtyEightListingDate(detailUrl: string): Promise<string | null> {
+    const html = await this.fetchThirtyEightHtml(detailUrl);
+    const listingLabel = '\uC0C1\uC7A5\uC77C';
+    const pattern = new RegExp(
+      `<td[^>]*>\\s*${listingLabel}\\s*<\\/td>\\s*<td[^>]*>([\\s\\S]*?)<\\/td>`,
+      'i',
+    );
+    const value = this.cleanHtmlText(pattern.exec(html)?.[1] ?? '');
+    return this.parseThirtyEightDate(value);
+  }
+
+  private async fetchThirtyEightHtml(url: string): Promise<string> {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`38 IPO request failed: ${response.status}`);
+    }
+    return new TextDecoder('euc-kr').decode(Buffer.from(await response.arrayBuffer()));
+  }
+
+  private cleanHtmlText(value: string): string {
+    return value
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;|&#160;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&#40;/g, '(')
+      .replace(/&#41;/g, ')')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private parseThirtyEightDateRange(value: string): {
+    startDate: string | null;
+    endDate: string | null;
+  } {
+    const match = /(\d{4})\.(\d{2})\.(\d{2})(?:\s*~\s*(?:(\d{4})\.)?(\d{2})\.(\d{2}))?/.exec(
+      value,
+    );
+    if (!match) {
+      return { startDate: null, endDate: null };
+    }
+    const startDate = `${match[1]}-${match[2]}-${match[3]}`;
+    const endDate = match[5]
+      ? `${match[4] ?? match[1]}-${match[5]}-${match[6]}`
+      : null;
+    return { startDate, endDate };
+  }
+
+  private parseThirtyEightDate(value: string): string | null {
+    const match = /(\d{4})\.(\d{2})\.(\d{2})/.exec(value);
+    if (!match) {
+      return null;
+    }
+    return `${match[1]}-${match[2]}-${match[3]}`;
+  }
+
+  private absoluteThirtyEightUrl(value: string): string {
+    if (/^https?:\/\//i.test(value)) {
+      return value.replace(/^https:\/\//i, 'http://');
+    }
+    return `http://www.38.co.kr${value.startsWith('/') ? '' : '/'}${value.replace(
+      /&amp;/g,
+      '&',
+    )}`;
+  }
+
   private async fetchKindListingSchedulesForMonth(month: {
     year: number;
     month: string;
@@ -1021,6 +1215,8 @@ export class IpoCalendarBatchService {
     schedules: KindListingSchedule[],
     windowStart: string,
     windowEnd: string,
+    source: string,
+    onlyMissing: boolean,
   ): Promise<number> {
     if (!schedules.length) {
       return 0;
@@ -1037,12 +1233,15 @@ export class IpoCalendarBatchService {
       if (!row) {
         continue;
       }
+      if (onlyMissing && row.listingDate) {
+        continue;
+      }
       row.listingDate = schedule.listingDate;
       row.listingDateText = schedule.listingDateText;
       row.raw = {
         ...(row.raw ?? {}),
-        listingSource: 'kind_pubofrschdl',
-        kindCorpName: schedule.corpName,
+        listingSource: source,
+        listingCorpName: schedule.corpName,
       };
       await this.ipoRepository.save(row);
       updated += 1;
