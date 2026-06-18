@@ -164,6 +164,19 @@ export class IpoCalendarBatchService {
           }
 
           const disclosure = disclosureByReceiptNo.get(correctedFiling.receiptNo);
+          const confirmedOfferPrice = this.isDateInRange(
+            windowStart,
+            correctedFiling.subscriptionStartDate,
+            subscriptionEndDate,
+          )
+            ? await this.fetchConfirmedOfferPrice(
+                apiKey,
+                correctedFiling,
+                disclosures,
+                from,
+                to,
+              )
+            : null;
           await this.ipoRepository.upsert(
             {
               corpCode: correctedFiling.corpCode,
@@ -178,6 +191,7 @@ export class IpoCalendarBatchService {
               subscriptionEndDate: correctedFiling.subscriptionEndDate,
               subscriptionDateText: correctedFiling.subscriptionDateText,
               expectedOfferPrice: correctedFiling.expectedOfferPrice,
+              confirmedOfferPrice,
               underwriter: correctedFiling.underwriter,
               dartUrl: `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${correctedFiling.receiptNo}`,
               source: 'dart_estkrs_batch',
@@ -190,6 +204,9 @@ export class IpoCalendarBatchService {
                     : 'document_xml',
                 reportName: disclosure?.report_nm,
                 receiptDate: disclosure?.rcept_dt,
+                confirmedOfferPriceSource: confirmedOfferPrice
+                  ? 'dart_confirmed_conditions_document'
+                  : undefined,
               },
             },
             ['receiptNo'],
@@ -698,6 +715,97 @@ export class IpoCalendarBatchService {
           ? `${startDate} ~ ${endDate}`
           : startDate ?? ''),
     };
+  }
+
+  private async fetchConfirmedOfferPrice(
+    apiKey: string,
+    filing: ParsedEquityFiling,
+    disclosures: DartDisclosure[],
+    beginDate: string,
+    endDate: string,
+  ): Promise<string | null> {
+    const conditionDisclosure =
+      this.findConfirmedConditionDisclosure(disclosures, filing) ??
+      this.findConfirmedConditionDisclosure(
+        await this.fetchCorpDisclosures(apiKey, filing.corpCode, beginDate, endDate),
+        filing,
+      );
+    if (!conditionDisclosure?.rcept_no) {
+      return null;
+    }
+
+    const text = await this.fetchDartDocumentText(
+      apiKey,
+      conditionDisclosure.rcept_no,
+    ).catch(() => '');
+    if (!text) {
+      return null;
+    }
+    return this.extractConfirmedOfferPrice(text);
+  }
+
+  private findConfirmedConditionDisclosure(
+    disclosures: DartDisclosure[],
+    filing: ParsedEquityFiling,
+  ): DartDisclosure | null {
+    return (
+      disclosures
+        .filter((item) => item.corp_code === filing.corpCode && item.rcept_no)
+        .filter((item) => {
+          const reportName = item.report_nm ?? '';
+          return /발행조건확정/.test(reportName) && /증권신고서|지분증권/.test(reportName);
+        })
+        .sort((left, right) =>
+          `${right.rcept_dt ?? ''}${right.rcept_no ?? ''}`.localeCompare(
+            `${left.rcept_dt ?? ''}${left.rcept_no ?? ''}`,
+          ),
+        )[0] ?? null
+    );
+  }
+
+  private async fetchCorpDisclosures(
+    apiKey: string,
+    corpCode: string,
+    beginDate: string,
+    endDate: string,
+  ): Promise<DartDisclosure[]> {
+    const url = new URL('https://opendart.fss.or.kr/api/list.json');
+    url.searchParams.set('crtfc_key', apiKey);
+    url.searchParams.set('corp_code', corpCode);
+    url.searchParams.set('bgn_de', beginDate);
+    url.searchParams.set('end_de', endDate);
+    url.searchParams.set('page_count', '100');
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`DART corp disclosure list request failed: ${response.status}`);
+    }
+    const body = (await response.json()) as DartListResponse;
+    if (body.status && body.status !== '000' && body.status !== '013') {
+      throw new Error(
+        `DART corp disclosure list failed: ${body.status} ${body.message ?? ''}`.trim(),
+      );
+    }
+    return body.list ?? [];
+  }
+
+  private extractConfirmedOfferPrice(text: string): string | null {
+    const patterns = [
+      /모집\(매출\)\s*확정가액\s*[:：]?\s*([0-9,]+)\s*원/,
+      /주당\s*확정공모가액\s*[:：]?\s*([0-9,]+)\s*원/,
+      /확정공모가(?:격|액)?\s*[:：]?\s*([0-9,]+)\s*원/,
+      /공모가액\s*확정[^0-9]{0,120}([0-9,]+)\s*원/,
+    ];
+    for (const pattern of patterns) {
+      const match = pattern.exec(text);
+      if (match?.[1]) {
+        return match[1].trim();
+      }
+    }
+    return null;
+  }
+
+  private isDateInRange(date: string, startDate: string, endDate: string): boolean {
+    return startDate <= date && date <= endDate;
   }
 
   private async fetchKindListingSchedules(

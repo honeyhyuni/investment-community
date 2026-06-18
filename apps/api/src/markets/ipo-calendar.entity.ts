@@ -52,6 +52,9 @@ export class IpoCalendarEntity {
   @Column({ name: 'expected_offer_price', type: 'varchar', nullable: true })
   expectedOfferPrice: string | null;
 
+  @Column({ name: 'confirmed_offer_price', type: 'varchar', nullable: true })
+  confirmedOfferPrice: string | null;
+
   @Column({ name: 'underwriter', type: 'varchar', nullable: true })
   underwriter: string | null;
 

@@ -191,8 +191,8 @@ function IpoCompactCard({
         {item.underwriter ?? (language === "ko" ? "주관사 미확인" : "Underwriter TBD")}
       </p>
       <p className="mt-1 break-words text-[11px] font-semibold leading-4 text-primary">
-        {item.expectedOfferPrice
-          ? `${item.expectedOfferPrice}원`
+        {getOfferPriceValue(item)
+          ? `${getOfferPriceValue(item)}원`
           : language === "ko"
             ? "공모가 미확인"
             : "Price TBD"}
@@ -239,8 +239,8 @@ function IpoListCard({
           value={formatListingDate(item, language)}
         />
         <InfoCell
-          label={language === "ko" ? "희망공모가" : "Expected price"}
-          value={item.expectedOfferPrice ?? "-"}
+          label={getOfferPriceLabel(item, language)}
+          value={getOfferPriceValue(item) ?? "-"}
         />
         <InfoCell
           label={language === "ko" ? "주관사" : "Underwriter"}
@@ -360,4 +360,18 @@ function formatListingDate(item: IpoCalendarItem, language: "en" | "ko"): string
     return item.listingDate;
   }
   return language === "ko" ? "상장일 미정" : "Listing date TBD";
+}
+
+function getOfferPriceValue(item: IpoCalendarItem): string | null {
+  return item.confirmedOfferPrice ?? item.expectedOfferPrice;
+}
+
+function getOfferPriceLabel(
+  item: IpoCalendarItem,
+  language: "en" | "ko",
+): string {
+  if (item.confirmedOfferPrice) {
+    return language === "ko" ? "확정공모가" : "Confirmed price";
+  }
+  return language === "ko" ? "희망공모가" : "Expected price";
 }
