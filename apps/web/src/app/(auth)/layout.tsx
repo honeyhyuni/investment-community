@@ -21,8 +21,7 @@ import {
 import { SessionLoading } from "@/common/components/SessionLoading";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
-import { useMarketDataStore } from "@/common/stores/market-data";
-import { MarketPulse } from "@/domain/markets/components/MarketPulse";
+import { MarketPulseContainer } from "@/domain/markets/components/MarketPulseContainer";
 
 const NAV_ITEMS: Array<{
   id: "stocks" | "favorites" | "news" | "marketBriefing" | "community" | "ipo" | "admin";
@@ -46,6 +45,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const accountMenuRef = useRef<HTMLDetailsElement>(null);
   const [headerScrolled, setHeaderScrolled] = useState(false);
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
 
   const accessToken = useSessionStore((s) => s.accessToken);
   const user = useSessionStore((s) => s.user);
@@ -56,12 +56,6 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   const darkMode = usePreferencesStore((s) => s.darkMode);
   const toggleLanguage = usePreferencesStore((s) => s.toggleLanguage);
   const toggleDarkMode = usePreferencesStore((s) => s.toggleDarkMode);
-
-  const pulse = useMarketDataStore((s) => s.pulse);
-  const livePrices = useMarketDataStore((s) => s.livePrices);
-  const marketLoading = useMarketDataStore((s) => s.marketLoading);
-  const exchangeRate = useMarketDataStore((s) => s.exchangeRate);
-  const loadMarketData = useMarketDataStore((s) => s.loadMarketData);
 
   const isAdmin = user?.role === "ADMIN";
   const isProfile = pathname === "/profile";
@@ -117,7 +111,16 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
     if (accountMenuRef.current) {
       accountMenuRef.current.open = false;
     }
+    setNavigatingTo(null);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!navigatingTo) {
+      return;
+    }
+    const timeout = window.setTimeout(() => setNavigatingTo(null), 8000);
+    return () => window.clearTimeout(timeout);
+  }, [navigatingTo]);
 
   if (authChecking || user?.status !== "APPROVED") {
     return (
@@ -276,23 +279,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <MarketPulse
-          pulse={pulse}
-          livePrices={livePrices}
-          loading={marketLoading}
-          refresh={() => {
-            if (accessToken) {
-              loadMarketData(accessToken);
-            }
-          }}
-          title={language === "ko" ? "시장 지표" : "Market pulse"}
-          eyebrow={language === "ko" ? "실시간 개요" : "Live overview"}
-          refreshLabel={language === "ko" ? "새로고침" : "Refresh"}
-          exchangeRate={exchangeRate}
-          exchangeRateErrorLabel={
-            language === "ko" ? "KIS 환율 조회 실패" : "Exchange rate unavailable"
-          }
-        />
+        <MarketPulseContainer accessToken={accessToken} />
 
         <nav className="mt-4 hidden gap-2 overflow-x-auto border-b border-border sm:flex">
           {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map((item) => {
@@ -306,6 +293,15 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
               <Link
                 key={item.id}
                 href={item.href}
+                onClick={(event) => {
+                  if (navigatingTo) {
+                    event.preventDefault();
+                    return;
+                  }
+                  if (!active) {
+                    setNavigatingTo(item.href);
+                  }
+                }}
                 className={`flex h-11 shrink-0 cursor-pointer items-center whitespace-nowrap border-b-2 px-3 text-sm font-semibold transition-colors ${
                   active
                     ? "border-primary text-primary"
@@ -317,6 +313,12 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
+
+        {navigatingTo ? (
+          <div className="pointer-events-none fixed inset-x-0 top-0 z-[70] h-1 bg-primary/20">
+            <div className="h-full w-2/3 animate-pulse bg-primary" />
+          </div>
+        ) : null}
 
         {children}
       </section>
@@ -334,6 +336,15 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
               <Link
                 key={item.id}
                 href={item.href}
+                onClick={(event) => {
+                  if (navigatingTo) {
+                    event.preventDefault();
+                    return;
+                  }
+                  if (!active) {
+                    setNavigatingTo(item.href);
+                  }
+                }}
                 className={`flex min-w-[72px] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors ${
                   active
                     ? "text-primary"

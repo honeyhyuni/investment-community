@@ -17,6 +17,7 @@ type MarketDataState = {
   marketLoading: boolean;
   /** pulse/종목/심볼 일괄 로드. 부분 실패는 무시(성공분만 반영). */
   loadMarketData: (token: string) => Promise<string[]>;
+  loadStockSymbols: (token: string) => Promise<void>;
   refreshMarketPulse: (token: string) => Promise<string[]>;
   loadStockQuotes: (
     tags: Array<{ symbol: string; market: "US" | "KR" }>,
@@ -46,13 +47,11 @@ export const useMarketDataStore = create<MarketDataState>((set) => ({
 
     set({ marketLoading: true });
     try {
-      const [pulseResult, usStocksResult, usSymbolsResult, krStocksResult, krSymbolsResult] =
+      const [pulseResult, usStocksResult, krStocksResult] =
         await Promise.allSettled([
           apiRequest<MarketQuote[]>("/markets/pulse", "GET", { accessToken: token }),
           apiRequest<MarketQuote[]>("/markets/stocks/us", "GET", { accessToken: token }),
-          apiRequest<StockSymbol[]>("/markets/symbols/us", "GET", { accessToken: token }),
           apiRequest<MarketQuote[]>("/markets/stocks/kr", "GET", { accessToken: token }),
-          apiRequest<StockSymbol[]>("/markets/symbols/kr", "GET", { accessToken: token }),
         ]);
       const next: Partial<MarketDataState> = {};
       if (pulseResult.status === "fulfilled") {
@@ -67,14 +66,8 @@ export const useMarketDataStore = create<MarketDataState>((set) => ({
       if (usStocksResult.status === "fulfilled") {
         next.usStocks = usStocksResult.value;
       }
-      if (usSymbolsResult.status === "fulfilled" && usStocksResult.status === "fulfilled") {
-        next.usSymbols = mergePrioritySymbols(usSymbolsResult.value, usStocksResult.value);
-      }
       if (krStocksResult.status === "fulfilled") {
         next.krStocks = krStocksResult.value;
-      }
-      if (krSymbolsResult.status === "fulfilled" && krStocksResult.status === "fulfilled") {
-        next.krSymbols = mergePrioritySymbols(krSymbolsResult.value, krStocksResult.value);
       }
       set(next);
       const subscribeSymbols = [
@@ -91,6 +84,28 @@ export const useMarketDataStore = create<MarketDataState>((set) => ({
     } finally {
       set({ marketLoading: false });
     }
+  },
+
+  loadStockSymbols: async (token) => {
+    if (!token) {
+      return;
+    }
+    const current = useMarketDataStore.getState();
+    if (current.usSymbols.length > 0 && current.krSymbols.length > 0) {
+      return;
+    }
+    const [usSymbolsResult, krSymbolsResult] = await Promise.allSettled([
+      apiRequest<StockSymbol[]>("/markets/symbols/us", "GET", { accessToken: token }),
+      apiRequest<StockSymbol[]>("/markets/symbols/kr", "GET", { accessToken: token }),
+    ]);
+    set((state) => ({
+      ...(usSymbolsResult.status === "fulfilled"
+        ? { usSymbols: mergePrioritySymbols(usSymbolsResult.value, state.usStocks) }
+        : {}),
+      ...(krSymbolsResult.status === "fulfilled"
+        ? { krSymbols: mergePrioritySymbols(krSymbolsResult.value, state.krStocks) }
+        : {}),
+    }));
   },
 
   refreshMarketPulse: async (token) => {
@@ -151,10 +166,14 @@ export const useMarketDataStore = create<MarketDataState>((set) => ({
 
   applyTrade: (tick) =>
     set((state) => {
-      const applyToQuotes = (quotes: MarketQuote[]) =>
-        quotes.map((quote) =>
+      const applyToQuotes = (quotes: MarketQuote[]) => {
+        if (!quotes.some((quote) => quote.symbol === tick.symbol)) {
+          return quotes;
+        }
+        return quotes.map((quote) =>
           quote.symbol === tick.symbol ? applyLiveTrade(quote, tick) : quote,
         );
+      };
       return {
         usStocks: applyToQuotes(state.usStocks),
         krStocks: applyToQuotes(state.krStocks),

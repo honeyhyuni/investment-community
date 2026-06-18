@@ -109,6 +109,7 @@ Scheduled market-briefing cron jobs must not run in local/dev containers. `ENABL
 - Tue-Sat `08:25`: previous US-session market briefing.
 - Mon-Fri `15:55`: current Korean-session market briefing.
 - KOSPI 200 five-year financial refresh is currently manual through the admin endpoint; `StockFinancialBatchService` has no cron decorator.
+- Daily `03:00`: IPO calendar refresh through DART/KIND, with a limited 38 Communications fallback.
 
 Manual admin endpoints:
 
@@ -116,8 +117,21 @@ Manual admin endpoints:
 - `POST /api/markets/profiles/batch`
 - `POST /api/markets/master/batch`
 - `POST /api/markets/financials/batch`
+- `POST /api/markets/ipos/batch`
 
 Market briefing OpenAI calls use `OPENAI_MODEL` and `service_tier: "flex"`. The text request retries once for timeout/429/resource-unavailable. A failed scheduled generation must skip publishing instead of creating partial data.
+
+## IPO Calendar Batch
+
+`IpoCalendarBatchService` keeps the IPO calendar focused on the next month plus near-past active rows.
+
+- DART remains the primary source for subscription date, expected/confirmed offer price, underwriter, receipt number, and original document URL.
+- KIND remains the primary source for listing dates when the official listing calendar exposes them.
+- 38 Communications is a fallback only for rows that are currently in the subscription window and still have no `listingDate`.
+- The 38 fallback must not replace a listing date already supplied by KIND.
+- The 38 fallback reads `http://www.38.co.kr/html/fund/?o=k` and then the matching detail page, because Node/OpenSSL can reject that site's HTTPS handshake with `ERR_SSL_DH_KEY_TOO_SMALL`.
+- If 38 scraping fails, skip the fallback and keep the batch successful; do not let a non-official fallback fail the full IPO batch.
+- Store fallback provenance in `raw.listingSource`, for example `38_communications`, so UI/debugging can distinguish official and fallback listing dates.
 
 ## Community Content
 
@@ -145,7 +159,7 @@ Local dev uses `docker-compose.yml`. The current operating VM deploy directory a
 
 ## Deployment
 
-- Working branch for requested changes: `LSH2`.
+- Working branch for requested changes: `LSH4`.
 - Docker Hub images:
   - `honeyhyuni12/investment-community-api:latest`
   - `honeyhyuni12/investment-community-web:latest`

@@ -1,4 +1,4 @@
-const CACHE_NAME = "15f-pwa-v2";
+const CACHE_NAME = "15f-pwa-v3";
 const APP_SHELL = ["/manifest.json", "/icons/icon.svg", "/icons/maskable-icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -40,9 +40,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (url.pathname.startsWith("/_next/")) {
-    event.respondWith(
-      fetch(request).catch(() => caches.match(request)),
-    );
+    event.respondWith(fetch(request));
     return;
   }
 

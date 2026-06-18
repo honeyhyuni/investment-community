@@ -133,6 +133,7 @@ export function StocksPage() {
   const liveSeries = useMarketDataStore((s) => s.liveSeries);
   const applyTrade = useMarketDataStore((s) => s.applyTrade);
   const exchangeRate = useMarketDataStore((s) => s.exchangeRate);
+  const loadStockSymbols = useMarketDataStore((s) => s.loadStockSymbols);
   const router = useRouter();
   const [relatedPosts, setRelatedPosts] = useState<CommunityPost[]>([]);
   const [stockNews, setStockNews] = useState<MarketNews[]>([]);
@@ -160,6 +161,12 @@ export function StocksPage() {
 
   // 셸(레이아웃)에서 stocks가 곧 기본 라우트라 별도 전환 불필요.
   const openStocksView = useCallback(() => {}, []);
+
+  useEffect(() => {
+    if (accessToken) {
+      void loadStockSymbols(accessToken);
+    }
+  }, [accessToken, loadStockSymbols]);
 
   useStockRouteSelection({
     selectedSymbol,
