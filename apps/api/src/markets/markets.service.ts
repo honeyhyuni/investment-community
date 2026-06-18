@@ -295,8 +295,49 @@ export class MarketsService {
     });
     return {
       name: masterStock?.name ?? normalizedSymbol,
-      ...(await this.getQuote(normalizedSymbol)),
+      ...(await this.getUsStockQuoteCached(normalizedSymbol)),
     };
+  }
+
+  private async getUsStockQuoteCached(
+    symbol: string,
+    maxAgeMs = 15_000,
+  ): Promise<MarketQuote> {
+    const key = `market:price:us:${symbol}`;
+    const cached = await this.redis
+      .get(key)
+      .then((value) =>
+        value
+          ? (JSON.parse(value) as { updatedAt: number; quote: MarketQuote })
+          : null,
+      )
+      .catch(() => null);
+
+    if (cached?.quote) {
+      if (Date.now() - cached.updatedAt > maxAgeMs) {
+        void this.refreshUsStockQuoteCache(key, symbol).catch((error) => {
+          this.logger.warn(
+            `Background US quote refresh failed for ${symbol}: ${
+              error instanceof Error ? error.message : 'unknown error'
+            }`,
+          );
+        });
+      }
+      return cached.quote;
+    }
+
+    return this.refreshUsStockQuoteCache(key, symbol);
+  }
+
+  private async refreshUsStockQuoteCache(
+    key: string,
+    symbol: string,
+  ): Promise<MarketQuote> {
+    const quote = await this.getQuote(symbol);
+    await this.redis
+      .set(key, JSON.stringify({ updatedAt: Date.now(), quote }), 'EX', 5 * 60)
+      .catch(() => undefined);
+    return quote;
   }
 
   private async getUsdKrwExchangeRate(): Promise<MarketQuote> {

@@ -6,7 +6,6 @@ import { ChevronLeft } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
 import { Button } from "@/common/components/Button";
 import { apiRequest } from "@/common/lib/api";
-import { resolveCommunityStockTag } from "@/domain/community/utils";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
@@ -34,7 +33,6 @@ export function PostDetailPage({ postId }: { postId: string }) {
     setReplyDrafts,
     error,
     setError,
-    stockSymbols,
     toggleLike,
     createComment,
     editComment,
@@ -114,12 +112,7 @@ export function PostDetailPage({ postId }: { postId: string }) {
           ) : null}
           {post ? (
             <PostCard
-              post={{
-                ...post,
-                stockTags: post.stockTags.map((tag) =>
-                  resolveCommunityStockTag(tag, stockSymbols),
-                ),
-              }}
+              post={post}
               currentUserId={user.id}
               commentDrafts={commentDrafts}
               setCommentDrafts={setCommentDrafts}

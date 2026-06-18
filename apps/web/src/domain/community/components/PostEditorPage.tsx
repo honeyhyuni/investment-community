@@ -27,6 +27,7 @@ export function PostEditorPage({ postId }: { postId?: string }) {
   const livePrices = useMarketDataStore((s) => s.livePrices);
   const extraQuotes = useMarketDataStore((s) => s.extraQuotes);
   const exchangeRate = useMarketDataStore((s) => s.exchangeRate);
+  const loadStockSymbols = useMarketDataStore((s) => s.loadStockSymbols);
   const loadStockQuotes = useMarketDataStore((s) => s.loadStockQuotes);
 
   const [title, setTitle] = useState("");
@@ -39,6 +40,12 @@ export function PostEditorPage({ postId }: { postId?: string }) {
   const [error, setError] = useState("");
 
   const stockSymbols = useMemo(() => [...krSymbols, ...usSymbols], [krSymbols, usSymbols]);
+
+  useEffect(() => {
+    if (accessToken) {
+      void loadStockSymbols(accessToken);
+    }
+  }, [accessToken, loadStockSymbols]);
 
   // 수정 모드: 기존 글을 불러와 에디터에 prefill
   const loadExistingPost = useCallback(async (token: string, targetId: string) => {
