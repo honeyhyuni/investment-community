@@ -136,6 +136,8 @@ export type IpoCalendarItem = {
   subscriptionStartDate: string | null;
   subscriptionEndDate: string | null;
   subscriptionDateText: string | null;
+  listingDate: string | null;
+  listingDateText: string | null;
   expectedOfferPrice: string | null;
   underwriter: string | null;
   dartUrl: string;

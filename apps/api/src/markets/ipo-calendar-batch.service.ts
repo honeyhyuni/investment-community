@@ -48,6 +48,12 @@ type ParsedEquityFiling = {
   offeringMethod: string | null;
 };
 
+type KindListingSchedule = {
+  corpName: string;
+  listingDate: string;
+  listingDateText: string;
+};
+
 @Injectable()
 export class IpoCalendarBatchService {
   private readonly logger = new Logger(IpoCalendarBatchService.name);
@@ -75,14 +81,24 @@ export class IpoCalendarBatchService {
     const oneMonthLater = this.formatDate(this.addDays(this.kstDate(), 31));
     return this.ipoRepository
       .createQueryBuilder('ipo')
-      .where('ipo.subscription_start_date <= :windowEnd', {
-        windowEnd: oneMonthLater,
-      })
-      .andWhere(
-        'coalesce(ipo.subscription_end_date, ipo.subscription_start_date) >= :windowStart',
-        { windowStart: today },
+      .where(
+        `(
+          ipo.subscription_start_date <= :windowEnd
+          and coalesce(ipo.subscription_end_date, ipo.subscription_start_date) >= :windowStart
+        )`,
+        {
+          windowStart: today,
+          windowEnd: oneMonthLater,
+        },
       )
-      .orderBy('ipo.subscription_start_date', 'ASC')
+      .orWhere(
+        'ipo.listing_date is not null and ipo.listing_date between :windowStart and :windowEnd',
+        {
+          windowStart: today,
+          windowEnd: oneMonthLater,
+        },
+      )
+      .orderBy('coalesce(ipo.subscription_start_date, ipo.listing_date)', 'ASC')
       .addOrderBy('ipo.corp_name', 'ASC')
       .getMany();
   }
@@ -103,6 +119,7 @@ export class IpoCalendarBatchService {
     const to = this.formatDateCompact(today);
     const windowStart = this.formatDate(today);
     const windowEnd = this.formatDate(this.addDays(today, 31));
+    const retentionStart = this.formatDate(this.addDays(today, -31));
     const disclosures = await this.fetchIpoDisclosures(apiKey, from, to);
     const disclosureByReceiptNo = new Map(
       disclosures
@@ -140,7 +157,7 @@ export class IpoCalendarBatchService {
             correctedFiling.subscriptionEndDate ??
             correctedFiling.subscriptionStartDate;
           if (
-            subscriptionEndDate < windowStart ||
+            subscriptionEndDate < retentionStart ||
             correctedFiling.subscriptionStartDate > windowEnd
           ) {
             continue;
@@ -191,6 +208,14 @@ export class IpoCalendarBatchService {
 
       await new Promise((resolve) => setTimeout(resolve, 120));
     }
+
+    const listingSchedules = await this.fetchKindListingSchedules(today, this.addDays(today, 31));
+    const listingUpdated = await this.applyListingSchedules(
+      listingSchedules,
+      retentionStart,
+      windowEnd,
+    );
+    updated += listingUpdated;
 
     await this.removeStaleUpcomingRows(windowStart, windowEnd, activeReceiptNos);
 
@@ -673,6 +698,281 @@ export class IpoCalendarBatchService {
           ? `${startDate} ~ ${endDate}`
           : startDate ?? ''),
     };
+  }
+
+  private async fetchKindListingSchedules(
+    fromDate: Date,
+    toDate: Date,
+  ): Promise<KindListingSchedule[]> {
+    const schedules: KindListingSchedule[] = [];
+    const months = this.monthKeysBetween(fromDate, toDate);
+    for (const month of months) {
+      try {
+        schedules.push(...(await this.fetchKindListingSchedulesForMonth(month)));
+      } catch (error) {
+        this.logger.warn(
+          `KIND IPO listing schedule request failed for ${month.year}-${month.month}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    const from = this.formatDate(fromDate);
+    const to = this.formatDate(toDate);
+    return schedules.filter(
+      (schedule) => schedule.listingDate >= from && schedule.listingDate <= to,
+    );
+  }
+
+  private async fetchKindListingSchedulesForMonth(month: {
+    year: number;
+    month: string;
+  }): Promise<KindListingSchedule[]> {
+    const entryUrl =
+      'https://kind.krx.co.kr/listinvstg/pubofrschdl.do?method=searchPubofrScholMain';
+    const cookieResponse = await fetch(entryUrl, {
+      headers: this.kindHeaders(),
+    });
+    const cookie = cookieResponse.headers.get('set-cookie') ?? '';
+    const response = await fetch('https://kind.krx.co.kr/listinvstg/pubofrschdl.do', {
+      method: 'POST',
+      headers: {
+        ...this.kindHeaders(),
+        Referer: entryUrl,
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+      body: new URLSearchParams({
+        method: 'searchPubofrScholCalnd',
+        forward: 'pubofrSchol_sub',
+        marketType: '',
+        scholType: '2',
+        selYear: String(month.year),
+        selMonth: month.month,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`KIND listing schedule request failed: ${response.status}`);
+    }
+    const html = await response.text();
+    if (/점검시간|img_notice|AKAMAI|boomerang/i.test(html)) {
+      throw new Error('KIND returned maintenance or protection page.');
+    }
+    return this.parseKindListingScheduleHtml(html, month.year, month.month);
+  }
+
+  private parseKindListingScheduleHtml(
+    html: string,
+    year: number,
+    month: string,
+  ): KindListingSchedule[] {
+    const normalized = html
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/&nbsp;|&#160;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/\s+/g, ' ');
+    const items: KindListingSchedule[] = [];
+    const tableCells = [...normalized.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
+    for (const cellMatch of tableCells) {
+      const cell = cellMatch[1] ?? '';
+      if (!/상장/.test(cell)) {
+        continue;
+      }
+      const plain = cell.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const day = /^(\d{1,2})(?:\s|$)/.exec(plain)?.[1]?.padStart(2, '0');
+      if (!day) {
+        continue;
+      }
+      const listingDate = `${year}-${month}-${day}`;
+      const corpText = plain.replace(/^\d{1,2}\s*/, '').replace(/^상장\s*/, '');
+      for (const corpName of this.splitKindCorpNames(corpText)) {
+        items.push({
+          corpName,
+          listingDate,
+          listingDateText: this.formatKoreanDateLabel(listingDate),
+        });
+      }
+    }
+    if (items.length) {
+      return this.uniqueListingSchedules(items);
+    }
+
+    const dayBlocks = [
+      ...normalized.matchAll(
+        /(?:<td[^>]*>|<li[^>]*>|<div[^>]*>)([\s\S]{0,1800}?)(?=<td[^>]*>|<li[^>]*>|<div[^>]*>|$)/gi,
+      ),
+    ];
+    for (const blockMatch of dayBlocks) {
+      const block = blockMatch[1] ?? '';
+      if (!/상장/.test(block)) {
+        continue;
+      }
+      const day = this.extractKindCalendarDay(block);
+      if (!day) {
+        continue;
+      }
+      const listingDate = `${year}-${month}-${day}`;
+      for (const corpName of this.extractKindCorpNames(block)) {
+        items.push({
+          corpName,
+          listingDate,
+          listingDateText: this.formatKoreanDateLabel(listingDate),
+        });
+      }
+    }
+
+    if (items.length) {
+      return this.uniqueListingSchedules(items);
+    }
+
+    const plain = normalized.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    const fallbackPattern =
+      /(\d{1,2})\s*(?:일|\.)?\s*([가-힣A-Za-z0-9][가-힣A-Za-z0-9\s().·ㆍ&-]{1,60})\s*상장/g;
+    for (const match of plain.matchAll(fallbackPattern)) {
+      const day = match[1]?.padStart(2, '0');
+      const corpName = this.cleanKindCorpName(match[2]);
+      if (!day || !corpName) {
+        continue;
+      }
+      const listingDate = `${year}-${month}-${day}`;
+      items.push({
+        corpName,
+        listingDate,
+        listingDateText: this.formatKoreanDateLabel(listingDate),
+      });
+    }
+    return this.uniqueListingSchedules(items);
+  }
+
+  private extractKindCalendarDay(block: string): string | null {
+    const text = block.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    const match =
+      /(?:^|\s)(\d{1,2})(?:\s*일)?(?:\s|$)/.exec(text) ??
+      /day["']?\s*[:=]\s*["']?(\d{1,2})/i.exec(block);
+    if (!match) {
+      return null;
+    }
+    return match[1].padStart(2, '0');
+  }
+
+  private extractKindCorpNames(block: string): string[] {
+    const names = new Set<string>();
+    const linkPattern = /<a[^>]*>([\s\S]*?)<\/a>/gi;
+    for (const match of block.matchAll(linkPattern)) {
+      const text = this.cleanKindCorpName(match[1]);
+      if (text && !/상장|신고서|수요예측|청약|납입|IR/.test(text)) {
+        names.add(text);
+      }
+    }
+    if (!names.size) {
+      const plain = block.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+      const match = /([가-힣A-Za-z0-9][가-힣A-Za-z0-9\s().·ㆍ&-]{1,60})\s*상장/.exec(
+        plain,
+      );
+      const name = this.cleanKindCorpName(match?.[1]);
+      if (name) {
+        names.add(name);
+      }
+    }
+    return [...names];
+  }
+
+  private cleanKindCorpName(value?: string): string {
+    return (value ?? '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\([^)]*상장[^)]*\)/g, ' ')
+      .replace(/\b상장\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private splitKindCorpNames(value: string): string[] {
+    return value
+      .split(/\s{2,}|ㆍ|,|\n/)
+      .map((item) => this.cleanKindCorpName(item))
+      .filter((item) => !!item && !/신고서|수요예측|청약|납입|IR/.test(item));
+  }
+
+  private uniqueListingSchedules(
+    schedules: KindListingSchedule[],
+  ): KindListingSchedule[] {
+    const byKey = new Map<string, KindListingSchedule>();
+    for (const schedule of schedules) {
+      byKey.set(
+        `${this.normalizeCorpName(schedule.corpName)}:${schedule.listingDate}`,
+        schedule,
+      );
+    }
+    return [...byKey.values()];
+  }
+
+  private async applyListingSchedules(
+    schedules: KindListingSchedule[],
+    windowStart: string,
+    windowEnd: string,
+  ): Promise<number> {
+    if (!schedules.length) {
+      return 0;
+    }
+    const rows = await this.ipoRepository.find({
+      where: {
+        subscriptionStartDate: Between(windowStart, windowEnd),
+      },
+    });
+    const byName = new Map(rows.map((row) => [this.normalizeCorpName(row.corpName), row]));
+    let updated = 0;
+    for (const schedule of schedules) {
+      const row = byName.get(this.normalizeCorpName(schedule.corpName));
+      if (!row) {
+        continue;
+      }
+      row.listingDate = schedule.listingDate;
+      row.listingDateText = schedule.listingDateText;
+      row.raw = {
+        ...(row.raw ?? {}),
+        listingSource: 'kind_pubofrschdl',
+        kindCorpName: schedule.corpName,
+      };
+      await this.ipoRepository.save(row);
+      updated += 1;
+    }
+    return updated;
+  }
+
+  private monthKeysBetween(
+    fromDate: Date,
+    toDate: Date,
+  ): Array<{ year: number; month: string }> {
+    const result: Array<{ year: number; month: string }> = [];
+    const cursor = new Date(fromDate.getFullYear(), fromDate.getMonth(), 1);
+    const end = new Date(toDate.getFullYear(), toDate.getMonth(), 1);
+    while (cursor <= end) {
+      result.push({
+        year: cursor.getFullYear(),
+        month: String(cursor.getMonth() + 1).padStart(2, '0'),
+      });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    return result;
+  }
+
+  private kindHeaders(): HeadersInit {
+    return {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+      Accept: 'text/html, */*; q=0.01',
+      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+    };
+  }
+
+  private normalizeCorpName(value: string): string {
+    return value
+      .replace(/\s+/g, '')
+      .replace(/주식회사|㈜|\(주\)|스팩|기업인수목적/g, '')
+      .toLowerCase();
   }
 
   private formatDartDate(value?: string): string | null {

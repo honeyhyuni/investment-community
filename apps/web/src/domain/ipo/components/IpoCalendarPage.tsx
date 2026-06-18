@@ -14,7 +14,12 @@ type CalendarDay = {
   date: string;
   label: string;
   weekday: string;
-  items: IpoCalendarItem[];
+  events: IpoCalendarEvent[];
+};
+
+type IpoCalendarEvent = {
+  item: IpoCalendarItem;
+  type: "subscription" | "listing";
 };
 
 export function IpoCalendarPage() {
@@ -103,17 +108,21 @@ export function IpoCalendarPage() {
                       </p>
                       <p className="text-xs font-medium text-muted">{day.weekday}</p>
                     </div>
-                    {day.items.length ? (
+                    {day.events.length ? (
                       <span className="rounded-full bg-positive/10 px-2 py-0.5 text-xs font-semibold text-positive">
-                        {day.items.length}
+                        {day.events.length}
                       </span>
                     ) : null}
                   </div>
 
                   <div className="mt-3 grid gap-2">
-                    {day.items.length ? (
-                      day.items.map((item) => (
-                        <IpoCompactCard key={item.id} item={item} language={language} />
+                    {day.events.length ? (
+                      day.events.map((event) => (
+                        <IpoCompactCard
+                          key={`${event.item.id}-${event.type}`}
+                          event={event}
+                          language={language}
+                        />
                       ))
                     ) : (
                       <p className="rounded-md border border-dashed border-border px-2 py-4 text-center text-xs text-muted">
@@ -151,16 +160,32 @@ export function IpoCalendarPage() {
 }
 
 function IpoCompactCard({
-  item,
+  event,
   language,
 }: {
-  item: IpoCalendarItem;
+  event: IpoCalendarEvent;
   language: "en" | "ko";
 }) {
+  const item = event.item;
+  const eventLabel =
+    event.type === "listing"
+      ? language === "ko"
+        ? "상장"
+        : "Listing"
+      : language === "ko"
+        ? "공모"
+        : "Subscription";
+  const eventLabelClass =
+    event.type === "listing"
+      ? "text-primary"
+      : "text-pink-400 dark:text-pink-300";
   return (
     <div className="min-w-0 rounded-md border border-border bg-surface px-2 py-2">
       <p className="break-all text-sm font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">
-        {item.corpName}
+        {item.corpName}{" "}
+        <span className={`text-xs font-semibold ${eventLabelClass}`}>
+          ({eventLabel})
+        </span>
       </p>
       <p className="mt-1 break-words text-[11px] font-medium leading-4 text-muted">
         {item.underwriter ?? (language === "ko" ? "주관사 미확인" : "Underwriter TBD")}
@@ -204,10 +229,14 @@ function IpoListCard({
         </a>
       </div>
 
-      <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <InfoCell
           label={language === "ko" ? "청약일" : "Subscription"}
           value={formatSubscription(item, language)}
+        />
+        <InfoCell
+          label={language === "ko" ? "상장일" : "Listing date"}
+          value={formatListingDate(item, language)}
         />
         <InfoCell
           label={language === "ko" ? "희망공모가" : "Expected price"}
@@ -272,7 +301,7 @@ function buildRollingCalendar(
       date: key,
       label: formatter.format(date),
       weekday: weekdayFormatter.format(date),
-      items: items.filter((item) => isDateInSubscriptionRange(item, key)),
+      events: buildCalendarEvents(items, key),
     });
     return days;
   }, []);
@@ -291,6 +320,22 @@ function isDateInSubscriptionRange(item: IpoCalendarItem, date: string): boolean
   return item.subscriptionStartDate <= date && date <= endDate;
 }
 
+function buildCalendarEvents(
+  items: IpoCalendarItem[],
+  date: string,
+): IpoCalendarEvent[] {
+  return items.flatMap((item) => {
+    const events: IpoCalendarEvent[] = [];
+    if (isDateInSubscriptionRange(item, date)) {
+      events.push({ item, type: "subscription" });
+    }
+    if (item.listingDate === date) {
+      events.push({ item, type: "listing" });
+    }
+    return events;
+  });
+}
+
 function toDateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
     date.getDate(),
@@ -305,4 +350,14 @@ function formatSubscription(item: IpoCalendarItem, language: "en" | "ko"): strin
     return item.subscriptionStartDate;
   }
   return language === "ko" ? "원문 확인 필요" : "Check DART filing";
+}
+
+function formatListingDate(item: IpoCalendarItem, language: "en" | "ko"): string {
+  if (item.listingDateText) {
+    return item.listingDateText;
+  }
+  if (item.listingDate) {
+    return item.listingDate;
+  }
+  return language === "ko" ? "상장일 미정" : "Listing date TBD";
 }
