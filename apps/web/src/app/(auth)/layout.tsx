@@ -345,7 +345,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                     setNavigatingTo(item.href);
                   }
                 }}
-                className={`flex min-w-[72px] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors ${
+                className={`flex min-w-[92px] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors ${
                   active
                     ? "text-primary"
                     : "text-muted hover:text-primary"
