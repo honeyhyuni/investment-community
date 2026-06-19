@@ -300,7 +300,7 @@ function WatchlistSection({
       <div className="flex items-center justify-between gap-3">
         <SectionHeader
           eyebrow="Watchlist"
-          title={language === "ko" ? "내관심종목" : "My Watchlist"}
+          title={language === "ko" ? "내 관심종목" : "My Watchlist"}
         />
         {favorites.length ? (
           <Button
@@ -392,7 +392,7 @@ function WatchlistSection({
       ) : (
         <div className="mt-4 rounded-md border border-dashed border-border bg-surface-muted px-4 py-12 text-center">
           <Star size={28} className="mx-auto text-[#f4b400]" fill="currentColor" />
-                    <p className="mt-3 text-base font-semibold text-foreground">
+          <p className="mt-3 text-base font-semibold text-foreground">
             아직 관심종목이 없습니다.
           </p>
           <p className="mt-1 text-sm text-muted">
@@ -1419,7 +1419,7 @@ function FavoriteStockCard({
       <FavoriteCardContent stock={stock} language={language} exchangeRate={exchangeRate} />
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-surface/50 opacity-0 backdrop-blur-[1px] transition-opacity duration-200 group-hover:opacity-100">
         <span className="text-sm font-semibold text-foreground">
-          {language === "ko" ? "?곸꽭 蹂닿린" : "Show detail"}
+          {language === "ko" ? "상세 보기" : "Show detail"}
         </span>
       </div>
     </button>
@@ -1473,8 +1473,8 @@ function SortableFavoriteCard({
           event.stopPropagation();
           onRemove();
         }}
-        title={language === "ko" ? "愿?ъ쥌紐??쒓굅" : "Remove favorite"}
-        aria-label={language === "ko" ? "愿?ъ쥌紐??쒓굅" : "Remove favorite"}
+        title={language === "ko" ? "관심종목 제거" : "Remove favorite"}
+        aria-label={language === "ko" ? "관심종목 제거" : "Remove favorite"}
         className={cn("absolute right-2 top-2 text-muted", isDragging && "invisible")}
       >
         <Trash2 size={16} />
