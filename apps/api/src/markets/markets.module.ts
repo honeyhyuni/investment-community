@@ -8,6 +8,8 @@ import { FavoriteStockEntity } from './favorite-stock.entity';
 import { IpoCalendarBatchService } from './ipo-calendar-batch.service';
 import { IpoCalendarEntity } from './ipo-calendar.entity';
 import { MarketBriefingEntity } from './market-briefing.entity';
+import { PortfolioEntity } from './portfolio.entity';
+import { PortfolioPositionEntity } from './portfolio-position.entity';
 import { StockFinancialBatchService } from './stock-financial-batch.service';
 import { StockFinancialEntity } from './stock-financial.entity';
 import { StockMasterBatchService } from './stock-master-batch.service';
@@ -22,6 +24,8 @@ import { StockProfileEntity } from './stock-profile.entity';
       StockFinancialEntity,
       MarketBriefingEntity,
       FavoriteStockEntity,
+      PortfolioEntity,
+      PortfolioPositionEntity,
       IpoCalendarEntity,
     ]),
   ],

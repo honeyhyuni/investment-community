@@ -32,7 +32,7 @@ const NAV_ITEMS: Array<{
 }> = [
   { id: "marketBriefing", href: "/market-briefing", label: { en: "Briefing", ko: "마켓" }, icon: FileText },
   { id: "stocks", href: "/", label: { en: "Stocks", ko: "종목" }, icon: BarChart3 },
-  { id: "favorites", href: "/favorites", label: { en: "Watchlist", ko: "내관심종목" }, icon: Star },
+  { id: "favorites", href: "/favorites", label: { en: "Portfolio", ko: "포트폴리오 대쉬보드" }, icon: Star },
   { id: "news", href: "/news", label: { en: "News", ko: "뉴스" }, icon: Newspaper },
   { id: "community", href: "/community", label: { en: "Community", ko: "피드" }, icon: MessageSquareText },
   { id: "ipo", href: "/ipo", label: { en: "IPO", ko: "공모주" }, icon: CalendarDays },
@@ -345,7 +345,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                     setNavigatingTo(item.href);
                   }
                 }}
-                className={`flex min-w-[72px] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors ${
+                className={`flex min-w-[92px] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors ${
                   active
                     ? "text-primary"
                     : "text-muted hover:text-primary"

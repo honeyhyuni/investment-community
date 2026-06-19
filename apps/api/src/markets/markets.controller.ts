@@ -12,11 +12,12 @@ import {
   MarketNews,
   MarketBriefing,
   MarketQuote,
+  Portfolio,
   StockDetail,
   StockSymbol,
 } from './finnhub-quote.dto';
 import { IpoCalendarBatchService } from './ipo-calendar-batch.service';
-import type { ChartPeriod } from './finnhub-quote.dto';
+import type { ChartPeriod, PortfolioInput } from './finnhub-quote.dto';
 import { MarketsService } from './markets.service';
 import { StockFinancialBatchService } from './stock-financial-batch.service';
 import { StockMasterBatchService } from './stock-master-batch.service';
@@ -103,6 +104,37 @@ export class MarketsController {
     @Param('symbol') symbol: string,
   ): Promise<{ ok: true }> {
     await this.marketsService.removeFavoriteStock(user.sub, market, symbol);
+    return { ok: true };
+  }
+
+  @Get('portfolios')
+  getPortfolios(@CurrentUser() user: AuthUser): Promise<Portfolio[]> {
+    return this.marketsService.getPortfolios(user.sub);
+  }
+
+  @Post('portfolios')
+  createPortfolio(
+    @CurrentUser() user: AuthUser,
+    @Body() body: PortfolioInput,
+  ): Promise<Portfolio> {
+    return this.marketsService.createPortfolio(user.sub, body);
+  }
+
+  @Patch('portfolios/:id')
+  updatePortfolio(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() body: PortfolioInput,
+  ): Promise<Portfolio> {
+    return this.marketsService.updatePortfolio(user.sub, id, body);
+  }
+
+  @Delete('portfolios/:id')
+  async deletePortfolio(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ): Promise<{ ok: true }> {
+    await this.marketsService.deletePortfolio(user.sub, id);
     return { ok: true };
   }
 
