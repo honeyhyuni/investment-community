@@ -24,6 +24,33 @@ export type FavoriteStock = MarketQuote & {
   addedAt: string;
 };
 
+export type PortfolioPositionInput = {
+  symbol: string;
+  market: "US" | "KR";
+  name?: string;
+  quantity: number;
+  averagePrice?: number;
+};
+
+export type PortfolioPosition = MarketQuote & {
+  id: string;
+  portfolioId: string;
+  market: "US" | "KR";
+  quantity: number;
+  averagePrice: number;
+  cost: number;
+  value: number;
+  addedAt: string;
+};
+
+export type Portfolio = {
+  id: string;
+  name: string;
+  positions: PortfolioPosition[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type StockSymbol = {
   symbol: string;
   displaySymbol: string;

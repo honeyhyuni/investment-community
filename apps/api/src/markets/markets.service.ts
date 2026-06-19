@@ -16,6 +16,9 @@ import {
   CompanyMetrics,
   FinnhubQuote,
   FavoriteStock,
+  Portfolio,
+  PortfolioInput,
+  PortfolioPosition,
   MarketQuote,
   StockDetail,
   StockSymbol,
@@ -28,6 +31,8 @@ import { StockMasterEntity } from './stock-master.entity';
 import { MarketBriefingEntity } from './market-briefing.entity';
 import { StockFinancialEntity } from './stock-financial.entity';
 import { FavoriteStockEntity } from './favorite-stock.entity';
+import { PortfolioEntity } from './portfolio.entity';
+import { PortfolioPositionEntity } from './portfolio-position.entity';
 
 const MARKET_PULSE = [
   { symbol: '^IXIC', name: 'Nasdaq Composite' },
@@ -217,6 +222,10 @@ export class MarketsService {
     private readonly marketBriefingsRepository: Repository<MarketBriefingEntity>,
     @InjectRepository(FavoriteStockEntity)
     private readonly favoriteStocksRepository: Repository<FavoriteStockEntity>,
+    @InjectRepository(PortfolioEntity)
+    private readonly portfoliosRepository: Repository<PortfolioEntity>,
+    @InjectRepository(PortfolioPositionEntity)
+    private readonly portfolioPositionsRepository: Repository<PortfolioPositionEntity>,
   ) {
     this.redis = new Redis(
       this.configService.get<string>('REDIS_URL') ?? 'redis://redis:6379',
@@ -750,6 +759,240 @@ export class MarketsService {
         position += 1;
       }
     });
+  }
+
+  // 사용자별 포트폴리오 목록을 읽고 각 포지션에 현재가 스냅샷을 붙인다.
+  async getPortfolios(userId: string): Promise<Portfolio[]> {
+    const rows = await this.portfoliosRepository.find({
+      where: { userId },
+      relations: { positions: true },
+      order: {
+        createdAt: 'DESC',
+        positions: { createdAt: 'ASC' },
+      },
+    });
+
+    return Promise.all(rows.map((row) => this.toPortfolioDto(row)));
+  }
+
+  // 포트폴리오 이름과 구성 종목/수량을 받아 새 포트폴리오를 만든다.
+  async createPortfolio(
+    userId: string,
+    body: PortfolioInput,
+  ): Promise<Portfolio> {
+    const name = this.normalizePortfolioName(body.name);
+    const positions = await this.normalizePortfolioPositions(body.positions);
+
+    const saved = await this.portfoliosRepository.manager.transaction(
+      async (manager) => {
+        const portfolio = await manager.save(
+          PortfolioEntity,
+          manager.create(PortfolioEntity, { userId, name }),
+        );
+
+        if (positions.length > 0) {
+          await manager.save(
+            PortfolioPositionEntity,
+            positions.map((position) =>
+              manager.create(PortfolioPositionEntity, {
+                ...position,
+                portfolioId: portfolio.id,
+                quantity: String(position.quantity),
+                averagePrice: String(position.averagePrice),
+              }),
+            ),
+          );
+        }
+
+        return portfolio;
+      },
+    );
+
+    const reloaded = await this.portfoliosRepository.findOne({
+      where: { id: saved.id, userId },
+      relations: { positions: true },
+    });
+    if (!reloaded) {
+      throw new NotFoundException('Portfolio was not created.');
+    }
+
+    return this.toPortfolioDto(reloaded);
+  }
+
+  // 포트폴리오 이름과 포지션 목록을 통째로 교체한다.
+  async updatePortfolio(
+    userId: string,
+    id: string,
+    body: PortfolioInput,
+  ): Promise<Portfolio> {
+    const portfolio = await this.portfoliosRepository.findOne({
+      where: { id, userId },
+    });
+    if (!portfolio) {
+      throw new NotFoundException('Portfolio not found.');
+    }
+
+    const name =
+      body.name === undefined
+        ? portfolio.name
+        : this.normalizePortfolioName(body.name);
+    const positions =
+      body.positions === undefined
+        ? undefined
+        : await this.normalizePortfolioPositions(body.positions);
+
+    await this.portfoliosRepository.manager.transaction(async (manager) => {
+      await manager.update(PortfolioEntity, { id, userId }, { name });
+      if (positions) {
+        await manager.delete(PortfolioPositionEntity, { portfolioId: id });
+        if (positions.length > 0) {
+          await manager.save(
+            PortfolioPositionEntity,
+            positions.map((position) =>
+              manager.create(PortfolioPositionEntity, {
+                ...position,
+                portfolioId: id,
+                quantity: String(position.quantity),
+                averagePrice: String(position.averagePrice),
+              }),
+            ),
+          );
+        }
+      }
+    });
+
+    const reloaded = await this.portfoliosRepository.findOne({
+      where: { id, userId },
+      relations: { positions: true },
+    });
+    if (!reloaded) {
+      throw new NotFoundException('Portfolio not found.');
+    }
+
+    return this.toPortfolioDto(reloaded);
+  }
+
+  // 사용자가 소유한 포트폴리오를 삭제한다. 포지션은 DB cascade로 같이 삭제된다.
+  async deletePortfolio(userId: string, id: string): Promise<void> {
+    const result = await this.portfoliosRepository.delete({ id, userId });
+    if (!result.affected) {
+      throw new NotFoundException('Portfolio not found.');
+    }
+  }
+
+  private normalizePortfolioName(name?: string): string {
+    const normalized = name?.trim();
+    if (!normalized) {
+      throw new NotFoundException('Portfolio name is required.');
+    }
+    return normalized.slice(0, 80);
+  }
+
+  private async normalizePortfolioPositions(
+    positions: PortfolioInput['positions'],
+  ): Promise<
+    Array<{
+      symbol: string;
+      market: 'US' | 'KR';
+      name: string | null;
+      quantity: number;
+      averagePrice: number;
+    }>
+  > {
+    const byKey = new Map<
+      string,
+      {
+        symbol: string;
+        market: 'US' | 'KR';
+        name: string | null;
+        quantity: number;
+        averagePrice: number;
+      }
+    >();
+
+    for (const item of positions ?? []) {
+      const symbol = item.symbol?.trim().toUpperCase();
+      const market = item.market?.toUpperCase() === 'KR' ? 'KR' : 'US';
+      const quantity = Number(item.quantity);
+      const averagePrice = Math.max(0, Number(item.averagePrice) || 0);
+      if (!symbol || !Number.isFinite(quantity) || quantity <= 0) {
+        continue;
+      }
+
+      const master = await this.findStockMaster(symbol, market);
+      const key = `${market}:${symbol}`;
+      const current = byKey.get(key);
+      const nextQuantity = (current?.quantity ?? 0) + quantity;
+      const nextAveragePrice =
+        nextQuantity > 0
+          ? (((current?.averagePrice ?? 0) * (current?.quantity ?? 0)) +
+              averagePrice * quantity) /
+            nextQuantity
+          : averagePrice;
+      byKey.set(key, {
+        symbol,
+        market,
+        name: item.name?.trim() || master?.name || symbol,
+        quantity: nextQuantity,
+        averagePrice: nextAveragePrice,
+      });
+    }
+
+    return [...byKey.values()];
+  }
+
+  private async toPortfolioDto(row: PortfolioEntity): Promise<Portfolio> {
+    const positions = [...(row.positions ?? [])].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+    );
+
+    const resolvedPositions = await Promise.all(
+      positions.map(async (position) => this.toPortfolioPositionDto(position)),
+    );
+
+    return {
+      id: row.id,
+      name: row.name,
+      positions: resolvedPositions,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  private async toPortfolioPositionDto(
+    position: PortfolioPositionEntity,
+  ): Promise<PortfolioPosition> {
+    const quantity = Number(position.quantity);
+    const averagePrice = Number(position.averagePrice);
+    const fallback: MarketQuote = {
+      symbol: position.symbol,
+      name: position.name ?? position.symbol,
+      currency: position.market === 'KR' ? 'KRW' : 'USD',
+      current: 0,
+      change: 0,
+      percentChange: 0,
+      high: 0,
+      low: 0,
+      open: 0,
+      previousClose: 0,
+      timestamp: Math.floor(Date.now() / 1000),
+    };
+    const quote = await this.getStockQuote(position.symbol, position.market).catch(
+      () => fallback,
+    );
+
+    return {
+      ...quote,
+      name: quote.name || position.name || position.symbol,
+      id: position.id,
+      portfolioId: position.portfolioId,
+      market: position.market,
+      quantity,
+      averagePrice,
+      cost: quantity * averagePrice,
+      value: quantity * (quote.current || 0),
+      addedAt: position.createdAt.toISOString(),
+    };
   }
 
   private async findStockMaster(
