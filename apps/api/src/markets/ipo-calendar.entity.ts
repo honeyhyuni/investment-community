@@ -10,6 +10,7 @@ import {
 @Entity({ name: 'ipo_calendar_items' })
 @Index(['subscriptionStartDate'])
 @Index(['subscriptionEndDate'])
+@Index(['listingDate'])
 @Index(['receiptDate'])
 export class IpoCalendarEntity {
   @PrimaryGeneratedColumn('uuid')
@@ -42,8 +43,17 @@ export class IpoCalendarEntity {
   @Column({ name: 'subscription_date_text', type: 'varchar', nullable: true })
   subscriptionDateText: string | null;
 
+  @Column({ name: 'listing_date', type: 'date', nullable: true })
+  listingDate: string | null;
+
+  @Column({ name: 'listing_date_text', type: 'varchar', nullable: true })
+  listingDateText: string | null;
+
   @Column({ name: 'expected_offer_price', type: 'varchar', nullable: true })
   expectedOfferPrice: string | null;
+
+  @Column({ name: 'confirmed_offer_price', type: 'varchar', nullable: true })
+  confirmedOfferPrice: string | null;
 
   @Column({ name: 'underwriter', type: 'varchar', nullable: true })
   underwriter: string | null;

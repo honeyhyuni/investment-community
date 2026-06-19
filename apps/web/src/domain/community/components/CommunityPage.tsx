@@ -9,7 +9,6 @@ import { SegmentedControl } from "@/common/components/SegmentedControl";
 import { Skeleton } from "@/common/components/Skeleton";
 import { cn } from "@/common/utils/cn";
 import { apiRequest } from "@/common/lib/api";
-import { resolveCommunityStockTag } from "@/domain/community/utils";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
@@ -67,7 +66,6 @@ export function CommunityPage({ userId }: { userId?: string }) {
     setReplyDrafts,
     error,
     setError,
-    stockSymbols,
     toggleLike,
     createComment,
     editComment,
@@ -304,12 +302,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
       {posts.map((post) => (
         <PostCard
           key={post.id}
-          post={{
-            ...post,
-            stockTags: post.stockTags.map((tag) =>
-              resolveCommunityStockTag(tag, stockSymbols),
-            ),
-          }}
+          post={post}
           currentUserId={user.id}
           commentDrafts={commentDrafts}
           setCommentDrafts={setCommentDrafts}
