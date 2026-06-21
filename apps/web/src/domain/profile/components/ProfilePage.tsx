@@ -46,7 +46,7 @@ export function ProfilePage() {
     try {
       const updatedUser = await apiRequest<User>("/auth/me", "PATCH", {
         accessToken,
-        body: { nickname: nicknameDraft },
+        body: { nickname: nicknameDraft.trim() },
       });
       setUser(updatedUser);
       router.replace("/?notice=profile-updated");
@@ -69,9 +69,7 @@ export function ProfilePage() {
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError(
-        ko ? "새 비밀번호가 일치하지 않습니다." : "New passwords do not match.",
-      );
+      setError(ko ? "새 비밀번호가 일치하지 않습니다." : "New passwords do not match.");
       return;
     }
 
@@ -205,7 +203,7 @@ function ProfilePanel({
           />
         </div>
 
-        <Button variant="primary" leftIcon={<UserPen />} loading={loading}>
+        <Button type="submit" variant="primary" leftIcon={<UserPen />} loading={loading}>
           {ko ? "프로필 저장" : "Save profile"}
         </Button>
       </form>
@@ -238,7 +236,7 @@ function ProfilePanel({
           type="password"
           minLength={8}
         />
-        <Button variant="primary" loading={loading}>
+        <Button type="submit" variant="primary" loading={loading}>
           {ko ? "비밀번호 변경" : "Change password"}
         </Button>
       </form>
@@ -268,5 +266,5 @@ function statusText(status: UserStatus, ko: boolean): string {
   if (!ko) {
     return status === "APPROVED" ? "Approved" : status === "PENDING" ? "Pending" : "Rejected";
   }
-  return status === "APPROVED" ? "승인됨" : status === "PENDING" ? "대기중" : "거부됨";
+  return status === "APPROVED" ? "승인됨" : status === "PENDING" ? "대기중" : "거절됨";
 }
