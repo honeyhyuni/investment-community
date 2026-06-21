@@ -1,6 +1,7 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -15,6 +16,8 @@ import { AuthUser } from './auth-user.type';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
@@ -121,14 +124,26 @@ export class AuthService {
 
   private signRefreshToken(payload: AuthUser): Promise<string> {
     return this.jwtService.signAsync(payload, {
-      secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      secret: this.getRefreshSecret(),
       expiresIn: '30d',
     });
   }
 
   private verifyRefreshToken(refreshToken: string): Promise<AuthUser> {
     return this.jwtService.verifyAsync<AuthUser>(refreshToken, {
-      secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
+      secret: this.getRefreshSecret(),
     });
+  }
+
+  private getRefreshSecret(): string {
+    const refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET');
+    if (refreshSecret) {
+      return refreshSecret;
+    }
+
+    this.logger.warn(
+      'JWT_REFRESH_SECRET is missing. Falling back to JWT_ACCESS_SECRET for refresh tokens.',
+    );
+    return this.configService.getOrThrow<string>('JWT_ACCESS_SECRET');
   }
 }

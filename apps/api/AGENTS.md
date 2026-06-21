@@ -159,13 +159,16 @@ Local dev uses `docker-compose.yml`. The current operating VM deploy directory a
 
 ## Deployment
 
-- Working branch for requested changes: `LSH4`.
+- Working branch for requested changes: `LSH6` unless the user explicitly creates a newer branch.
 - Docker Hub images:
   - `honeyhyuni12/investment-community-api:latest`
   - `honeyhyuni12/investment-community-web:latest`
-- Operating VM: `172.16.11.126`
+- Current operating VM: `172.16.11.137` (Ubuntu). The previous Rocky VM `172.16.11.126` was replaced after storage/VM corruption.
 - Deployment directory: `/home/ncloud/investment-community`
 - Public site: `https://15f.kro.kr/`
+- Direct-IP fallback for infrastructure checks: `http://172.16.11.137/`
+- Production VM `.env` should use `WEB_ORIGIN=https://15f.kro.kr`, `NEXT_PUBLIC_API_BASE_URL=/api`, and `REFRESH_COOKIE_SECURE=true`.
+- Fresh VM deployments start with an empty PostgreSQL volume. This project currently has no migration files; if the DB is blank, either restore the previous DB backup or run a one-time schema sync with the API in non-production mode while scheduled jobs are disabled, then return the API to production mode.
 
 Never place SSH passwords or environment secrets in this file. Build, push, pull, recreate only changed services, then verify `/api/health` and HTTP status through the gateway.
 

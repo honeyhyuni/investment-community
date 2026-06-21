@@ -159,10 +159,12 @@ Before finishing market/community changes, manually verify:
 
 ## Deployment
 
-- Working branch for requested changes: `LSH`.
+- Working branch for requested changes: `LSH6` unless the user explicitly creates a newer branch.
 - Docker image: `honeyhyuni12/investment-community-web:latest`
-- Operating VM: `172.16.11.126`
+- Current operating VM: `172.16.11.137` (Ubuntu). The previous Rocky VM `172.16.11.126` was replaced after storage/VM corruption.
 - Deployment directory: `/home/ncloud/investment-community`
 - Public site: `https://15f.kro.kr/`
+- Direct-IP fallback for infrastructure checks: `http://172.16.11.137/`
+- Production VM `.env` should use `WEB_ORIGIN=https://15f.kro.kr`, `NEXT_PUBLIC_API_BASE_URL=/api`, and `REFRESH_COOKIE_SECURE=true`.
 
 Never commit `.env`, credentials, tokens, passwords, generated logs, or local `.next` output.
