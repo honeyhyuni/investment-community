@@ -61,16 +61,17 @@ export function stockSearchScore(item: StockSymbol, rawQuery: string): number {
   if (!query) {
     return 0;
   }
-  const symbol = item.symbol.toLowerCase();
-  const displaySymbol = (item.displaySymbol ?? item.symbol).toLowerCase();
-  const name = item.description.toLowerCase();
+  const symbol = (item.symbol ?? "").toLowerCase();
+  const displaySymbol = (item.displaySymbol ?? item.symbol ?? "").toLowerCase();
+  const name = (item.description ?? "").toLowerCase();
   const tickerCandidates = [...new Set([symbol, displaySymbol])];
   const exactTicker = tickerCandidates.find((candidate) => candidate === query);
   if (exactTicker) return 320 - exactTicker.length;
   const prefixTicker = tickerCandidates.find((candidate) => candidate.startsWith(query));
   if (prefixTicker) return 240 - prefixTicker.length;
-  if (name.split(/[\s.,/&()_-]+/).some((part) => part === query)) return 180;
-  if (name.split(/[\s.,/&()_-]+/).some((part) => part.startsWith(query))) return 150;
+  const nameParts = name.split(/[\s.,/&()_-]+/).filter(Boolean);
+  if (nameParts.some((part) => part === query)) return 180;
+  if (nameParts.some((part) => part.startsWith(query))) return 150;
   if (name.startsWith(query)) return 100;
   if (tickerCandidates.some((candidate) => candidate.includes(query))) return 90;
   if (name.includes(query)) return 80;

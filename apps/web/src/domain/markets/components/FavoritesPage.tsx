@@ -1279,25 +1279,37 @@ function portfolioSearchScore(item: StockSymbol, rawQuery: string): number {
   if (!query) {
     return 0;
   }
-  const symbol = item.symbol.toLowerCase();
-  const name = item.description.toLowerCase();
+  const symbol = (item.symbol ?? "").toLowerCase();
+  const displaySymbol = (item.displaySymbol ?? item.symbol ?? "").toLowerCase();
+  const name = (item.description ?? "").toLowerCase();
   const compactQuery = query.replace(/[^a-z0-9가-힣]/g, "");
   const compactSymbol = symbol.replace(/[^a-z0-9]/g, "");
-  const compactName = name.replace(/\s+/g, "");
+  const compactDisplaySymbol = displaySymbol.replace(/[^a-z0-9]/g, "");
+  const normalizedQuery = normalizePortfolioSearchText(query);
+  const normalizedName = normalizePortfolioSearchText(name);
+  const compactName = name.replace(/[^a-z0-9가-힣]/g, "");
 
-  if (compactSymbol === compactQuery || compactName === compactQuery) return 150;
-  if (compactSymbol.startsWith(compactQuery)) return 130;
-  if (compactName.startsWith(compactQuery)) return 125;
-  if (compactSymbol.includes(compactQuery)) return 110;
-  if (compactName.includes(compactQuery)) return 100;
+  if (
+    compactSymbol === normalizedQuery ||
+    compactDisplaySymbol === normalizedQuery ||
+    normalizedName === normalizedQuery
+  ) return 150;
+  if (compactSymbol.startsWith(normalizedQuery) || compactDisplaySymbol.startsWith(normalizedQuery)) return 130;
+  if (normalizedName.startsWith(normalizedQuery)) return 125;
+  if (compactSymbol.includes(normalizedQuery) || compactDisplaySymbol.includes(normalizedQuery)) return 110;
+  if (normalizedName.includes(normalizedQuery)) return 100;
 
   const baseScore = stockSearchScore(item, rawQuery);
-  const symbolDistance = editDistance(compactSymbol, compactQuery);
+  const symbolDistance = editDistance(compactSymbol, normalizedQuery);
   const transposed =
-    compactSymbol.length === compactQuery.length &&
-    [...compactSymbol].sort().join("") === [...compactQuery].sort().join("");
+    compactSymbol.length === normalizedQuery.length &&
+    [...compactSymbol].sort().join("") === [...normalizedQuery].sort().join("");
   const fuzzyScore = transposed ? 95 : symbolDistance <= 2 ? 90 - symbolDistance * 10 : 0;
   return Math.max(baseScore, fuzzyScore);
+}
+
+function normalizePortfolioSearchText(value: string): string {
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 function editDistance(a: string, b: string): number {

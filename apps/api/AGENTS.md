@@ -9,7 +9,7 @@ The API is a NestJS + TypeScript service using PostgreSQL, TypeORM, Redis, Socke
 - `src/auth`: login, refresh-cookie sessions, profile/password changes, JWT guards.
 - `src/users`: approval workflow and admin user management.
 - `src/community`: long-form posts, comments/replies, likes, subscriptions, related-stock feeds.
-- `src/markets`: stock master/profile/financial data, quotes, candles, news, market pulse, briefings, and batches.
+- `src/markets`: stock master/profile/financial data, quotes, candles, news, market pulse, IPO/earnings calendars, briefings, and batches.
 - Entities live beside their feature service.
 - API response changes must be reflected in matching Web types.
 
@@ -94,6 +94,7 @@ Community tags are stored as:
 - Yahoo: global quote/news fallback.
 - Naver: Korean market news and stock-code news fallback.
 - DART: Korean company profiles and financial statements.
+- Alpha Vantage: US earnings calendar only.
 - OpenAI: market briefing generation only.
 
 Keys must remain in environment variables. Never commit `.env`, credentials, tokens, or user passwords.
@@ -110,6 +111,7 @@ Scheduled market-briefing cron jobs must not run in local/dev containers. `ENABL
 - Mon-Fri `15:55`: current Korean-session market briefing.
 - KOSPI 200 five-year financial refresh is currently manual through the admin endpoint; `StockFinancialBatchService` has no cron decorator.
 - Daily `03:00`: IPO calendar refresh through DART/KIND, with a limited 38 Communications fallback.
+- Daily `03:20`: US earnings calendar refresh through Alpha Vantage.
 
 Manual admin endpoints:
 
@@ -118,6 +120,7 @@ Manual admin endpoints:
 - `POST /api/markets/master/batch`
 - `POST /api/markets/financials/batch`
 - `POST /api/markets/ipos/batch`
+- `POST /api/markets/calendar/earnings/us/batch`
 
 Market briefing OpenAI calls use `OPENAI_MODEL` and `service_tier: "flex"`. The text request retries once for timeout/429/resource-unavailable. A failed scheduled generation must skip publishing instead of creating partial data.
 
@@ -132,6 +135,22 @@ Market briefing OpenAI calls use `OPENAI_MODEL` and `service_tier: "flex"`. The 
 - The 38 fallback reads `http://www.38.co.kr/html/fund/?o=k` and then the matching detail page, because Node/OpenSSL can reject that site's HTTPS handshake with `ERR_SSL_DH_KEY_TOO_SMALL`.
 - If 38 scraping fails, skip the fallback and keep the batch successful; do not let a non-official fallback fail the full IPO batch.
 - Store fallback provenance in `raw.listingSource`, for example `38_communications`, so UI/debugging can distinguish official and fallback listing dates.
+
+## US Earnings Calendar Batch
+
+`UsEarningsCalendarBatchService` stores Alpha Vantage `EARNINGS_CALENDAR` rows in `us_earnings_calendar`.
+
+- Source: Alpha Vantage `EARNINGS_CALENDAR` with `horizon=3month`.
+- Required environment variable: `ALPHA_VANTAGE_API_KEY`.
+- Public read endpoints:
+  - `GET /api/markets/calendar/earnings/us?from=YYYY-MM-DD&to=YYYY-MM-DD&query=...`
+  - `GET /api/markets/calendar/earnings/us/bounds`
+- Admin refresh endpoint: `POST /api/markets/calendar/earnings/us/batch`
+- Stock detail includes `nextEarnings` from the nearest `report_date >= today` row for US stocks.
+- Each refresh deletes the currently refreshed report-date range before inserting the latest provider rows. This prevents stale future rows when Alpha Vantage changes a report date, EPS estimate, or time-of-day.
+- After refreshing the latest provider range, the batch deletes rows older than the first day of the previous month. Example: when the batch runs in August, rows before July 1 are removed, so June data no longer remains.
+- Production uses `synchronize: false`; create `us_earnings_calendar` manually or via migration before enabling the feature on a fresh DB.
+- The current VM `docker-compose.yml` is separate from the repository compose files. If adding `ALPHA_VANTAGE_API_KEY` locally, also ensure the VM compose maps `ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY}` into the API service.
 
 ## Community Content
 

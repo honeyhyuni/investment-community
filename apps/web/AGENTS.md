@@ -27,6 +27,9 @@ Important shareable routes:
 - `/community/<postId>`: shareable full post.
 - `/community/<postId>/edit`: post editor.
 - `/community/users/<userId>`: shareable user feed.
+- `/calendar`: calendar shell, defaults to IPO.
+- `/calendar/ipo`: shareable IPO subscription/listing calendar.
+- `/calendar/earnings`: shareable US earnings calendar.
 - `/market-briefing/<briefingId>`: shareable briefing.
 
 Use router navigation and URL state for cross-feature navigation. Do not introduce hidden view-only state that prevents menu navigation or link sharing.
@@ -138,6 +141,26 @@ Do not replace TipTap with ad hoc paragraph/image block controls.
   `/markets/stocks/news?symbol=<six-digit>&market=KR&language=ko`
 - Render the API response; do not independently invent company-name news queries in the Web.
 - Stock/news/briefing loading failures should fail visibly or to an intentional empty state, not silently switch to unrelated content.
+
+## Calendar And Earnings UI
+
+- The main navigation label is `캘린더` / `Calendar`.
+- Calendar tabs use the same segmented-control style as portfolio dashboard tabs.
+- `공모주` shows IPO subscription/listing events.
+- `미국실적` shows US earnings events from the API, not from direct browser calls to Alpha Vantage.
+- Earnings routes must remain shareable: `/calendar/ipo` and `/calendar/earnings`.
+- Earnings views:
+  - Daily and weekly views exclude Saturday/Sunday.
+  - Monthly view supports search. Searching a ticker/company should keep the calendar layout and show/highlight matching result cards on their report dates.
+  - Monthly previous/next buttons must not navigate outside the DB bounds returned by `/markets/calendar/earnings/us/bounds`.
+  - The UI should also respect the backend retention model: only the previous month and newer retained data should be reachable.
+- US stock detail displays `nextEarnings` near the stock title action area, beside the watchlist/currency controls, not inside the company overview box.
+- Hide `nextEarnings` if the report date is before today, even if stale data is accidentally returned.
+- Translate earnings time labels in the UI:
+  - `pre-market` -> `프리마켓`
+  - `post-market` / after-market variants -> `애프터마켓`
+  - unknown/missing -> `시간 미정`
+- Keep the next-earnings badge responsive; do not truncate the text to `...` when Korean/English labels are longer.
 
 ## Verification
 
