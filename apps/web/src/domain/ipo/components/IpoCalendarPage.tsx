@@ -14,8 +14,11 @@ import { Notice } from "@/common/components/Notice";
 import { SectionHeader } from "@/common/components/SectionHeader";
 import { SegmentedControl } from "@/common/components/SegmentedControl";
 import { Skeleton } from "@/common/components/Skeleton";
+import { useMarketDataStore } from "@/common/stores/market-data";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { useSessionStore } from "@/common/stores/session";
+import { StockSymbol } from "@/common/types";
+import { stockSearchScore } from "@/common/utils/stock-search";
 import {
   IpoCalendarItem,
   UsEarningsCalendarBounds,
@@ -256,9 +259,12 @@ function UsEarningsSection({
   accessToken: string | null;
   language: "en" | "ko";
 }) {
+  const usSymbols = useMarketDataStore((state) => state.usSymbols);
+  const loadStockSymbols = useMarketDataStore((state) => state.loadStockSymbols);
   const [view, setView] = useState<EarningsView>("daily");
   const [anchorDate, setAnchorDate] = useState(() => startOfDay(new Date()));
   const [query, setQuery] = useState("");
+  const [selectedEarningsSymbol, setSelectedEarningsSymbol] = useState("");
   const [items, setItems] = useState<UsEarningsCalendarItem[]>([]);
   const [bounds, setBounds] = useState<UsEarningsCalendarBounds>({
     minDate: null,
@@ -272,6 +278,30 @@ function UsEarningsSection({
     anchorDate,
   ]);
   const effectiveQuery = query.trim();
+  const highlightedSymbol = selectedEarningsSymbol.toUpperCase();
+  const symbolSuggestions = useMemo(() => {
+    if (!effectiveQuery || highlightedSymbol === effectiveQuery.toUpperCase()) {
+      return [];
+    }
+    return usSymbols
+      .map((item) => ({
+        item,
+        score: stockSearchScore(item, effectiveQuery),
+      }))
+      .filter(({ score }) => score > 0)
+      .sort(
+        (a, b) =>
+          b.score - a.score || a.item.symbol.localeCompare(b.item.symbol),
+      )
+      .slice(0, 8)
+      .map(({ item }) => item);
+  }, [effectiveQuery, highlightedSymbol, usSymbols]);
+
+  useEffect(() => {
+    if (accessToken) {
+      void loadStockSymbols(accessToken);
+    }
+  }, [accessToken, loadStockSymbols]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -369,6 +399,40 @@ function UsEarningsSection({
     setAnchorDate((current) => shiftEarningsAnchor(view, current, direction));
   }
 
+  async function selectEarningsSymbol(symbol: StockSymbol) {
+    if (!accessToken) {
+      return;
+    }
+
+    const ticker = symbol.symbol.toUpperCase();
+    setQuery(ticker);
+    setSelectedEarningsSymbol(ticker);
+
+    const params = new URLSearchParams({
+      from: toDateKey(minDate),
+      to: toDateKey(maxDate),
+      query: ticker,
+    });
+    const path = '/markets/calendar/earnings/us?' + params.toString();
+    const results = await apiRequest<UsEarningsCalendarItem[]>(
+      path,
+      "GET",
+      { accessToken },
+    ).catch(() => []);
+    const today = startOfDay(new Date());
+    const target =
+      results.find(
+        (item) =>
+          item.symbol.toUpperCase() === ticker &&
+          parseDateKey(item.reportDate) >= today,
+      ) ??
+      results.find((item) => item.symbol.toUpperCase() === ticker) ??
+      results[0];
+    if (target?.reportDate) {
+      setAnchorDate(parseDateKey(target.reportDate));
+    }
+  }
+
   return (
     <div className="pt-4">
       {error ? <Notice message="" error={error} /> : null}
@@ -431,11 +495,33 @@ function UsEarningsSection({
             <input
               id="earnings-search"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setSelectedEarningsSymbol("");
+              }}
               placeholder={language === "ko" ? "예: TSLA, Tesla" : "e.g. TSLA, Tesla"}
               className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted"
             />
           </div>
+          {symbolSuggestions.length ? (
+            <div className="overflow-hidden rounded-md border border-border bg-surface shadow-lg">
+              {symbolSuggestions.map((symbol) => (
+                <button
+                  key={symbol.symbol}
+                  type="button"
+                  onClick={() => selectEarningsSymbol(symbol)}
+                  className="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-surface-muted"
+                >
+                  <span className="shrink-0 font-semibold text-foreground">
+                    {symbol.symbol}
+                  </span>
+                  <span className="min-w-0 truncate text-xs font-semibold text-muted">
+                    {symbol.description}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
           {effectiveQuery ? (
             <p className="text-xs font-semibold text-muted">
               {language === "ko"
@@ -462,12 +548,14 @@ function UsEarningsSection({
           groupedItems={groupedItems}
           language={language}
           searching={!!effectiveQuery}
+          highlightedSymbol={highlightedSymbol}
         />
       ) : (
         <EarningsList
           dates={dateKeysBetween(range.from, range.to)}
           groupedItems={groupedItems}
           language={language}
+          highlightedSymbol={highlightedSymbol}
         />
       )}
     </div>
@@ -478,10 +566,12 @@ function EarningsList({
   dates,
   groupedItems,
   language,
+  highlightedSymbol,
 }: {
   dates: string[];
   groupedItems: Map<string, UsEarningsCalendarItem[]>;
   language: "en" | "ko";
+  highlightedSymbol: string;
 }) {
   return (
     <div className="mt-4 grid gap-3">
@@ -502,7 +592,13 @@ function EarningsList({
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {items.length ? (
-                items.map((item) => <EarningsCard key={item.id} item={item} />)
+                items.map((item) => (
+                  <EarningsCard
+                    key={item.id}
+                    item={item}
+                    highlighted={item.symbol.toUpperCase() === highlightedSymbol}
+                  />
+                ))
               ) : (
                 <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted">
                   {language === "ko" ? "실적 발표 일정 없음" : "No earnings"}
@@ -521,11 +617,13 @@ function MonthlyEarningsCalendar({
   groupedItems,
   language,
   searching,
+  highlightedSymbol,
 }: {
   anchorDate: Date;
   groupedItems: Map<string, UsEarningsCalendarItem[]>;
   language: "en" | "ko";
   searching: boolean;
+  highlightedSymbol: string;
 }) {
   const days = buildMonthDays(anchorDate, groupedItems, language);
   return (
@@ -554,7 +652,13 @@ function MonthlyEarningsCalendar({
             </div>
             <div className="mt-3 grid gap-2">
               {day.events.slice(0, searching ? 30 : 3).map((item) => (
-                <EarningsCompactCard key={item.id} item={item} highlighted={searching} />
+                <EarningsCompactCard
+                  key={item.id}
+                  item={item}
+                  highlighted={
+                    searching && item.symbol.toUpperCase() === highlightedSymbol
+                  }
+                />
               ))}
               {!searching && day.events.length > 3 ? (
                 <p className="text-xs font-semibold text-muted">
@@ -574,13 +678,23 @@ function MonthlyEarningsCalendar({
   );
 }
 
-function EarningsCard({ item }: { item: UsEarningsCalendarItem }) {
+function EarningsCard({
+  item,
+  highlighted,
+}: {
+  item: UsEarningsCalendarItem;
+  highlighted: boolean;
+}) {
   const router = useRouter();
   return (
     <button
       type="button"
       onClick={() => router.push(`/?symbol=${encodeURIComponent(item.symbol)}&market=US`)}
-      className="min-w-0 cursor-pointer rounded-md border border-border bg-surface p-3 text-left transition-colors hover:border-primary hover:text-primary"
+      className={`min-w-0 cursor-pointer rounded-md border p-3 text-left transition-colors hover:border-primary hover:text-primary ${
+        highlighted
+          ? "border-primary bg-primary/10"
+          : "border-border bg-surface"
+      }`}
     >
       <p className="text-base font-bold text-foreground">{item.symbol}</p>
       <p className="mt-1 truncate text-sm font-semibold text-muted">
