@@ -271,7 +271,7 @@ function UsEarningsSection({
     view,
     anchorDate,
   ]);
-  const effectiveQuery = view === "monthly" ? query.trim() : "";
+  const effectiveQuery = query.trim();
 
   useEffect(() => {
     if (!accessToken) {
@@ -342,46 +342,31 @@ function UsEarningsSection({
     };
   }, [accessToken, effectiveQuery, language, range.from, range.to]);
 
-  const searchLimited = view === "monthly" && effectiveQuery && items.length > 30;
+  const searchLimited = !!effectiveQuery && items.length > 30;
   const visibleItems = searchLimited ? [] : items;
   const groupedItems = useMemo(() => groupEarningsByDate(visibleItems), [
     visibleItems,
   ]);
-  const minMonth = useMemo(() => {
+  const minDate = useMemo(() => {
     const retentionFloor = getPreviousMonthStart(new Date());
-    const dataFloor = bounds.minDate
-      ? startOfMonth(parseDateKey(bounds.minDate))
-      : startOfMonth(new Date());
+    const dataFloor = bounds.minDate ? parseDateKey(bounds.minDate) : startOfDay(new Date());
     return dataFloor > retentionFloor ? dataFloor : retentionFloor;
   }, [bounds.minDate]);
-  const maxMonth = useMemo(
-    () => (bounds.maxDate ? startOfMonth(parseDateKey(bounds.maxDate)) : startOfMonth(new Date())),
+  const maxDate = useMemo(
+    () => (bounds.maxDate ? parseDateKey(bounds.maxDate) : startOfDay(new Date())),
     [bounds.maxDate],
   );
-  const currentMonth = startOfMonth(anchorDate);
-  const canMovePrevious = view !== "monthly" || currentMonth > minMonth;
-  const canMoveNext = view !== "monthly" || currentMonth < maxMonth;
+  const canMovePrevious = canMoveEarningsRange(view, anchorDate, -1, minDate, maxDate);
+  const canMoveNext = canMoveEarningsRange(view, anchorDate, 1, minDate, maxDate);
 
   function moveRange(direction: -1 | 1) {
-    if (view === "monthly") {
-      if (direction < 0 && !canMovePrevious) {
-        return;
-      }
-      if (direction > 0 && !canMoveNext) {
-        return;
-      }
+    if (direction < 0 && !canMovePrevious) {
+      return;
     }
-    setAnchorDate((current) => {
-      const next = new Date(current);
-      if (view === "daily") {
-        next.setDate(current.getDate() + direction);
-      } else if (view === "weekly") {
-        next.setDate(current.getDate() + direction * 7);
-      } else {
-        next.setMonth(current.getMonth() + direction);
-      }
-      return startOfDay(next);
-    });
+    if (direction > 0 && !canMoveNext) {
+      return;
+    }
+    setAnchorDate((current) => shiftEarningsAnchor(view, current, direction));
   }
 
   return (
@@ -436,7 +421,7 @@ function UsEarningsSection({
         </div>
       </div>
 
-      {view === "monthly" ? (
+      {(
         <div className="mt-4 flex flex-col gap-2 sm:max-w-md">
           <label className="text-xs font-semibold text-muted" htmlFor="earnings-search">
             {language === "ko" ? "티커 또는 회사명 검색" : "Search ticker or company"}
@@ -459,7 +444,7 @@ function UsEarningsSection({
             </p>
           ) : null}
         </div>
-      ) : null}
+      )}
 
       {searchLimited ? (
         <p className="mt-4 rounded-md border border-border bg-surface-muted px-4 py-3 text-sm font-semibold text-muted">
@@ -823,6 +808,30 @@ function getEarningsRange(view: EarningsView, anchorDate: Date) {
   const from = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
   const to = new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 0);
   return { from, to };
+}
+
+function shiftEarningsAnchor(view: EarningsView, current: Date, direction: -1 | 1): Date {
+  const next = new Date(current);
+  if (view === "daily") {
+    next.setDate(current.getDate() + direction);
+  } else if (view === "weekly") {
+    next.setDate(current.getDate() + direction * 7);
+  } else {
+    next.setMonth(current.getMonth() + direction);
+  }
+  return startOfDay(next);
+}
+
+function canMoveEarningsRange(
+  view: EarningsView,
+  anchorDate: Date,
+  direction: -1 | 1,
+  minDate: Date,
+  maxDate: Date,
+): boolean {
+  const nextAnchor = shiftEarningsAnchor(view, anchorDate, direction);
+  const nextRange = getEarningsRange(view, nextAnchor);
+  return startOfDay(nextRange.to) >= startOfDay(minDate) && startOfDay(nextRange.from) <= startOfDay(maxDate);
 }
 
 function groupEarningsByDate(items: UsEarningsCalendarItem[]) {
