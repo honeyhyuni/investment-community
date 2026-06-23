@@ -90,11 +90,18 @@ export function FavoritesPage({
   const usSymbols = useMarketDataStore((s) => s.usSymbols);
   const krSymbols = useMarketDataStore((s) => s.krSymbols);
   const livePrices = useMarketDataStore((s) => s.livePrices);
+  const loadStockSymbols = useMarketDataStore((s) => s.loadStockSymbols);
   const [activeTab, setActiveTab] = useState<PortfolioTab>(initialTab);
 
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
+
+  useEffect(() => {
+    if (accessToken && activeTab === "portfolio") {
+      void loadStockSymbols(accessToken);
+    }
+  }, [accessToken, activeTab, loadStockSymbols]);
 
   function switchTab(tab: PortfolioTab) {
     setActiveTab(tab);
