@@ -221,6 +221,145 @@ export class StockFinancialBatchService {
     };
   }
 
+  // 전체 국내 종목의 확정 연간 재무제표를 1회성으로 채운다.
+  async backfillAnnualFinancials(
+    startYear = 2021,
+    endYear = 2025,
+    limit?: number,
+  ): Promise<{
+    stocks: number;
+    rows: number;
+    failed: number;
+    years: number[];
+  }> {
+    const apiKey = this.configService.get<string>('DART_API_KEY');
+    if (!apiKey) {
+      this.logger.warn(
+        'DART annual financial backfill skipped: DART_API_KEY is missing.',
+      );
+      return { stocks: 0, rows: 0, failed: 0, years: [] };
+    }
+
+    const years = this.getFiscalYearRange(startYear, endYear);
+    if (!years.length) {
+      return { stocks: 0, rows: 0, failed: 0, years: [] };
+    }
+
+    const stocks = await this.fetchKoreanStocksWithDartCode(limit);
+    if (!stocks.length) {
+      return { stocks: 0, rows: 0, failed: 0, years };
+    }
+
+    if (!(await this.isDartFinancialApiAvailable(apiKey, years[0]))) {
+      this.logger.warn(
+        'DART annual financial backfill skipped: DART multi-company API is unavailable from this server.',
+      );
+      return { stocks: 0, rows: 0, failed: 0, years };
+    }
+
+    const stockByCorpCode = new Map(
+      stocks.map((stock) => [stock.dartCorpCode!, stock]),
+    );
+    const financialByKey = new Map<string, ParsedFinancial>();
+    const failedCorpCodes = new Set<string>();
+    const corpCodeChunks = this.chunk(
+      [...stockByCorpCode.keys()],
+      this.dartChunkSize,
+    );
+
+    for (const fiscalYear of years) {
+      for (const corpCodes of corpCodeChunks) {
+        try {
+          const rows = await this.fetchDartFinancialsBulk(
+            apiKey,
+            corpCodes,
+            fiscalYear,
+          );
+          this.parseFinancialRows(rows).forEach((financial, corpCode) => {
+            financialByKey.set(`${corpCode}:${fiscalYear}`, financial);
+          });
+        } catch (error) {
+          corpCodes.forEach((corpCode) => failedCorpCodes.add(corpCode));
+          this.logger.warn(
+            `DART annual backfill failed for ${corpCodes.length} companies in ${fiscalYear}: ${
+              error instanceof Error ? error.message : 'unknown error'
+            }`,
+          );
+        }
+        await this.sleep(1_000);
+      }
+    }
+
+    const entities: Partial<StockFinancialEntity>[] = [];
+    for (const stock of stocks) {
+      for (const fiscalYear of years) {
+        const financial = financialByKey.get(
+          `${stock.dartCorpCode}:${fiscalYear}`,
+        );
+        if (!financial) {
+          continue;
+        }
+
+        entities.push({
+          id: `${stock.symbol}:${fiscalYear}`,
+          symbol: stock.symbol,
+          corpCode: stock.dartCorpCode,
+          fiscalYear,
+          revenue: financial.revenue,
+          operatingProfit: financial.operatingProfit,
+          netIncome: financial.netIncome,
+          equity: financial.equity,
+          assets: financial.assets,
+          eps: null,
+          listedShares: null,
+          closePrice: null,
+          marketCap: null,
+          per: null,
+          pbr: null,
+          psr: null,
+          roe:
+            financial.netIncome !== null &&
+            financial.equity !== null &&
+            financial.equity > 0
+              ? (financial.netIncome / financial.equity) * 100
+              : null,
+          reportCode: '11011',
+          source: 'dart_annual_financial_backfill',
+          fetchedAt: new Date(),
+        });
+      }
+    }
+
+    for (const items of this.chunk(entities, 500)) {
+      await this.financialRepository.upsert(items, ['id']);
+    }
+
+    return {
+      stocks: stocks.length,
+      rows: entities.length,
+      failed: failedCorpCodes.size,
+      years,
+    };
+  }
+
+  // DART corp code가 연결된 국내 상장 종목만 backfill 대상으로 선별한다.
+  private async fetchKoreanStocksWithDartCode(
+    limit?: number,
+  ): Promise<StockMasterEntity[]> {
+    const query = this.masterRepository
+      .createQueryBuilder('stock')
+      .where('stock.active = :active', { active: true })
+      .andWhere('stock.country = :country', { country: 'KR' })
+      .andWhere('stock.dartCorpCode IS NOT NULL')
+      .orderBy('stock.symbol', 'ASC');
+
+    if (limit && limit > 0) {
+      query.limit(limit);
+    }
+
+    return query.getMany();
+  }
+
   private async fetchKospi200Symbols(): Promise<Set<string>> {
     const symbols = new Set<string>();
     for (let page = 1; page <= 20; page += 1) {
@@ -416,6 +555,16 @@ export class StockFinancialBatchService {
   private getRecentFiscalYears(count: number): number[] {
     const latest = new Date().getFullYear() - 1;
     return Array.from({ length: count }, (_, index) => latest - index);
+  }
+
+  private getFiscalYearRange(startYear: number, endYear: number): number[] {
+    const start = Math.trunc(startYear);
+    const end = Math.trunc(endYear);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) {
+      return [];
+    }
+
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
   }
 
   private async getKisCurrentPrice(

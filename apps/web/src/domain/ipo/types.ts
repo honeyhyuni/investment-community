@@ -19,3 +19,23 @@ export type IpoCalendarItem = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type UsEarningsCalendarItem = {
+  id: string;
+  symbol: string;
+  companyName: string;
+  reportDate: string;
+  fiscalDateEnding: string | null;
+  estimate: number | null;
+  currency: string | null;
+  timeOfTheDay: string | null;
+  stockMasterId: string | null;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UsEarningsCalendarBounds = {
+  minDate: string | null;
+  maxDate: string | null;
+};

@@ -107,6 +107,7 @@ export type StockDetail = {
   profile: CompanyProfile;
   metrics: CompanyMetrics | null;
   financials?: StockFinancial[];
+  nextEarnings?: UsEarningsCalendarItem | null;
   overview: {
     en: string;
     ko: string;
@@ -174,6 +175,21 @@ export type IpoCalendarItem = {
   confirmedOfferPrice: string | null;
   underwriter: string | null;
   dartUrl: string;
+  source: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type UsEarningsCalendarItem = {
+  id: string;
+  symbol: string;
+  companyName: string;
+  reportDate: string;
+  fiscalDateEnding: string | null;
+  estimate: number | null;
+  currency: string | null;
+  timeOfTheDay: string | null;
+  stockMasterId: string | null;
   source: string;
   createdAt: Date;
   updatedAt: Date;

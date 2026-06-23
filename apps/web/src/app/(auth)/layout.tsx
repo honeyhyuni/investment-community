@@ -24,7 +24,7 @@ import { usePreferencesStore } from "@/common/stores/preferences";
 import { MarketPulseContainer } from "@/domain/markets/components/MarketPulseContainer";
 
 const NAV_ITEMS: Array<{
-  id: "stocks" | "favorites" | "news" | "marketBriefing" | "community" | "ipo" | "admin";
+  id: "stocks" | "favorites" | "news" | "marketBriefing" | "community" | "calendar" | "admin";
   href: string;
   label: { en: string; ko: string };
   icon: typeof BarChart3;
@@ -35,7 +35,7 @@ const NAV_ITEMS: Array<{
   { id: "favorites", href: "/favorites", label: { en: "Portfolio", ko: "포트폴리오 대쉬보드" }, icon: Star },
   { id: "news", href: "/news", label: { en: "News", ko: "뉴스" }, icon: Newspaper },
   { id: "community", href: "/community", label: { en: "Community", ko: "피드" }, icon: MessageSquareText },
-  { id: "ipo", href: "/ipo", label: { en: "IPO", ko: "공모주" }, icon: CalendarDays },
+  { id: "calendar", href: "/calendar", label: { en: "Calendar", ko: "캘린더" }, icon: CalendarDays },
   { id: "admin", href: "/admin", label: { en: "Admin", ko: "관리" }, icon: ShieldCheck, adminOnly: true },
 ];
 

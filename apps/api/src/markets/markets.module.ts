@@ -15,6 +15,8 @@ import { StockFinancialEntity } from './stock-financial.entity';
 import { StockMasterBatchService } from './stock-master-batch.service';
 import { StockMasterEntity } from './stock-master.entity';
 import { StockProfileEntity } from './stock-profile.entity';
+import { UsEarningsCalendarBatchService } from './us-earnings-calendar-batch.service';
+import { UsEarningsCalendarEntity } from './us-earnings-calendar.entity';
 
 @Module({
   imports: [
@@ -27,6 +29,7 @@ import { StockProfileEntity } from './stock-profile.entity';
       PortfolioEntity,
       PortfolioPositionEntity,
       IpoCalendarEntity,
+      UsEarningsCalendarEntity,
     ]),
   ],
   controllers: [MarketsController],
@@ -37,6 +40,7 @@ import { StockProfileEntity } from './stock-profile.entity';
     StockMasterBatchService,
     StockFinancialBatchService,
     IpoCalendarBatchService,
+    UsEarningsCalendarBatchService,
   ],
 })
 /** Wires market quotes, stock metadata, financial batches, briefings, and sockets. */

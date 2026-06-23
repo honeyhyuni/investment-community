@@ -1,4 +1,5 @@
 import { MarketQuote } from "@/common/types";
+import { UsEarningsCalendarItem } from "@/domain/ipo/types";
 
 export type StockTab = "US" | "KR";
 
@@ -19,6 +20,7 @@ export type StockDetail = {
     shareOutstanding?: number;
   };
   metrics: Record<string, number | string | null | undefined> | null;
+  nextEarnings?: UsEarningsCalendarItem | null;
   financials?: Array<{
     fiscalYear: number;
     revenue: number | null;

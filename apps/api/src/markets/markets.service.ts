@@ -33,6 +33,7 @@ import { StockFinancialEntity } from './stock-financial.entity';
 import { FavoriteStockEntity } from './favorite-stock.entity';
 import { PortfolioEntity } from './portfolio.entity';
 import { PortfolioPositionEntity } from './portfolio-position.entity';
+import { UsEarningsCalendarEntity } from './us-earnings-calendar.entity';
 
 const MARKET_PULSE = [
   { symbol: '^IXIC', name: 'Nasdaq Composite' },
@@ -226,6 +227,8 @@ export class MarketsService {
     private readonly portfoliosRepository: Repository<PortfolioEntity>,
     @InjectRepository(PortfolioPositionEntity)
     private readonly portfolioPositionsRepository: Repository<PortfolioPositionEntity>,
+    @InjectRepository(UsEarningsCalendarEntity)
+    private readonly usEarningsRepository: Repository<UsEarningsCalendarEntity>,
   ) {
     this.redis = new Redis(
       this.configService.get<string>('REDIS_URL') ?? 'redis://redis:6379',
@@ -1095,12 +1098,16 @@ export class MarketsService {
       }
     }
 
-    const metrics = await this.getMetrics(normalizedSymbol).catch(() => null);
+    const [metrics, nextEarnings] = await Promise.all([
+      this.getMetrics(normalizedSymbol).catch(() => null),
+      this.getNextUsEarnings(normalizedSymbol),
+    ]);
 
     return {
       symbol: normalizedSymbol,
       profile,
       metrics,
+      nextEarnings,
       overview: cachedProfile
         ? {
             en: cachedProfile.overviewEn,
@@ -1116,6 +1123,20 @@ export class MarketsService {
           },
       quote,
     };
+  }
+
+  private async getNextUsEarnings(
+    symbol: string,
+  ): Promise<UsEarningsCalendarEntity | null> {
+    return this.usEarningsRepository
+      .createQueryBuilder('earnings')
+      .where('earnings.symbol = :symbol', { symbol: symbol.toUpperCase() })
+      .andWhere('earnings.report_date >= :today', {
+        today: this.toDateKey(new Date()),
+      })
+      .orderBy('earnings.report_date', 'ASC')
+      .getOne()
+      .catch(() => null);
   }
 
   private async enrichCachedProfileLogo(
@@ -3591,6 +3612,13 @@ export class MarketsService {
       month: '2-digit',
       day: '2-digit',
     }).format(date);
+  }
+
+  private toDateKey(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+      2,
+      '0',
+    )}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
   private toMarketBriefingDto(entity: MarketBriefingEntity): MarketBriefing {

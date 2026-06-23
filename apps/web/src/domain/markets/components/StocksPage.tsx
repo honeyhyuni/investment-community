@@ -37,6 +37,7 @@ import { useMarketDataStore } from "@/common/stores/market-data";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { formatMoney, formatNumber } from "@/common/utils/format";
 import { applyLiveTrade } from "@/common/utils/market";
+import { stockSearchScore } from "@/common/utils/stock-search";
 import {
   DisplayCurrency,
   FavoriteStock,
@@ -214,11 +215,10 @@ export function StocksPage() {
     }
 
     return source
-      .filter(
-        (item) =>
-          item.symbol.toLowerCase().includes(query) ||
-          item.description.toLowerCase().includes(query),
-      )
+      .map((item) => ({ item, score: stockSearchScore(item, debouncedSearch) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || a.item.symbol.localeCompare(b.item.symbol))
+      .map(({ item }) => item)
       .slice(0, 24);
   }, [debouncedSearch, usStocks, usSymbols]);
 
@@ -229,11 +229,10 @@ export function StocksPage() {
     }
 
     return krSymbols
-      .filter(
-        (item) =>
-          item.symbol.toLowerCase().includes(query) ||
-          item.description.toLowerCase().includes(query),
-      )
+      .map((item) => ({ item, score: stockSearchScore(item, debouncedSearch) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || a.item.symbol.localeCompare(b.item.symbol))
+      .map(({ item }) => item)
       .slice(0, 24);
   }, [debouncedSearch, krSymbols]);
 
@@ -764,6 +763,7 @@ function StockDetailPanel({
       (isKoreanMarket
         ? `https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${detail.symbol}.svg`
         : getFallbackLogoUrl(detail.profile.weburl));
+    const nextEarningsLabel = formatNextEarnings(detail.nextEarnings, language);
     const valuationItems = [
     {
       label: translateDetailLabel(language, "marketCap"),
@@ -787,6 +787,14 @@ function StockDetailPanel({
           </p>
         </div>
         <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
+          {nextEarningsLabel ? (
+            <span className="inline-flex max-w-[240px] items-center rounded-md border border-primary/25 bg-primary/10 px-2.5 py-2 text-xs font-semibold leading-5 text-primary sm:max-w-md">
+              <span className="whitespace-normal break-keep">
+                {language === "ko" ? "다음 실적 " : "Next earnings "}
+                {nextEarningsLabel}
+              </span>
+            </span>
+          ) : null}
           <Button
             variant="secondary"
             size="icon"
@@ -1676,6 +1684,65 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
   }, [delayMs, value]);
 
   return debounced;
+}
+
+function formatNextEarnings(
+  nextEarnings: StockDetail["nextEarnings"],
+  language: "en" | "ko",
+): string | null {
+  if (!nextEarnings?.reportDate) {
+    return null;
+  }
+  const date = new Date(`${nextEarnings.reportDate.slice(0, 10)}T00:00:00`);
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (date < todayStart) {
+    return null;
+  }
+  const formattedDate = new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
+    month: "short",
+    day: "numeric",
+  }).format(date);
+  const time = formatEarningsTime(nextEarnings.timeOfTheDay, language);
+  const estimate =
+    nextEarnings.estimate !== null && nextEarnings.currency
+      ? ` · EPS ${nextEarnings.estimate.toFixed(2)} ${nextEarnings.currency}`
+      : "";
+  return `${formattedDate} · ${time}${estimate}`;
+}
+
+function formatEarningsTime(
+  timeOfTheDay: string | null | undefined,
+  language: "en" | "ko",
+): string {
+  const normalized = timeOfTheDay?.trim().toLowerCase();
+  if (!normalized) {
+    return language === "ko" ? "시간 미정" : "Time TBD";
+  }
+
+  const koLabels: Record<string, string> = {
+    "pre-market": "프리마켓",
+    premarket: "프리마켓",
+    "before-market": "프리마켓",
+    "post-market": "애프터마켓",
+    postmarket: "애프터마켓",
+    "after-market": "애프터마켓",
+    "after hours": "애프터마켓",
+    "during-market": "장중",
+  };
+  const enLabels: Record<string, string> = {
+    premarket: "pre-market",
+    "before-market": "pre-market",
+    postmarket: "post-market",
+    "after-market": "post-market",
+    "after hours": "post-market",
+    "during-market": "during market",
+  };
+
+  if (language === "ko") {
+    return koLabels[normalized] ?? timeOfTheDay;
+  }
+  return enLabels[normalized] ?? timeOfTheDay;
 }
 
 function InfoBox({ label, value }: { label: string; value: string }) {

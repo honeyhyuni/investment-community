@@ -62,11 +62,17 @@ export function stockSearchScore(item: StockSymbol, rawQuery: string): number {
     return 0;
   }
   const symbol = item.symbol.toLowerCase();
+  const displaySymbol = (item.displaySymbol ?? item.symbol).toLowerCase();
   const name = item.description.toLowerCase();
-  if (symbol === query) return 120;
-  if (symbol.startsWith(query)) return 105;
+  const tickerCandidates = [...new Set([symbol, displaySymbol])];
+  const exactTicker = tickerCandidates.find((candidate) => candidate === query);
+  if (exactTicker) return 320 - exactTicker.length;
+  const prefixTicker = tickerCandidates.find((candidate) => candidate.startsWith(query));
+  if (prefixTicker) return 240 - prefixTicker.length;
+  if (name.split(/[\s.,/&()_-]+/).some((part) => part === query)) return 180;
+  if (name.split(/[\s.,/&()_-]+/).some((part) => part.startsWith(query))) return 150;
   if (name.startsWith(query)) return 100;
-  if (symbol.includes(query)) return 90;
+  if (tickerCandidates.some((candidate) => candidate.includes(query))) return 90;
   if (name.includes(query)) return 80;
   const distance = editDistance(symbol, query);
   return distance <= 2 ? 70 - distance * 10 : 0;
