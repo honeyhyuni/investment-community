@@ -87,6 +87,10 @@ export class UsEarningsCalendarBatchService {
       };
     });
 
+    const refreshedRangeDeleted = await this.deleteRefreshedEarningsRange(
+      entities.map((entity) => entity.reportDate),
+    );
+
     for (const batch of this.chunk(entities, 500)) {
       await this.earningsRepository.upsert(batch, [
         'symbol',
@@ -95,7 +99,7 @@ export class UsEarningsCalendarBatchService {
       ]);
     }
 
-    const deleted = await this.deleteExpiredEarnings();
+    const deleted = refreshedRangeDeleted + (await this.deleteExpiredEarnings());
 
     return { fetched: validRows.length, updated: entities.length, deleted };
   }
@@ -245,6 +249,22 @@ export class UsEarningsCalendarBatchService {
       .createQueryBuilder()
       .delete()
       .where('report_date < :retentionStart', { retentionStart })
+      .execute();
+    return result.affected ?? 0;
+  }
+
+  private async deleteRefreshedEarningsRange(reportDates: string[]): Promise<number> {
+    const validDates = reportDates.filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date));
+    if (!validDates.length) {
+      return 0;
+    }
+    const sortedDates = [...validDates].sort();
+    const from = sortedDates[0];
+    const to = sortedDates[sortedDates.length - 1];
+    const result = await this.earningsRepository
+      .createQueryBuilder()
+      .delete()
+      .where('report_date between :from and :to', { from, to })
       .execute();
     return result.affected ?? 0;
   }
