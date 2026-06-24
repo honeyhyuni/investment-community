@@ -1120,10 +1120,14 @@ export class MarketsService {
       }),
     ]);
 
+    const displayMetrics = usFinancials
+      ? this.buildUsSp500Metrics(usFinancials, quote.current, profile, metrics)
+      : metrics;
+
     return {
       symbol: normalizedSymbol,
       profile,
-      metrics,
+      metrics: displayMetrics,
       nextEarnings,
       isSp500: !!usFinancials,
       financials: usFinancials?.annual.map((row) => ({
@@ -1163,14 +1167,127 @@ export class MarketsService {
     };
   }
 
+  private buildUsSp500Metrics(
+    financials: import('./us-stock-financials.service').UsStockFinancialResponse,
+    currentPrice: number,
+    profile: CompanyProfile,
+    fallback: CompanyMetrics | null,
+  ): CompanyMetrics {
+    const quarters = [...financials.quarterly].sort(
+      (a, b) =>
+        a.fiscalYear - b.fiscalYear || a.fiscalQuarter - b.fiscalQuarter,
+    );
+    const latestAnnual = [...financials.annual]
+      .sort((a, b) => a.fiscalYear - b.fiscalYear)
+      .at(-1);
+    const latestQuarter = [...quarters]
+      .reverse()
+      .find((row) => row.equity !== null);
+    const lastFour = quarters.slice(-4);
+    const revenueTtm = this.sumIfComplete(lastFour.map((row) => row.revenue));
+    const netIncomeTtm = this.sumIfComplete(
+      lastFour.map((row) => row.netIncome),
+    );
+    const quarterlyEpsTtm = this.sumIfComplete(lastFour.map((row) => row.eps));
+    const epsTtm = quarterlyEpsTtm ?? latestAnnual?.eps ?? null;
+    const equity = latestQuarter?.equity ?? latestAnnual?.equity ?? null;
+    const marketCap = this.getUsMarketCap(profile, currentPrice);
+
+    return {
+      peTTM: this.safeDivide(currentPrice, epsTtm),
+      pbAnnual: this.safeDivide(marketCap, equity),
+      epsTTM: epsTtm,
+      psTTM: this.safeDivide(marketCap, revenueTtm),
+      roeTTM:
+        netIncomeTtm !== null && equity !== null && equity > 0
+          ? (netIncomeTtm / equity) * 100
+          : null,
+      dividendYieldTTM: this.pickFallbackMetric(fallback, [
+        'currentDividendYieldTTM',
+        'dividendYieldTTM',
+      ]),
+      '52WeekHigh': this.pickFallbackMetric(fallback, ['52WeekHigh']),
+      '52WeekLow': this.pickFallbackMetric(fallback, ['52WeekLow']),
+      currentPrice,
+    };
+  }
+
+  private sumIfComplete(values: Array<number | null>): number | null {
+    if (!values.length || values.some((value) => value === null)) {
+      return null;
+    }
+    return values.reduce<number>((sum, value) => sum + Number(value), 0);
+  }
+
+  private getUsMarketCap(
+    profile: CompanyProfile,
+    currentPrice: number,
+  ): number | null {
+    if (profile.marketCapitalization && profile.marketCapitalization > 0) {
+      return profile.marketCapitalization * 1_000_000;
+    }
+    if (
+      profile.shareOutstanding &&
+      profile.shareOutstanding > 0 &&
+      currentPrice > 0
+    ) {
+      return profile.shareOutstanding * 1_000_000 * currentPrice;
+    }
+    return null;
+  }
+
+  private pickFallbackMetric(
+    metrics: CompanyMetrics | null,
+    keys: string[],
+  ): number | null {
+    if (!metrics) {
+      return null;
+    }
+    for (const key of keys) {
+      const value = metrics[key];
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+      }
+      if (typeof value === 'string') {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+    }
+    return null;
+  }
+
   private async getNextUsEarnings(
     symbol: string,
   ): Promise<UsEarningsCalendarEntity | null> {
+    const normalized = symbol.toUpperCase();
+    const today = new Date();
+    const recentStart = new Date(today);
+    recentStart.setDate(recentStart.getDate() - 15);
+
+    const recentActual = await this.usEarningsRepository
+      .createQueryBuilder('earnings')
+      .where('earnings.symbol = :symbol', { symbol: normalized })
+      .andWhere('earnings.report_date between :from and :to', {
+        from: this.toDateKey(recentStart),
+        to: this.toDateKey(today),
+      })
+      .andWhere(
+        '(earnings.eps_actual is not null or earnings.revenue_actual is not null)',
+      )
+      .orderBy('earnings.report_date', 'DESC')
+      .getOne()
+      .catch(() => null);
+    if (recentActual) {
+      return recentActual;
+    }
+
     return this.usEarningsRepository
       .createQueryBuilder('earnings')
-      .where('earnings.symbol = :symbol', { symbol: symbol.toUpperCase() })
+      .where('earnings.symbol = :symbol', { symbol: normalized })
       .andWhere('earnings.report_date >= :today', {
-        today: this.toDateKey(new Date()),
+        today: this.toDateKey(today),
       })
       .orderBy('earnings.report_date', 'ASC')
       .getOne()

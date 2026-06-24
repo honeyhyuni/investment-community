@@ -34,7 +34,7 @@ Important identifiers:
 Never query `stock_master.market = 'KR'`; use:
 
 ```ts
-In(['KR:KOSPI', 'KR:KOSDAQ'])
+In(['KR:KOSPI', 'KR:KOSDAQ']);
 ```
 
 `stock_master` is the source of truth for stock names and market classification. Prefer its Korean trading name, such as `SK하이닉스`, over DART legal names, such as `에스케이하이닉스`, for user-facing search and news queries.
@@ -136,21 +136,31 @@ Market briefing OpenAI calls use `OPENAI_MODEL` and `service_tier: "flex"`. The 
 - If 38 scraping fails, skip the fallback and keep the batch successful; do not let a non-official fallback fail the full IPO batch.
 - Store fallback provenance in `raw.listingSource`, for example `38_communications`, so UI/debugging can distinguish official and fallback listing dates.
 
-## US Earnings Calendar Batch
+## US Earnings And S&P 500 Financials
 
-`UsEarningsCalendarBatchService` stores Alpha Vantage `EARNINGS_CALENDAR` rows in `us_earnings_calendar`.
+US earnings automation is limited to S&P 500 symbols for Finnhub estimates/actuals and SEC financial confirmation.
 
-- Source: Alpha Vantage `EARNINGS_CALENDAR` with `horizon=3month`.
-- Required environment variable: `ALPHA_VANTAGE_API_KEY`.
-- Public read endpoints:
+- Alpha Vantage remains the broad earnings-calendar source and runs daily at 03:20 Asia/Seoul.
+- The same 03:20 batch augments S&P 500 rows from Finnhub for today-7 days through today+60 days.
+- Finnhub calendar responses can truncate near 1,500 rows. The batch therefore splits the date range into consecutive seven-day API requests during one batch run, combines the responses, then filters to S&P 500 symbols. This is not a seven-day delayed job.
+- Finnhub supplies EPS/revenue estimates and preliminary EPS/revenue actuals when available.
+- Alpha Vantage and Finnhub can disagree on the report date by one day. Finnhub data is merged into an existing same-symbol row within +/-1 day, preferring the Alpha Vantage row and deleting duplicate nearby rows.
+- Preliminary actual checks are scheduled every 15 minutes but only perform provider calls in KST windows relevant to US releases: 06:00-09:59 for the prior US report date after-market/unknown events, and 20:00-23:30 for same-date pre-market/unknown events.
+- SEC confirmation runs daily at 04:00 Asia/Seoul for unconfirmed events from the previous 30 days that already have a preliminary actual. Once a matching SEC quarterly row is confirmed, it is not checked again by the confirmation batch.
+- Opening an S&P 500 financial or earnings page also uses SEC cache-aside refresh, so actively viewed symbols may confirm earlier.
+- When Finnhub first supplies an actual, send an EARNINGS notification only to users who favorited that US ticker and enabled earnings notifications. Title format is `MU 실적 보기`; the URL is `/stocks/US/MU/earnings`. Notification failure must not fail the batch.
+- The stock-detail header shows the next event while no recent actual exists. For up to 15 days after an actual, it shows a link such as `2026 Q2 실적 보기`; a newer Alpha event naturally switches it back to the next scheduled earnings label.
+- Public/read routes:
   - `GET /api/markets/calendar/earnings/us?from=YYYY-MM-DD&to=YYYY-MM-DD&query=...`
   - `GET /api/markets/calendar/earnings/us/bounds`
-- Admin refresh endpoint: `POST /api/markets/calendar/earnings/us/batch`
-- Stock detail includes `nextEarnings` from the nearest `report_date >= today` row for US stocks.
-- Each refresh deletes the currently refreshed report-date range before inserting the latest provider rows. This prevents stale future rows when Alpha Vantage changes a report date, EPS estimate, or time-of-day.
-- After refreshing the latest provider range, the batch deletes rows older than the first day of the previous month. Example: when the batch runs in August, rows before July 1 are removed, so June data no longer remains.
-- Production uses `synchronize: false`; create `us_earnings_calendar` manually or via migration before enabling the feature on a fresh DB.
-- The current VM `docker-compose.yml` is separate from the repository compose files. If adding `ALPHA_VANTAGE_API_KEY` locally, also ensure the VM compose maps `ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY}` into the API service.
+  - `GET /api/markets/stocks/earnings/us?symbol=MU`
+- Admin routes:
+  - `POST /api/markets/calendar/earnings/us/batch`
+  - `POST /api/markets/calendar/earnings/us/actuals`
+  - `POST /api/markets/calendar/earnings/us/sec-confirmations`
+- Production uses `synchronize: false`. Apply `sql/20260624_us_earnings_estimates.sql` before deploying the entity changes.
+
+S&P 500 financial statements are stored in PostgreSQL from SEC Company Facts. Annual and quarterly results are not Redis-owned data. The stock-detail chart remains annual; `/stocks/US/{symbol}/financials` provides the detailed annual/quarterly view, and `/stocks/US/{symbol}/earnings` provides estimate-versus-actual and historical comparisons.
 
 ## PWA Push Notifications
 
@@ -171,7 +181,6 @@ Push notifications use `web-push` with VAPID and are implemented under `src/noti
 - Development Compose mounts the named volume `api_node_modules` over image dependencies. After adding API packages, update both root and `apps/api/package-lock.json` and run `docker compose run --rm --no-deps api npm ci` or recreate that dependency volume.
 
 Notification API routes include VAPID public config, subscribe/unsubscribe, preference get/update, in-app list/read, and the optional test endpoint.
-
 
 ## Community Content
 

@@ -30,6 +30,40 @@ export class UsEarningsCalendarEntity {
   @Column({ type: 'double precision', nullable: true })
   estimate: number | null;
 
+  @Column({
+    name: 'revenue_estimate',
+    type: 'double precision',
+    nullable: true,
+  })
+  revenueEstimate: number | null;
+
+  @Column({ name: 'eps_actual', type: 'double precision', nullable: true })
+  epsActual: number | null;
+
+  @Column({ name: 'revenue_actual', type: 'double precision', nullable: true })
+  revenueActual: number | null;
+
+  @Column({ name: 'actual_checked_at', type: 'timestamp', nullable: true })
+  actualCheckedAt: Date | null;
+
+  @Column({ name: 'estimate_source', type: 'varchar', nullable: true })
+  estimateSource: string | null;
+
+  @Column({ name: 'actual_source', type: 'varchar', nullable: true })
+  actualSource: string | null;
+
+  @Column({ name: 'finnhub_year', type: 'integer', nullable: true })
+  finnhubYear: number | null;
+
+  @Column({ name: 'finnhub_quarter', type: 'integer', nullable: true })
+  finnhubQuarter: number | null;
+
+  @Column({ name: 'sec_confirmed_at', type: 'timestamp', nullable: true })
+  secConfirmedAt: Date | null;
+
+  @Column({ name: 'sec_financial_id', type: 'varchar', nullable: true })
+  secFinancialId: string | null;
+
   @Column({ type: 'varchar', nullable: true })
   currency: string | null;
 

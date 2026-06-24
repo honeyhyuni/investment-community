@@ -105,6 +105,14 @@ export class UsStockFinancialsService {
     return company ? this.getForCompany(company) : null;
   }
 
+  async isSp500(symbol: string): Promise<boolean> {
+    return (await this.getConstituents()).has(this.normalizeSymbol(symbol));
+  }
+
+  async getSp500Symbols(): Promise<Set<string>> {
+    return new Set((await this.getConstituents()).keys());
+  }
+
   async getRequired(symbol: string): Promise<UsStockFinancialResponse> {
     const result = await this.getIfSp500(symbol);
     if (!result) {
@@ -113,6 +121,19 @@ export class UsStockFinancialsService {
       );
     }
     return result;
+  }
+
+  async refreshIfSp500(
+    symbol: string,
+  ): Promise<UsStockFinancialResponse | null> {
+    const company = (await this.getConstituents()).get(
+      this.normalizeSymbol(symbol),
+    );
+    if (!company) {
+      return null;
+    }
+    const rows = await this.fetchAndStore(company);
+    return this.toResponse(company, rows);
   }
 
   private async getForCompany(
@@ -145,6 +166,13 @@ export class UsStockFinancialsService {
     if (annualCount < 5 || quarterlyCount < 8) {
       rows = await this.fetchAndStore(company);
     }
+    return this.toResponse(company, rows);
+  }
+
+  private toResponse(
+    company: Sp500Company,
+    rows: UsStockFinancialEntity[],
+  ): UsStockFinancialResponse {
     return {
       symbol: company.symbol,
       companyName: company.name,

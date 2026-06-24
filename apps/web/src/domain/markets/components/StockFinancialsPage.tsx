@@ -25,10 +25,14 @@ export function StockFinancialsPage({ symbol }: { symbol: string }) {
   const exchangeRate = useMarketDataStore((state) => state.exchangeRate);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const urlCurrency = searchParams.get("currency")?.trim().toUpperCase() === "KRW" ? "KRW" : "USD";
+  const urlCurrency =
+    searchParams.get("currency")?.trim().toUpperCase() === "KRW"
+      ? "KRW"
+      : "USD";
   const [data, setData] = useState<UsStockFinancialResponse | null>(null);
   const [tab, setTab] = useState<PeriodTab>("ANNUAL");
-  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>(urlCurrency);
+  const [displayCurrency, setDisplayCurrency] =
+    useState<DisplayCurrency>(urlCurrency);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const ko = language === "ko";
@@ -89,21 +93,22 @@ export function StockFinancialsPage({ symbol }: { symbol: string }) {
     <section className="space-y-5">
       <div>
         <Link
-          href={"/?market=US&symbol=" + encodeURIComponent(symbol) + "&currency=" + displayCurrency}
+          href={
+            "/?market=US&symbol=" +
+            encodeURIComponent(symbol) +
+            "&currency=" +
+            displayCurrency
+          }
           className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
         >
           <ChevronLeft size={16} />
-          {ko ? "\uC885\uBAA9 \uC0C1\uC138\uB85C \uB3CC\uC544\uAC00\uAE30" : "Back to stock"}
+          {ko
+            ? "\uC885\uBAA9 \uC0C1\uC138\uB85C \uB3CC\uC544\uAC00\uAE30"
+            : "Back to stock"}
         </Link>
-        <p className="mt-4 text-sm text-muted">S&amp;P 500 ? SEC EDGAR</p>
         <h1 className="mt-1 text-2xl font-bold text-foreground">
           {data?.companyName || symbol} ({symbol})
         </h1>
-        <p className="mt-2 text-sm text-muted">
-          {ko
-            ? "SEC \uD655\uC815 \uACF5\uC2DC\uB97C \uCCAB \uC870\uD68C \uC2DC DB\uC5D0 \uC800\uC7A5\uD55C \uC2E4\uC81C \uC2E4\uC801\uC785\uB2C8\uB2E4."
-            : "Actual results stored from SEC filings on first request."}
-        </p>
       </div>
 
       <Notice message="" error={error} />
@@ -118,10 +123,12 @@ export function StockFinancialsPage({ symbol }: { symbol: string }) {
                   key={value}
                   type="button"
                   onClick={() => setTab(value)}
-                  className={"rounded px-4 py-2 text-sm font-semibold " +
+                  className={
+                    "rounded px-4 py-2 text-sm font-semibold " +
                     (tab === value
                       ? "bg-primary text-on-primary"
-                      : "text-muted hover:text-foreground")}
+                      : "text-muted hover:text-foreground")
+                  }
                 >
                   {value === "ANNUAL"
                     ? ko
@@ -139,10 +146,12 @@ export function StockFinancialsPage({ symbol }: { symbol: string }) {
                   key={currency}
                   type="button"
                   onClick={() => changeDisplayCurrency(currency)}
-                  className={"rounded px-4 py-2 text-sm font-semibold " +
+                  className={
+                    "rounded px-4 py-2 text-sm font-semibold " +
                     (displayCurrency === currency
                       ? "bg-primary text-on-primary"
-                      : "text-muted hover:text-foreground")}
+                      : "text-muted hover:text-foreground")
+                  }
                 >
                   {currency === "KRW" ? "\uC6D0" : "$"}
                 </button>
@@ -181,8 +190,16 @@ function FinancialOverviewChart({
 }) {
   const max = Math.max(
     ...rows.flatMap((row) => [
-      Math.abs(convertFinancialValue(row.revenue, displayCurrency, exchangeRate) ?? 0),
-      Math.abs(convertFinancialValue(row.operatingIncome, displayCurrency, exchangeRate) ?? 0),
+      Math.abs(
+        convertFinancialValue(row.revenue, displayCurrency, exchangeRate) ?? 0,
+      ),
+      Math.abs(
+        convertFinancialValue(
+          row.operatingIncome,
+          displayCurrency,
+          exchangeRate,
+        ) ?? 0,
+      ),
     ]),
     0,
   );
@@ -194,7 +211,9 @@ function FinancialOverviewChart({
     <div className="rounded-md border border-border bg-surface p-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold">
-          {ko ? "\uB9E4\uCD9C\u00B7\uC601\uC5C5\uC774\uC775 \uCC28\uD2B8" : "Revenue & operating income"}
+          {ko
+            ? "\uB9E4\uCD9C\u00B7\uC601\uC5C5\uC774\uC775 \uCC28\uD2B8"
+            : "Revenue & operating income"}
         </h2>
         <div className="flex gap-3 text-xs text-muted">
           <span className="flex items-center gap-1">
@@ -214,20 +233,36 @@ function FinancialOverviewChart({
         }}
       >
         {rows.map((row) => {
-          const revenue = convertFinancialValue(row.revenue, displayCurrency, exchangeRate);
-          const operatingIncome = convertFinancialValue(row.operatingIncome, displayCurrency, exchangeRate);
+          const revenue = convertFinancialValue(
+            row.revenue,
+            displayCurrency,
+            exchangeRate,
+          );
+          const operatingIncome = convertFinancialValue(
+            row.operatingIncome,
+            displayCurrency,
+            exchangeRate,
+          );
           return (
             <div key={periodKey(row)} className="min-w-16">
               <div className="flex h-44 items-end justify-center gap-1 rounded bg-surface-muted p-2">
                 <div
                   className="w-5 rounded-t bg-primary"
                   style={{ height: height(revenue, max) + "%" }}
-                  title={formatFinancialAmount(row.revenue, displayCurrency, exchangeRate)}
+                  title={formatFinancialAmount(
+                    row.revenue,
+                    displayCurrency,
+                    exchangeRate,
+                  )}
                 />
                 <div
                   className="w-5 rounded-t bg-positive"
                   style={{ height: height(operatingIncome, max) + "%" }}
-                  title={formatFinancialAmount(row.operatingIncome, displayCurrency, exchangeRate)}
+                  title={formatFinancialAmount(
+                    row.operatingIncome,
+                    displayCurrency,
+                    exchangeRate,
+                  )}
                 />
               </div>
               <p className="mt-2 text-center text-xs font-semibold">
@@ -235,10 +270,20 @@ function FinancialOverviewChart({
               </p>
               <div className="mt-1 space-y-0.5 text-center text-[11px] text-muted">
                 <p className="truncate">
-                  {ko ? "\uB9E4\uCD9C" : "Revenue"} {formatFinancialAmount(row.revenue, displayCurrency, exchangeRate)}
+                  {ko ? "\uB9E4\uCD9C" : "Revenue"}{" "}
+                  {formatFinancialAmount(
+                    row.revenue,
+                    displayCurrency,
+                    exchangeRate,
+                  )}
                 </p>
                 <p className="truncate">
-                  {ko ? "\uC601\uC5C5\uC774\uC775" : "Operating"} {formatFinancialAmount(row.operatingIncome, displayCurrency, exchangeRate)}
+                  {ko ? "\uC601\uC5C5\uC774\uC775" : "Operating"}{" "}
+                  {formatFinancialAmount(
+                    row.operatingIncome,
+                    displayCurrency,
+                    exchangeRate,
+                  )}
                 </p>
               </div>
             </div>
@@ -298,8 +343,16 @@ function FinancialTable({
               {rows.map((row) => (
                 <td key={periodKey(row)} className="px-4 py-3 text-right">
                   {key === "eps"
-                    ? formatPerShareAmount(row[key], displayCurrency, exchangeRate)
-                    : formatFinancialAmount(row[key], displayCurrency, exchangeRate)}
+                    ? formatPerShareAmount(
+                        row[key],
+                        displayCurrency,
+                        exchangeRate,
+                      )
+                    : formatFinancialAmount(
+                        row[key],
+                        displayCurrency,
+                        exchangeRate,
+                      )}
                 </td>
               ))}
             </tr>
@@ -365,7 +418,10 @@ function periodLabel(row: UsStockFinancial) {
   return year + " Q" + quarter;
 }
 
-function getPeriodMiddleDate(start: string | null | undefined, end: string | null | undefined) {
+function getPeriodMiddleDate(
+  start: string | null | undefined,
+  end: string | null | undefined,
+) {
   const endDate = parseDateOnly(end);
   if (!endDate) {
     return null;
@@ -401,7 +457,12 @@ function convertFinancialValue(
   if (value === null || !Number.isFinite(value)) {
     return null;
   }
-  const converted = convertMoneyValue(value, displayCurrency, "USD", exchangeRate);
+  const converted = convertMoneyValue(
+    value,
+    displayCurrency,
+    "USD",
+    exchangeRate,
+  );
   return Number.isFinite(converted) ? converted : null;
 }
 
@@ -419,7 +480,13 @@ function formatFinancialAmount(
   if (displayCurrency === "KRW") {
     if (absolute >= 1e12) return sign + compact(absolute / 1e12) + "\uC870";
     if (absolute >= 1e8) return sign + compact(absolute / 1e8) + "\uC5B5";
-    return sign + new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 }).format(absolute) + "\uC6D0";
+    return (
+      sign +
+      new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 }).format(
+        absolute,
+      ) +
+      "\uC6D0"
+    );
   }
   if (absolute >= 1e12) return sign + "$" + compact(absolute / 1e12) + "T";
   if (absolute >= 1e9) return sign + "$" + compact(absolute / 1e9) + "B";
@@ -436,11 +503,13 @@ function formatPerShareAmount(
   if (converted === null) {
     return "-";
   }
-  return (displayCurrency === "KRW" ? "" : "$") +
+  return (
+    (displayCurrency === "KRW" ? "" : "$") +
     new Intl.NumberFormat(displayCurrency === "KRW" ? "ko-KR" : "en-US", {
       maximumFractionDigits: displayCurrency === "KRW" ? 0 : 2,
     }).format(converted) +
-    (displayCurrency === "KRW" ? "\uC6D0" : "");
+    (displayCurrency === "KRW" ? "\uC6D0" : "")
+  );
 }
 
 function compact(value: number) {

@@ -18,12 +18,14 @@ import { StockProfileEntity } from './stock-profile.entity';
 import { UsEarningsCalendarBatchService } from './us-earnings-calendar-batch.service';
 import { UsEarningsCalendarEntity } from './us-earnings-calendar.entity';
 import { User } from '../users/user.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { MarketNotificationJobsService } from './market-notification-jobs.service';
 import { UsStockFinancialEntity } from './us-stock-financial.entity';
 import { UsStockFinancialsService } from './us-stock-financials.service';
 
 @Module({
   imports: [
+    NotificationsModule,
     TypeOrmModule.forFeature([
       StockProfileEntity,
       StockMasterEntity,

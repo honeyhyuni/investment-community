@@ -30,7 +30,11 @@ import { Skeleton } from "@/common/components/Skeleton";
 import { useSessionStore } from "@/common/stores/session";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { usePreferencesStore } from "@/common/stores/preferences";
-import { convertMoneyValue, formatMoney, formatNumber } from "@/common/utils/format";
+import {
+  convertMoneyValue,
+  formatMoney,
+  formatNumber,
+} from "@/common/utils/format";
 import { applyLiveTrade } from "@/common/utils/market";
 import { stockSearchScore } from "@/common/utils/stock-search";
 import {
@@ -797,12 +801,26 @@ function StockDetailPanel({
         </div>
         <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
           {nextEarningsLabel ? (
-            <span className="inline-flex max-w-[240px] items-center rounded-md border border-primary/25 bg-primary/10 px-2.5 py-2 text-xs font-semibold leading-5 text-primary sm:max-w-md">
-              <span className="whitespace-normal break-keep">
-                {language === "ko" ? "다음 실적 " : "Next earnings "}
-                {nextEarningsLabel}
+            detail.isSp500 ? (
+              <Link
+                href={
+                  "/stocks/US/" +
+                  encodeURIComponent(detail.symbol) +
+                  "/earnings"
+                }
+                className="inline-flex max-w-[260px] items-center rounded-md border border-primary/25 bg-primary/10 px-2.5 py-2 text-xs font-semibold leading-5 text-primary hover:underline sm:max-w-md"
+              >
+                <span className="whitespace-normal break-keep">
+                  {nextEarningsLabel}
+                </span>
+              </Link>
+            ) : (
+              <span className="inline-flex max-w-[260px] items-center rounded-md border border-primary/25 bg-primary/10 px-2.5 py-2 text-xs font-semibold leading-5 text-primary sm:max-w-md">
+                <span className="whitespace-normal break-keep">
+                  {nextEarningsLabel}
+                </span>
               </span>
-            </span>
+            )
           ) : null}
           <Button
             variant="secondary"
@@ -978,6 +996,18 @@ function StockDetailPanel({
       />
     </div>
   );
+}
+
+function earningsPeriodLabel(item: NonNullable<StockDetail["nextEarnings"]>) {
+  const baseDate = item.fiscalDateEnding || item.reportDate;
+  const date = new Date(baseDate.slice(0, 10) + "T00:00:00Z");
+  if (!Number.isNaN(date.getTime())) {
+    date.setUTCMonth(date.getUTCMonth() - 1);
+    return (
+      date.getUTCFullYear() + " Q" + (Math.floor(date.getUTCMonth() / 3) + 1)
+    );
+  }
+  return item.reportDate.slice(0, 7);
 }
 
 function StockSearchPopover({
@@ -1647,7 +1677,14 @@ function FinancialBarChart({
     .slice(-5);
   const maxValue = Math.max(
     ...rows.flatMap((item) => [
-      Math.abs(convertFinancialValue(item.revenue, currency, sourceCurrency, exchangeRate) ?? 0),
+      Math.abs(
+        convertFinancialValue(
+          item.revenue,
+          currency,
+          sourceCurrency,
+          exchangeRate,
+        ) ?? 0,
+      ),
       Math.abs(
         convertFinancialValue(
           item.operatingProfit,
@@ -1741,10 +1778,22 @@ function FinancialBarChart({
               </p>
               <div className="mt-1 space-y-0.5 text-center text-[11px] text-muted">
                 <p className="truncate">
-                  {revenueLabel} {formatFinancialAmount(item.revenue, currency, sourceCurrency, exchangeRate)}
+                  {revenueLabel}{" "}
+                  {formatFinancialAmount(
+                    item.revenue,
+                    currency,
+                    sourceCurrency,
+                    exchangeRate,
+                  )}
                 </p>
                 <p className="truncate">
-                  {operatingProfitLabel} {formatFinancialAmount(item.operatingProfit, currency, sourceCurrency, exchangeRate)}
+                  {operatingProfitLabel}{" "}
+                  {formatFinancialAmount(
+                    item.operatingProfit,
+                    currency,
+                    sourceCurrency,
+                    exchangeRate,
+                  )}
                 </p>
               </div>
             </div>
@@ -1807,7 +1856,12 @@ function convertFinancialValue(
   if (value === null || !Number.isFinite(value)) {
     return null;
   }
-  const converted = convertMoneyValue(value, currency, sourceCurrency, exchangeRate);
+  const converted = convertMoneyValue(
+    value,
+    currency,
+    sourceCurrency,
+    exchangeRate,
+  );
   return Number.isFinite(converted) ? converted : null;
 }
 
@@ -1875,7 +1929,17 @@ function formatNextEarnings(
   if (!nextEarnings?.reportDate) {
     return null;
   }
-  const date = new Date(`${nextEarnings.reportDate.slice(0, 10)}T00:00:00`);
+
+  const hasActual =
+    nextEarnings.epsActual !== null || nextEarnings.revenueActual !== null;
+  if (hasActual) {
+    const label = earningsPeriodLabel(nextEarnings);
+    return language === "ko"
+      ? label + " \uC2E4\uC801 \uBCF4\uAE30"
+      : "View " + label + " earnings";
+  }
+
+  const date = new Date(nextEarnings.reportDate.slice(0, 10) + "T00:00:00");
   const today = new Date();
   const todayStart = new Date(
     today.getFullYear(),
@@ -1895,45 +1959,55 @@ function formatNextEarnings(
   const time = formatEarningsTime(nextEarnings.timeOfTheDay, language);
   const estimate =
     nextEarnings.estimate !== null && nextEarnings.currency
-      ? ` · EPS ${nextEarnings.estimate.toFixed(2)} ${nextEarnings.currency}`
+      ? " \u00B7 EPS " +
+        nextEarnings.estimate.toFixed(2) +
+        " " +
+        nextEarnings.currency
       : "";
-  return `${formattedDate} · ${time}${estimate}`;
+  return (
+    (language === "ko" ? "\uB2E4\uC74C \uC2E4\uC801 " : "Next earnings ") +
+    formattedDate +
+    " \u00B7 " +
+    time +
+    estimate
+  );
 }
-
 function formatEarningsTime(
   timeOfTheDay: string | null | undefined,
   language: "en" | "ko",
 ): string {
   const normalized = timeOfTheDay?.trim().toLowerCase();
   if (!normalized) {
-    return language === "ko" ? "시간 미정" : "Time TBD";
+    return language === "ko" ? "\uC2DC\uAC04 \uBBF8\uC815" : "Time TBD";
   }
 
   const koLabels: Record<string, string> = {
-    "pre-market": "프리마켓",
-    premarket: "프리마켓",
-    "before-market": "프리마켓",
-    "post-market": "애프터마켓",
-    postmarket: "애프터마켓",
-    "after-market": "애프터마켓",
-    "after hours": "애프터마켓",
-    "during-market": "장중",
+    "pre-market": "\uD504\uB9AC\uB9C8\uCF13",
+    premarket: "\uD504\uB9AC\uB9C8\uCF13",
+    "before-market": "\uD504\uB9AC\uB9C8\uCF13",
+    bmo: "\uD504\uB9AC\uB9C8\uCF13",
+    "post-market": "\uC560\uD504\uD130\uB9C8\uCF13",
+    postmarket: "\uC560\uD504\uD130\uB9C8\uCF13",
+    "after-market": "\uC560\uD504\uD130\uB9C8\uCF13",
+    "after hours": "\uC560\uD504\uD130\uB9C8\uCF13",
+    amc: "\uC560\uD504\uD130\uB9C8\uCF13",
   };
   const enLabels: Record<string, string> = {
-    premarket: "pre-market",
-    "before-market": "pre-market",
-    postmarket: "post-market",
-    "after-market": "post-market",
-    "after hours": "post-market",
-    "during-market": "during market",
+    "pre-market": "Pre-market",
+    premarket: "Pre-market",
+    "before-market": "Pre-market",
+    bmo: "Pre-market",
+    "post-market": "After-market",
+    postmarket: "After-market",
+    "after-market": "After-market",
+    "after hours": "After-market",
+    amc: "After-market",
   };
 
-  if (language === "ko") {
-    return koLabels[normalized] ?? timeOfTheDay;
-  }
-  return enLabels[normalized] ?? timeOfTheDay;
+  return language === "ko"
+    ? (koLabels[normalized] ?? timeOfTheDay ?? "\uC2DC\uAC04 \uBBF8\uC815")
+    : (enLabels[normalized] ?? timeOfTheDay ?? "Time TBD");
 }
-
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-md border border-border bg-surface-muted p-3">

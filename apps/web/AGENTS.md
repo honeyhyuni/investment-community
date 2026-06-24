@@ -136,7 +136,6 @@ Do not replace TipTap with ad hoc paragraph/image block controls.
 - Service workers are registered only in production. After changing `sw.js`, bump `CACHE_NAME` and fully close/reopen an installed PWA during verification.
 - `PullToRefresh` is mounted in the authenticated layout for screens below 640px. It activates only at page scroll position zero, ignores horizontal gestures and form/open-menu interactions, and reloads after a 72px pull threshold.
 
-
 ## Styling Rules
 
 - Reuse design tokens and existing common components.
@@ -172,6 +171,16 @@ Do not replace TipTap with ad hoc paragraph/image block controls.
   - `post-market` / after-market variants -> `애프터마켓`
   - unknown/missing -> `시간 미정`
 - Keep the next-earnings badge responsive; do not truncate the text to `...` when Korean/English labels are longer.
+
+## S&P 500 Financial And Earnings UI
+
+- The stock-detail annual chart is shown only when S&P 500 financial data exists. Its More link routes to `/stocks/US/{symbol}/financials?currency=USD|KRW`.
+- The detailed financial page supports annual/quarterly data and USD/KRW conversion.
+- The earnings page route is `/stocks/US/{symbol}/earnings`. It displays revenue and EPS actual/estimate, estimate surprise, previous-quarter values/change, and year-ago values/change.
+- Positive percentages use `text-positive` (green), and negative percentages use `text-negative` (red). Null comparisons render as `-`.
+- Korean-friendly quarter labels are derived from the reporting period/date rather than blindly displaying a provider fiscal-quarter number. This is important for non-calendar fiscal years such as NVIDIA.
+- All US-to-KRW values on stock prices, charts, financial details, and earnings use the shared Zustand `exchangeRate` loaded from the market-pulse quote `KIS_FX:USDKRW`. Conversion is USD x rate for KRW and KRW / rate for USD.
+- The stock-detail earnings badge is a link to the earnings route. It shows the next scheduled event before release and a recent-period earnings link after actual data arrives.
 
 ## Verification
 

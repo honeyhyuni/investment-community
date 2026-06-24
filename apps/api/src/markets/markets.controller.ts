@@ -233,6 +233,13 @@ export class MarketsController {
     return this.usEarningsCalendarBatchService.getUsEarningsBounds();
   }
 
+  @Get('stocks/earnings/us')
+  getUsStockEarnings(
+    @Query('symbol') symbol: string,
+  ): Promise<UsEarningsCalendarItem[]> {
+    return this.usEarningsCalendarBatchService.getUsEarningsForSymbol(symbol);
+  }
+
   @Get('briefing')
   // 마켓브리핑 메뉴에서 시장별 최신 브리핑 하나를 조회한다.
   getMarketBriefing(
@@ -353,8 +360,33 @@ export class MarketsController {
     fetched: number;
     updated: number;
     deleted: number;
+    finnhubFetched: number;
+    finnhubUpdated: number;
+    actualUpdated: number;
   }> {
     return this.usEarningsCalendarBatchService.refreshUsEarningsCalendar();
+  }
+
+  @Post('calendar/earnings/us/actuals')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  refreshDueUsEarningsActuals(): Promise<{
+    checkedDates: string[];
+    fetched: number;
+    updated: number;
+    actualUpdated: number;
+  }> {
+    return this.usEarningsCalendarBatchService.refreshDueFinnhubActuals();
+  }
+
+  @Post('calendar/earnings/us/sec-confirmations')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  refreshUsEarningsSecConfirmations(): Promise<{
+    checked: number;
+    confirmed: number;
+  }> {
+    return this.usEarningsCalendarBatchService.refreshSecConfirmations();
   }
 
   private formatDateOffset(offsetDays: number): string {
