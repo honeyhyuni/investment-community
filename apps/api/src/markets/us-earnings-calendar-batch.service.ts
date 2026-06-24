@@ -587,9 +587,10 @@ export class UsEarningsCalendarBatchService {
       item.revenueActual !== null
         ? '\uB9E4\uCD9C ' + this.formatActualRevenue(item.revenueActual)
         : null;
-    const body =
+    const resultText =
       [epsText, revenueText].filter(Boolean).join(', ') ||
       '\uBC1C\uD45C\uCE58\uAC00 \uC5C5\uB370\uC774\uD2B8\uB418\uC5C8\uC2B5\uB2C8\uB2E4.';
+    const body = resultText + '\n[15F \uC54C\uB9BC]';
 
     await this.notificationsService.sendToUsers(
       audience.map((row) => row.userId),
