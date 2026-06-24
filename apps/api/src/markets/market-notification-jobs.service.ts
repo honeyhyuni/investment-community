@@ -61,7 +61,7 @@ export class MarketNotificationJobsService {
           {
             type: 'PRICE',
             title: quote.name || stock.name || stock.symbol,
-            body: `${band}% ${percent >= 0 ? '\uC624\uB978' : '\uB0B4\uB9B0'} ${this.formatPrice(quote.current, stock.market, quote.currency)}\uC785\uB2C8\uB2E4.\n[15F \uC54C\uB9BC]`,
+            body: `${band}% ${percent >= 0 ? '\uC624\uB978' : '\uB0B4\uB9B0'} ${this.formatPrice(quote.current, stock.market, quote.currency)}\uC785\uB2C8\uB2E4.`,
             url: `/?symbol=${encodeURIComponent(stock.symbol)}&market=${stock.market}`,
             data: {
               symbol: stock.symbol,
@@ -108,13 +108,13 @@ export class MarketNotificationJobsService {
         audience,
         {
           type: 'EARNINGS',
-          title: `${item.companyName || item.symbol} \uC2E4\uC801\uBC1C\uD45C \uC608\uC815`,
-          body: `${item.reportDate}, ${timing}, \uC608\uC0C1 EPS ${item.estimate ?? '\uBBF8\uC815'}${item.currency ? ` ${item.currency}` : ''}\n[15F \uC54C\uB9BC]`,
+          title: `${item.symbol} \uC2E4\uC801\uBC1C\uD45C \uC608\uC815`,
+          body: `${item.reportDate}, ${timing}, \uC608\uC0C1 EPS ${item.estimate ?? '\uBBF8\uC815'}${item.currency ? ` ${item.currency}` : ''}`,
           url: `/?symbol=${encodeURIComponent(item.symbol)}&market=US`,
           data: { earningsId: item.id, reportDate: item.reportDate },
           tag: `earnings:${item.symbol}`,
         },
-        (userId) => `earnings:v2:${userId}:${item.id}:${item.reportDate}:today`,
+        (userId) => `earnings:v3:${userId}:${item.id}:${item.reportDate}:today`,
       );
     }
   }
@@ -160,13 +160,13 @@ export class MarketNotificationJobsService {
           {
             type: 'IPO',
             title: `${item.corpName} ${label}`,
-            body: `${dateRange}\n${price}, ${underwriter}\n[15F \uC54C\uB9BC]`,
+            body: `${dateRange}\n\uACF5\uBAA8\uAC00 : ${price}, ${underwriter}`,
             url: '/calendar/ipo',
             data: { ipoId: item.id, kind: event.kind, date: event.date },
             tag: `ipo:${item.id}:${event.kind}`,
           },
           (userId) =>
-            `ipo:v2:${userId}:${item.id}:${event.kind}:${event.date}:today`,
+            `ipo:v3:${userId}:${item.id}:${event.kind}:${event.date}:today`,
         );
       }
     }

@@ -48,7 +48,7 @@ export class CommunityNotificationJobsService {
           {
             type: 'LIKE',
             title: '\uC0C8 \uC88B\uC544\uC694',
-            body: `${actor}\uB2D8\uC774 \uD68C\uC6D0\uB2D8\uC758 \uAC8C\uC2DC\uAE00\uC744 \uC88B\uC544\uD569\uB2C8\uB2E4.\n[15F \uC54C\uB9BC]`,
+            body: `${actor}\uB2D8\uC774 \uD68C\uC6D0\uB2D8\uC758 \uAC8C\uC2DC\uAE00\uC744 \uC88B\uC544\uD569\uB2C8\uB2E4.`,
             url: `/community/${first.post.id}`,
             data: { postId: first.post.id, count: group.length },
             tag: `likes:${first.post.id}`,

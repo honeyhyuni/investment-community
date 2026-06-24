@@ -462,7 +462,7 @@ export class CommunityService {
       {
         type: 'NEW_POST',
         title: `${post.author.nickname}\uB2D8\uC758 \uC0C8 \uAC8C\uC2DC\uAE00`,
-        body: `${post.title || body}\n[15F \uC54C\uB9BC]`,
+        body: `${post.title || body}`,
         url: `/community/${post.id}`,
         data: { postId: post.id, authorId: post.author.id },
         tag: `new-post:${post.id}`,
@@ -483,7 +483,7 @@ export class CommunityService {
       {
         type: 'COMMENT',
         title: `${comment.author.nickname}\uB2D8\uC758 ${parent ? '\uC0C8 \uB2F5\uAE00' : '\uC0C8 \uB313\uAE00'}`,
-        body: `${comment.content.slice(0, 160)}\n[15F \uC54C\uB9BC]`,
+        body: `${comment.content.slice(0, 160)}`,
         url: `/community/${post.id}`,
         data: { postId: post.id, commentId: comment.id },
         tag: `comment:${comment.id}`,
