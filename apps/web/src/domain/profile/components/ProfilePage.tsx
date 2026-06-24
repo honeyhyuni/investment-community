@@ -10,6 +10,7 @@ import { TextInput } from "@/common/components/TextInput";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { apiRequest, User, UserRole, UserStatus } from "@/common/lib/api";
+import { NotificationSettings } from "@/domain/notifications/components/NotificationSettings";
 
 export function ProfilePage() {
   const router = useRouter();
@@ -126,6 +127,7 @@ export function ProfilePage() {
         onPasswordSubmit={changePassword}
         onBack={() => router.push("/")}
       />
+      {accessToken ? <NotificationSettings accessToken={accessToken} ko={ko} /> : null}
     </div>
   );
 }

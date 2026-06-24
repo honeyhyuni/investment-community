@@ -34,6 +34,9 @@ import { FavoriteStockEntity } from './favorite-stock.entity';
 import { PortfolioEntity } from './portfolio.entity';
 import { PortfolioPositionEntity } from './portfolio-position.entity';
 import { UsEarningsCalendarEntity } from './us-earnings-calendar.entity';
+import { User } from '../users/user.entity';
+import { UserStatus } from '../users/user-status.enum';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const MARKET_PULSE = [
   { symbol: '^IXIC', name: 'Nasdaq Composite' },
@@ -229,6 +232,9 @@ export class MarketsService {
     private readonly portfolioPositionsRepository: Repository<PortfolioPositionEntity>,
     @InjectRepository(UsEarningsCalendarEntity)
     private readonly usEarningsRepository: Repository<UsEarningsCalendarEntity>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
+    private readonly notifications: NotificationsService,
   ) {
     this.redis = new Redis(
       this.configService.get<string>('REDIS_URL') ?? 'redis://redis:6379',
@@ -969,7 +975,7 @@ export class MarketsService {
       const nextQuantity = (current?.quantity ?? 0) + quantity;
       const nextAveragePrice =
         nextQuantity > 0
-          ? (((current?.averagePrice ?? 0) * (current?.quantity ?? 0)) +
+          ? ((current?.averagePrice ?? 0) * (current?.quantity ?? 0) +
               averagePrice * quantity) /
             nextQuantity
           : averagePrice;
@@ -1021,9 +1027,10 @@ export class MarketsService {
       previousClose: 0,
       timestamp: Math.floor(Date.now() / 1000),
     };
-    const quote = await this.getStockQuote(position.symbol, position.market).catch(
-      () => fallback,
-    );
+    const quote = await this.getStockQuote(
+      position.symbol,
+      position.market,
+    ).catch(() => fallback);
 
     return {
       ...quote,
@@ -1569,7 +1576,33 @@ export class MarketsService {
         generatedAt: new Date(),
       }),
     );
+    void this.notifyMarketBriefing(saved).catch((error) => {
+      this.logger.warn(
+        `Market briefing notification failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    });
     return this.toMarketBriefingDto(saved);
+  }
+
+  private async notifyMarketBriefing(
+    briefing: MarketBriefingEntity,
+  ): Promise<void> {
+    const users = await this.usersRepository.find({
+      where: { status: UserStatus.Approved },
+      select: { id: true },
+    });
+    await this.notifications.sendToUsers(
+      users.map((user) => user.id),
+      {
+        type: 'MARKET_BRIEFING',
+        title: `${briefing.market === 'KR' ? 'Korea' : 'US'} market ? ${briefing.title}`,
+        body: briefing.summaryLines[0] ?? briefing.summary.slice(0, 180),
+        url: `/market-briefing/${briefing.id}`,
+        data: { briefingId: briefing.id, market: briefing.market },
+        tag: `market-briefing:${briefing.market}`,
+      },
+      (userId) => `market-briefing:${briefing.id}:${userId}`,
+    );
   }
 
   private async getMarketBriefingNews(
@@ -3254,7 +3287,9 @@ export class MarketsService {
       }
 
       const preview = rawOutput.replace(/\s+/g, ' ').slice(0, 600);
-      this.logger.warn(`OpenAI briefing JSON parse failed. Preview: ${preview}`);
+      this.logger.warn(
+        `OpenAI briefing JSON parse failed. Preview: ${preview}`,
+      );
       throw firstError;
     }
   }
@@ -3597,7 +3632,9 @@ export class MarketsService {
   }
 
   private isScheduledJobsEnabled(): boolean {
-    const explicitValue = this.configService.get<string>('ENABLE_SCHEDULED_JOBS');
+    const explicitValue = this.configService.get<string>(
+      'ENABLE_SCHEDULED_JOBS',
+    );
     if (explicitValue !== undefined) {
       return explicitValue === 'true';
     }

@@ -152,6 +152,27 @@ Market briefing OpenAI calls use `OPENAI_MODEL` and `service_tier: "flex"`. The 
 - Production uses `synchronize: false`; create `us_earnings_calendar` manually or via migration before enabling the feature on a fresh DB.
 - The current VM `docker-compose.yml` is separate from the repository compose files. If adding `ALPHA_VANTAGE_API_KEY` locally, also ensure the VM compose maps `ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY}` into the API service.
 
+## PWA Push Notifications
+
+Push notifications use `web-push` with VAPID and are implemented under `src/notifications`.
+
+- Production schema is created by `sql/20260624_notifications.sql`. Production has `synchronize: false`, so apply this SQL before deploying the notification-enabled API.
+- Tables store device subscriptions, per-user preferences, in-app notification history/read state, and deduplication delivery keys.
+- VAPID secrets stay in the API environment only: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT`.
+- `ENABLE_WEB_PUSH=true` enables real delivery. `ENABLE_PUSH_TEST_API=true` exposes authenticated `POST /api/notifications/test` and should normally remain false in production.
+- Expired subscriptions returning HTTP 404/410 are deleted automatically. Notification failures must be logged without failing the user action that triggered them.
+- Preference defaults: earnings, IPO, and market briefing enabled; price, community reactions, and subscribed-author posts disabled.
+- Earnings notifications run daily at 09:00 Asia/Seoul and send only on the report date, only to users who favorited the US symbol and enabled earnings notifications.
+- IPO notifications run daily at 09:00 Asia/Seoul and send only on the subscription start date or listing date, to approved users who enabled IPO notifications. D-1 notifications are intentionally not sent.
+- Price-band checks run every minute during each market's regular session. Favorites are deduplicated by market/symbol before quote lookup. A user receives each direction/5-percent band at most once per trading date.
+- Comments/replies and first publication of subscribed-author posts notify immediately after DB save. Self-reactions are excluded.
+- Likes are grouped by post every 15 minutes.
+- Market briefings notify only after a briefing row is successfully saved.
+- Development Compose mounts the named volume `api_node_modules` over image dependencies. After adding API packages, update both root and `apps/api/package-lock.json` and run `docker compose run --rm --no-deps api npm ci` or recreate that dependency volume.
+
+Notification API routes include VAPID public config, subscribe/unsubscribe, preference get/update, in-app list/read, and the optional test endpoint.
+
+
 ## Community Content
 
 - Posts are long-form TipTap HTML stored in `contentBlocks`.

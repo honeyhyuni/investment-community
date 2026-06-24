@@ -126,6 +126,17 @@ Do not replace TipTap with ad hoc paragraph/image block controls.
 - Check safe-area spacing, sticky headers, bottom navigation, text overflow, chart sizing, editor usability, and image behavior on mobile.
 - Production PWA may cache old frontend assets. After deployment, a full app close/reopen or service-worker refresh may be required during verification.
 
+## Push Notification And Mobile Refresh UI
+
+- `NotificationCenter` is rendered in the authenticated header. Device Push permission and notification-type preferences are separate controls.
+- Never request notification permission automatically after login. Request it only after an explicit user action such as "Enable on this device".
+- Users can independently enable or disable watchlist price bands, earnings, IPO, market briefing, community reactions, and subscribed-author posts.
+- `public/sw.js` handles `push` and `notificationclick`. Notification URLs must remain shareable authenticated routes.
+- iOS Push requires iOS 16.4+ and an installed Home Screen PWA. Android and desktop Chromium PWAs are also supported.
+- Service workers are registered only in production. After changing `sw.js`, bump `CACHE_NAME` and fully close/reopen an installed PWA during verification.
+- `PullToRefresh` is mounted in the authenticated layout for screens below 640px. It activates only at page scroll position zero, ignores horizontal gestures and form/open-menu interactions, and reloads after a 72px pull threshold.
+
+
 ## Styling Rules
 
 - Reuse design tokens and existing common components.

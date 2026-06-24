@@ -19,9 +19,11 @@ import {
   UserPen,
 } from "lucide-react";
 import { SessionLoading } from "@/common/components/SessionLoading";
+import { PullToRefresh } from "@/common/components/PullToRefresh";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { MarketPulseContainer } from "@/domain/markets/components/MarketPulseContainer";
+import { NotificationCenter } from "@/domain/notifications/components/NotificationCenter";
 
 const NAV_ITEMS: Array<{
   id: "stocks" | "favorites" | "news" | "marketBriefing" | "community" | "calendar" | "admin";
@@ -138,6 +140,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
     <main
       className={`min-h-dvh overflow-x-clip bg-[#f6f7fb] text-[#161a22] ${darkMode ? "dark-app" : ""}`}
     >
+      <PullToRefresh ko={language === "ko"} />
       <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] pt-0 sm:px-8 sm:pb-6">
         <header
           className={`sticky top-0 z-40 w-screen self-center border-b transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300 ${
@@ -191,6 +194,8 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                   {darkMode ? <Sun size={18} /> : <Moon size={18} />}
                 </button>
               </div>
+
+              {accessToken ? <NotificationCenter accessToken={accessToken} /> : null}
 
               <details ref={accountMenuRef} className="group relative">
               <summary

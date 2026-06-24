@@ -2,11 +2,13 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, MoreThanOrEqual, Repository } from 'typeorm';
 import { User } from '../users/user.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UserStatus } from '../users/user-status.enum';
 import { UserRole } from '../users/user-role.enum';
 import { CommunityPost } from './community-post.entity';
@@ -81,6 +83,8 @@ export type CommunityContentBlock = {
 
 @Injectable()
 export class CommunityService {
+  private readonly logger = new Logger(CommunityService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
@@ -92,6 +96,7 @@ export class CommunityService {
     private readonly commentsRepository: Repository<PostComment>,
     @InjectRepository(UserSubscription)
     private readonly subscriptionsRepository: Repository<UserSubscription>,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async getFeed(
@@ -189,6 +194,9 @@ export class CommunityService {
         caption,
         stockTags,
       }),
+    );
+    void this.notifySubscribers(post).catch((error) =>
+      this.logNotificationFailure('new post', error),
     );
 
     return (await this.toPostDtos([post], currentUserId))[0];
@@ -307,13 +315,16 @@ export class CommunityService {
       throw new NotFoundException('Parent comment not found.');
     }
 
-    await this.commentsRepository.save(
+    const comment = await this.commentsRepository.save(
       this.commentsRepository.create({
         post,
         author,
         parent: parent?.parent ? parent.parent : parent,
         content,
       }),
+    );
+    void this.notifyComment(comment, post, parent).catch((error) =>
+      this.logNotificationFailure('comment', error),
     );
 
     return (await this.toPostDtos([post], currentUserId))[0];
@@ -439,6 +450,61 @@ export class CommunityService {
       this.subscriptionsRepository.create({ subscriber, creator }),
     );
     return { subscribed: true };
+  }
+
+  private async notifySubscribers(post: CommunityPost): Promise<void> {
+    const subscriptions = await this.subscriptionsRepository.find({
+      where: { creator: { id: post.author.id } },
+    });
+    const body = this.firstSentence(post.content || post.caption || 'New post');
+    await this.notifications.sendToUsers(
+      subscriptions.map((item) => item.subscriber.id),
+      {
+        type: 'NEW_POST',
+        title: post.title || `${post.author.nickname}'s new post`,
+        body,
+        url: `/community/${post.id}`,
+        data: { postId: post.id, authorId: post.author.id },
+        tag: `new-post:${post.id}`,
+      },
+      (userId) => `new-post:${post.id}:${userId}`,
+    );
+  }
+
+  private async notifyComment(
+    comment: PostComment,
+    post: CommunityPost,
+    parent: PostComment | null,
+  ): Promise<void> {
+    const recipientId = parent?.author.id ?? post.author.id;
+    if (recipientId === comment.author.id) return;
+    await this.notifications.sendToUser(
+      recipientId,
+      {
+        type: 'COMMENT',
+        title: parent ? 'New reply' : 'New comment',
+        body: `${comment.author.nickname}: ${comment.content.slice(0, 160)}`,
+        url: `/community/${post.id}`,
+        data: { postId: post.id, commentId: comment.id },
+        tag: `comment:${comment.id}`,
+      },
+      `comment:${comment.id}:${recipientId}`,
+    );
+  }
+
+  private firstSentence(value: string): string {
+    const plain = value
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const match = plain.match(/^.*?[.!?](?:\s|$)/);
+    return (match?.[0] ?? plain).slice(0, 180);
+  }
+
+  private logNotificationFailure(kind: string, error: unknown): void {
+    this.logger.warn(
+      `${kind} notification failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+    );
   }
 
   private async resolveFeedAuthorIds(
