@@ -98,12 +98,15 @@ export type StockFinancial = {
   pbr: number | null;
   psr: number | null;
   roe: number | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
   source: string;
   fetchedAt: Date | null;
 };
 
 export type StockDetail = {
   symbol: string;
+  isSp500?: boolean;
   profile: CompanyProfile;
   metrics: CompanyMetrics | null;
   financials?: StockFinancial[];

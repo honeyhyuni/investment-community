@@ -19,6 +19,8 @@ import { UsEarningsCalendarBatchService } from './us-earnings-calendar-batch.ser
 import { UsEarningsCalendarEntity } from './us-earnings-calendar.entity';
 import { User } from '../users/user.entity';
 import { MarketNotificationJobsService } from './market-notification-jobs.service';
+import { UsStockFinancialEntity } from './us-stock-financial.entity';
+import { UsStockFinancialsService } from './us-stock-financials.service';
 
 @Module({
   imports: [
@@ -33,6 +35,7 @@ import { MarketNotificationJobsService } from './market-notification-jobs.servic
       IpoCalendarEntity,
       UsEarningsCalendarEntity,
       User,
+      UsStockFinancialEntity,
     ]),
   ],
   controllers: [MarketsController],
@@ -45,6 +48,7 @@ import { MarketNotificationJobsService } from './market-notification-jobs.servic
     IpoCalendarBatchService,
     UsEarningsCalendarBatchService,
     MarketNotificationJobsService,
+    UsStockFinancialsService,
   ],
 })
 /** Wires market quotes, stock metadata, financial batches, briefings, and sockets. */

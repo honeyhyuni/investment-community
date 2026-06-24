@@ -37,6 +37,7 @@ import { UsEarningsCalendarEntity } from './us-earnings-calendar.entity';
 import { User } from '../users/user.entity';
 import { UserStatus } from '../users/user-status.enum';
 import { NotificationsService } from '../notifications/notifications.service';
+import { UsStockFinancialsService } from './us-stock-financials.service';
 
 const MARKET_PULSE = [
   { symbol: '^IXIC', name: 'Nasdaq Composite' },
@@ -235,6 +236,7 @@ export class MarketsService {
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
     private readonly notifications: NotificationsService,
+    private readonly usStockFinancials: UsStockFinancialsService,
   ) {
     this.redis = new Redis(
       this.configService.get<string>('REDIS_URL') ?? 'redis://redis:6379',
@@ -1105,9 +1107,17 @@ export class MarketsService {
       }
     }
 
-    const [metrics, nextEarnings] = await Promise.all([
+    const [metrics, nextEarnings, usFinancials] = await Promise.all([
       this.getMetrics(normalizedSymbol).catch(() => null),
       this.getNextUsEarnings(normalizedSymbol),
+      this.usStockFinancials.getIfSp500(normalizedSymbol).catch((error) => {
+        this.logger.warn(
+          `US financial statements skipped for ${normalizedSymbol}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+        return null;
+      }),
     ]);
 
     return {
@@ -1115,6 +1125,27 @@ export class MarketsService {
       profile,
       metrics,
       nextEarnings,
+      isSp500: !!usFinancials,
+      financials: usFinancials?.annual.map((row) => ({
+        fiscalYear: row.fiscalYear,
+        revenue: row.revenue,
+        operatingProfit: row.operatingIncome,
+        netIncome: row.netIncome,
+        equity: row.equity,
+        eps: row.eps,
+        periodStart: row.periodStart,
+        periodEnd: row.periodEnd,
+        marketCap: null,
+        per: null,
+        pbr: null,
+        psr: null,
+        roe:
+          row.netIncome !== null && row.equity !== null && row.equity > 0
+            ? (row.netIncome / row.equity) * 100
+            : null,
+        source: row.source,
+        fetchedAt: row.filedAt ? new Date(row.filedAt) : null,
+      })),
       overview: cachedProfile
         ? {
             en: cachedProfile.overviewEn,
