@@ -81,7 +81,7 @@ export function StockEarningsPage({ symbol }: { symbol: string }) {
             "&currency=" +
             displayCurrency
           }
-          className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+          className="inline-flex cursor-pointer items-center gap-1 text-sm font-semibold text-primary hover:underline"
         >
           <ChevronLeft size={16} />
           {ko ? "종목 상세로 돌아가기" : "Back to stock"}
@@ -104,7 +104,7 @@ export function StockEarningsPage({ symbol }: { symbol: string }) {
                 type="button"
                 onClick={() => setDisplayCurrency(currency)}
                 className={
-                  "min-h-8 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors " +
+                  "min-h-8 cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition-colors " +
                   (displayCurrency === currency
                     ? "bg-primary text-on-primary"
                     : "text-muted hover:text-foreground")

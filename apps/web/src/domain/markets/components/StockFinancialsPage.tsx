@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
+import { SegmentedControl } from "@/common/components/SegmentedControl";
 import { Skeleton } from "@/common/components/Skeleton";
 import { apiRequest } from "@/common/lib/api";
 import { useSessionStore } from "@/common/stores/session";
@@ -99,7 +100,7 @@ export function StockFinancialsPage({ symbol }: { symbol: string }) {
             "&currency=" +
             displayCurrency
           }
-          className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+          className="inline-flex cursor-pointer items-center gap-1 text-sm font-semibold text-primary hover:underline"
         >
           <ChevronLeft size={16} />
           {ko
@@ -117,29 +118,22 @@ export function StockFinancialsPage({ symbol }: { symbol: string }) {
       {!loading && data ? (
         <>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="inline-flex self-start rounded-lg border border-border bg-surface-muted p-0.5 shadow-sm">
-              {(["ANNUAL", "QUARTERLY"] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setTab(value)}
-                  className={
-                    "min-h-8 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors " +
-                    (tab === value
-                      ? "bg-primary text-on-primary"
-                      : "text-muted hover:text-foreground")
-                  }
-                >
-                  {value === "ANNUAL"
-                    ? ko
-                      ? "\uC5F0\uAC04 \uC2E4\uC801"
-                      : "Annual"
-                    : ko
-                      ? "\uBD84\uAE30 \uC2E4\uC801"
-                      : "Quarterly"}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl<PeriodTab>
+              className="self-start"
+              aria-label={ko ? "\uC2E4\uC801 \uAE30\uAC04" : "Financial period"}
+              options={[
+                {
+                  value: "ANNUAL",
+                  label: ko ? "\uC5F0\uAC04 \uC2E4\uC801" : "Annual",
+                },
+                {
+                  value: "QUARTERLY",
+                  label: ko ? "\uBD84\uAE30 \uC2E4\uC801" : "Quarterly",
+                },
+              ]}
+              value={tab}
+              onChange={setTab}
+            />
             <div className="inline-flex self-start rounded-lg border border-border bg-surface-muted p-0.5 shadow-sm">
               {(["USD", "KRW"] as const).map((currency) => (
                 <button
@@ -147,7 +141,7 @@ export function StockFinancialsPage({ symbol }: { symbol: string }) {
                   type="button"
                   onClick={() => changeDisplayCurrency(currency)}
                   className={
-                    "min-h-8 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors " +
+                    "min-h-8 cursor-pointer rounded-md px-3 py-1.5 text-xs font-semibold transition-colors " +
                     (displayCurrency === currency
                       ? "bg-primary text-on-primary"
                       : "text-muted hover:text-foreground")
