@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { SessionLoading } from "@/common/components/SessionLoading";
 import { PullToRefresh } from "@/common/components/PullToRefresh";
+import { apiRequest } from "@/common/lib/api";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { MarketPulseContainer } from "@/domain/markets/components/MarketPulseContainer";
@@ -69,6 +70,31 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       router.replace("/login");
     }
   }, [authChecking, user?.status, router]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+    const url = new URL(window.location.href);
+    const notificationId = url.searchParams.get("notificationId");
+    if (!notificationId) {
+      return;
+    }
+
+    url.searchParams.delete("notificationId");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      url.pathname + url.search + url.hash,
+    );
+    void apiRequest<{ ok: true }>(
+      "/notifications/" + encodeURIComponent(notificationId) + "/read",
+      "PATCH",
+      { accessToken },
+    )
+      .then(() => window.dispatchEvent(new Event("notifications:changed")))
+      .catch(() => undefined);
+  }, [accessToken, pathname]);
 
   useEffect(() => {
     const syncHeaderState = () => {

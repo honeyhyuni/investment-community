@@ -1,4 +1,4 @@
-const CACHE_NAME = "15f-pwa-v4";
+const CACHE_NAME = "15f-pwa-v5";
 const APP_SHELL = ["/manifest.json", "/icons/icon.svg", "/icons/maskable-icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -82,7 +82,12 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  const targetUrl = new URL(event.notification.data?.url || "/", self.location.origin);
+  const notificationId = event.notification.data?.notificationId;
+  if (notificationId) {
+    targetUrl.searchParams.set("notificationId", notificationId);
+  }
+  const target = targetUrl.href;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       const existing = clients.find((client) => new URL(client.url).origin === self.location.origin);

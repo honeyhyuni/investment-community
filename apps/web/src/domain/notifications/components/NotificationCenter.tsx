@@ -31,12 +31,14 @@ export function NotificationCenter({ accessToken }: { accessToken: string }) {
   }, [accessToken]);
 
   useEffect(() => {
-    queueMicrotask(() => void load().catch(() => undefined));
-    const interval = window.setInterval(
-      () => void load().catch(() => undefined),
-      60_000,
-    );
-    return () => window.clearInterval(interval);
+    const refresh = () => void load().catch(() => undefined);
+    queueMicrotask(refresh);
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener("notifications:changed", refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("notifications:changed", refresh);
+    };
   }, [load]);
 
   async function openNotification(item: AppNotification) {

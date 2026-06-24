@@ -72,7 +72,7 @@ export function StockEarningsPage({ symbol }: { symbol: string }) {
   const latest = useMemo(() => rows[0] ?? null, [rows]);
 
   return (
-    <section className="space-y-5 pt-3 sm:pt-1">
+    <section className="mt-6 space-y-5 sm:mt-8">
       <div>
         <Link
           href={
