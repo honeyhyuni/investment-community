@@ -42,13 +42,13 @@ export class CommunityNotificationJobsService {
         const actor =
           names.length === 1
             ? names[0]
-            : `${names[0]} 외 ${names.length - 1}명`;
+            : `${names[0]} \uC678 ${names.length - 1}\uBA85`;
         await this.notifications.sendToUser(
           first.post.author.id,
           {
             type: 'LIKE',
-            title: '새 좋아요',
-            body: `${actor}이(가) 회원님의 게시글을 좋아합니다.`,
+            title: '\uC0C8 \uC88B\uC544\uC694',
+            body: `${actor}\uB2D8\uC774 \uD68C\uC6D0\uB2D8\uC758 \uAC8C\uC2DC\uAE00\uC744 \uC88B\uC544\uD569\uB2C8\uB2E4.\n[15F \uC54C\uB9BC]`,
             url: `/community/${first.post.id}`,
             data: { postId: first.post.id, count: group.length },
             tag: `likes:${first.post.id}`,

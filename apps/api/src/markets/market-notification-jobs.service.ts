@@ -41,7 +41,6 @@ export class MarketNotificationJobsService {
       group.push(row);
       symbols.set(key, group);
     }
-
     for (const group of symbols.values()) {
       const stock = group[0];
       try {
@@ -61,8 +60,8 @@ export class MarketNotificationJobsService {
           group.map((item) => item.userId),
           {
             type: 'PRICE',
-            title: `${quote.name || stock.name || stock.symbol} ${percent >= 0 ? '상승' : '하락'} 알림`,
-            body: `전일 종가 대비 ${percent >= 0 ? '+' : ''}${percent.toFixed(2)}% (${band}% 구간)`,
+            title: quote.name || stock.name || stock.symbol,
+            body: `${band}% ${percent >= 0 ? '\uC624\uB978' : '\uB0B4\uB9B0'} ${this.formatPrice(quote.current, stock.market, quote.currency)}\uC785\uB2C8\uB2E4.\n[15F \uC54C\uB9BC]`,
             url: `/?symbol=${encodeURIComponent(stock.symbol)}&market=${stock.market}`,
             data: {
               symbol: stock.symbol,
@@ -78,9 +77,7 @@ export class MarketNotificationJobsService {
         );
       } catch (error) {
         this.logger.warn(
-          `Price notification check failed for ${stock.market}:${stock.symbol}: ${
-            error instanceof Error ? error.message : 'unknown error'
-          }`,
+          `Price notification check failed for ${stock.market}:${stock.symbol}: ${error instanceof Error ? error.message : 'unknown error'}`,
         );
       }
     }
@@ -97,9 +94,7 @@ export class MarketNotificationJobsService {
 
   private async sendEarningsNotifications(): Promise<void> {
     const today = this.dateKey(new Date(), 'Asia/Seoul');
-    const items = await this.earnings.find({
-      where: { reportDate: today },
-    });
+    const items = await this.earnings.find({ where: { reportDate: today } });
     if (!items.length) return;
     const favoriteRows = await this.favorites.find({
       where: { market: 'US', symbol: In(items.map((item) => item.symbol)) },
@@ -108,21 +103,18 @@ export class MarketNotificationJobsService {
       const audience = favoriteRows
         .filter((favorite) => favorite.symbol === item.symbol)
         .map((favorite) => favorite.userId);
-      const dDay = item.reportDate === today ? '오늘' : 'D-1';
       const timing = this.earningsTiming(item.timeOfTheDay);
       await this.notifications.sendToUsers(
         audience,
         {
           type: 'EARNINGS',
-          title: `${item.symbol} 실적 발표 ${dDay}`,
-          body: `${item.reportDate} · ${timing} · 예상 EPS ${
-            item.estimate ?? '미정'
-          }${item.currency ? ` ${item.currency}` : ''}`,
+          title: `${item.companyName || item.symbol} \uC2E4\uC801\uBC1C\uD45C \uC608\uC815`,
+          body: `${item.reportDate}, ${timing}, \uC608\uC0C1 EPS ${item.estimate ?? '\uBBF8\uC815'}${item.currency ? ` ${item.currency}` : ''}\n[15F \uC54C\uB9BC]`,
           url: `/?symbol=${encodeURIComponent(item.symbol)}&market=US`,
           data: { earningsId: item.id, reportDate: item.reportDate },
           tag: `earnings:${item.symbol}`,
         },
-        (userId) => `earnings:${userId}:${item.id}:${item.reportDate}:today`,
+        (userId) => `earnings:v2:${userId}:${item.id}:${item.reportDate}:today`,
       );
     }
   }
@@ -143,29 +135,38 @@ export class MarketNotificationJobsService {
     for (const item of items) {
       const events: Array<{ kind: 'subscription' | 'listing'; date: string }> =
         [];
-      if (item.subscriptionStartDate === today) {
+      if (item.subscriptionStartDate === today)
         events.push({ kind: 'subscription', date: item.subscriptionStartDate });
-      }
-      if (item.listingDate === today) {
+      if (item.listingDate === today)
         events.push({ kind: 'listing', date: item.listingDate });
-      }
       for (const event of events) {
-        const dDay = event.date === today ? '오늘' : 'D-1';
-        const label = event.kind === 'subscription' ? '청약 시작' : '상장';
-        const price =
-          item.confirmedOfferPrice ?? item.expectedOfferPrice ?? '가격 미정';
+        const label =
+          event.kind === 'subscription'
+            ? '\uACF5\uBAA8\uC8FC \uCCAD\uC57D \uC2DC\uC791\uC77C\uC785\uB2C8\uB2E4.'
+            : '\uC0C1\uC7A5\uC77C\uC785\uB2C8\uB2E4.';
+        const endDate =
+          event.kind === 'subscription'
+            ? (item.subscriptionEndDate ?? event.date)
+            : event.date;
+        const dateRange =
+          event.date === endDate ? event.date : `${event.date} ~ ${endDate}`;
+        const price = this.formatIpoPrice(
+          item.confirmedOfferPrice ?? item.expectedOfferPrice,
+        );
+        const underwriter =
+          item.underwriter?.trim() || '\uC8FC\uAD00\uC0AC \uBBF8\uC815';
         await this.notifications.sendToUsers(
           audience,
           {
             type: 'IPO',
-            title: `${item.corpName} ${label} today`,
-            body: `${event.date} · ${price}`,
+            title: `${item.corpName} ${label}`,
+            body: `${dateRange}\n${price}, ${underwriter}\n[15F \uC54C\uB9BC]`,
             url: '/calendar/ipo',
             data: { ipoId: item.id, kind: event.kind, date: event.date },
             tag: `ipo:${item.id}:${event.kind}`,
           },
           (userId) =>
-            `ipo:${userId}:${item.id}:${event.kind}:${event.date}:today`,
+            `ipo:v2:${userId}:${item.id}:${event.kind}:${event.date}:today`,
         );
       }
     }
@@ -207,10 +208,26 @@ export class MarketNotificationJobsService {
 
   private earningsTiming(value: string | null): string {
     const normalized = value?.toLowerCase() ?? '';
-    if (normalized.includes('pre')) return '장전';
+    if (normalized.includes('pre')) return '\uC7A5\uC804';
     if (normalized.includes('post') || normalized.includes('after'))
-      return '장후';
-    return '시간 미정';
+      return '\uC7A5\uD6C4';
+    return '\uC2DC\uAC04 \uBBF8\uC815';
+  }
+
+  private formatPrice(
+    value: number,
+    market: 'US' | 'KR',
+    currency?: string,
+  ): string {
+    if (market === 'KR')
+      return `${Math.round(value).toLocaleString('ko-KR')}\uC6D0`;
+    return `${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency || 'USD'}`;
+  }
+
+  private formatIpoPrice(value: string | null): string {
+    if (!value?.trim()) return '\uACF5\uBAA8\uAC00\uACA9 \uBBF8\uC815';
+    const trimmed = value.trim();
+    return trimmed.includes('\uC6D0') ? trimmed : `${trimmed}\uC6D0`;
   }
 
   private jobsEnabled(): boolean {

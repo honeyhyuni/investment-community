@@ -83,7 +83,7 @@ export function NotificationCenter({ accessToken }: { accessToken: string }) {
           </span>
         ) : null}
       </summary>
-      <div className="absolute right-0 z-50 mt-2 w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-border bg-surface shadow-xl">
+      <div className="fixed inset-x-3 top-[calc(4.75rem+env(safe-area-inset-top))] z-50 flex max-h-[calc(100dvh-6rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col overflow-hidden rounded-lg border border-border bg-surface shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:max-h-[min(42rem,calc(100dvh-7rem))] sm:w-96">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <p className="font-semibold">{ko ? "알림" : "Notifications"}</p>
           {data.unreadCount ? (
@@ -120,7 +120,7 @@ export function NotificationCenter({ accessToken }: { accessToken: string }) {
             ) : null}
           </div>
         ) : null}
-        <details className="border-b border-border">
+        <details className="shrink-0 border-b border-border">
           <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-surface-muted [&::-webkit-details-marker]:hidden">
             {ko
               ? "\uC54C\uB9BC \uC885\uB958 \uC124\uC815"
@@ -137,7 +137,7 @@ export function NotificationCenter({ accessToken }: { accessToken: string }) {
             />
           </div>
         </details>
-        <div className="max-h-[60vh] overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {data.items.length ? (
             data.items.map((item) => (
               <button
@@ -151,7 +151,7 @@ export function NotificationCenter({ accessToken }: { accessToken: string }) {
                 <p className="text-sm font-semibold text-foreground">
                   {item.title}
                 </p>
-                <p className="mt-1 line-clamp-2 text-xs text-muted">
+                <p className="mt-1 whitespace-pre-line break-words text-xs leading-5 text-muted">
                   {item.body}
                 </p>
                 <p className="mt-1 text-[11px] text-muted">

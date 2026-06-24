@@ -1595,8 +1595,11 @@ export class MarketsService {
       users.map((user) => user.id),
       {
         type: 'MARKET_BRIEFING',
-        title: `${briefing.market === 'KR' ? 'Korea' : 'US'} market ? ${briefing.title}`,
-        body: briefing.summaryLines[0] ?? briefing.summary.slice(0, 180),
+        title:
+          briefing.market === 'KR'
+            ? '\uD55C\uAD6D \uC2DC\uD669 \uC694\uC57D'
+            : '\uBBF8\uAD6D \uC2DC\uD669 \uC694\uC57D',
+        body: `${briefing.title}\n[15F \uC54C\uB9BC]`,
         url: `/market-briefing/${briefing.id}`,
         data: { briefingId: briefing.id, market: briefing.market },
         tag: `market-briefing:${briefing.market}`,
