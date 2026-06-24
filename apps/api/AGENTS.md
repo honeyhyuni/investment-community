@@ -158,7 +158,7 @@ US earnings automation is limited to S&P 500 symbols for Finnhub estimates/actua
   - `POST /api/markets/calendar/earnings/us/batch`
   - `POST /api/markets/calendar/earnings/us/actuals`
   - `POST /api/markets/calendar/earnings/us/sec-confirmations`
-- Production uses `synchronize: false`. Apply `sql/20260624_us_earnings_estimates.sql` before deploying the entity changes.
+- Production uses `synchronize: false`. Apply `sql/20260624_us_stock_financials.sql` for the SEC financial cache table and `sql/20260624_us_earnings_estimates.sql` for earnings estimate/actual columns before deploying the entity changes.
 
 S&P 500 financial statements are stored in PostgreSQL from SEC Company Facts. Annual and quarterly results are not Redis-owned data. The stock-detail chart remains annual; `/stocks/US/{symbol}/financials` provides the detailed annual/quarterly view, and `/stocks/US/{symbol}/earnings` provides estimate-versus-actual and historical comparisons.
 
