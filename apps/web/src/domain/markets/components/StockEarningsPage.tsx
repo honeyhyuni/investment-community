@@ -72,7 +72,7 @@ export function StockEarningsPage({ symbol }: { symbol: string }) {
   const latest = useMemo(() => rows[0] ?? null, [rows]);
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-5 pt-3 sm:pt-1">
       <div>
         <Link
           href={
@@ -97,14 +97,14 @@ export function StockEarningsPage({ symbol }: { symbol: string }) {
                 : "Estimates come from Alpha Vantage/Finnhub, preliminary actuals from Finnhub, and confirmed statements from SEC."}
             </p>
           </div>
-          <div className="inline-flex rounded-md border border-border bg-surface p-1">
+          <div className="inline-flex self-start rounded-lg border border-border bg-surface-muted p-0.5 shadow-sm">
             {(["USD", "KRW"] as const).map((currency) => (
               <button
                 key={currency}
                 type="button"
                 onClick={() => setDisplayCurrency(currency)}
                 className={
-                  "rounded px-4 py-2 text-sm font-semibold " +
+                  "min-h-8 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors " +
                   (displayCurrency === currency
                     ? "bg-primary text-on-primary"
                     : "text-muted hover:text-foreground")

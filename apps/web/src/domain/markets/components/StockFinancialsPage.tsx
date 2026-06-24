@@ -90,7 +90,7 @@ export function StockFinancialsPage({ symbol }: { symbol: string }) {
   }
 
   return (
-    <section className="space-y-5">
+    <section className="space-y-5 pt-3 sm:pt-1">
       <div>
         <Link
           href={
@@ -117,14 +117,14 @@ export function StockFinancialsPage({ symbol }: { symbol: string }) {
       {!loading && data ? (
         <>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="inline-flex rounded-md border border-border bg-surface p-1">
+            <div className="inline-flex self-start rounded-lg border border-border bg-surface-muted p-0.5 shadow-sm">
               {(["ANNUAL", "QUARTERLY"] as const).map((value) => (
                 <button
                   key={value}
                   type="button"
                   onClick={() => setTab(value)}
                   className={
-                    "rounded px-4 py-2 text-sm font-semibold " +
+                    "min-h-8 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors " +
                     (tab === value
                       ? "bg-primary text-on-primary"
                       : "text-muted hover:text-foreground")
@@ -140,14 +140,14 @@ export function StockFinancialsPage({ symbol }: { symbol: string }) {
                 </button>
               ))}
             </div>
-            <div className="inline-flex rounded-md border border-border bg-surface p-1">
+            <div className="inline-flex self-start rounded-lg border border-border bg-surface-muted p-0.5 shadow-sm">
               {(["USD", "KRW"] as const).map((currency) => (
                 <button
                   key={currency}
                   type="button"
                   onClick={() => changeDisplayCurrency(currency)}
                   className={
-                    "rounded px-4 py-2 text-sm font-semibold " +
+                    "min-h-8 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors " +
                     (displayCurrency === currency
                       ? "bg-primary text-on-primary"
                       : "text-muted hover:text-foreground")
