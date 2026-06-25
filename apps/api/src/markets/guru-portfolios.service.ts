@@ -18,6 +18,7 @@ import { StockMasterEntity } from './stock-master.entity';
 import { StockProfileEntity } from './stock-profile.entity';
 import { GuruSecurityMasterEntity } from './guru-security-master.entity';
 import { GuruSecDatasetEntity } from './guru-sec-dataset.entity';
+import { GuruEdgarFilingEntity } from './guru-edgar-filing.entity';
 
 type SeedHolding = {
   issuer: string;
@@ -73,6 +74,22 @@ type SecParsedDataset = {
   generatedAt: string;
   source: string;
   quarters: Record<string, SeedQuarter | undefined>;
+};
+
+type EdgarRecentFiling = {
+  accession: string;
+  form: string;
+  filingDate: string;
+  reportDate: string;
+  primaryDocument: string;
+};
+
+type EdgarRefreshResult = {
+  managers: number;
+  holdings: number;
+  skippedManagers: number;
+  failedManagers: number;
+  generatedAt: string;
 };
 
 type NasdaqScreenerRow = {
@@ -145,6 +162,8 @@ export class GuruPortfoliosService implements OnModuleInit {
     private readonly securityMasterRepository: Repository<GuruSecurityMasterEntity>,
     @InjectRepository(GuruSecDatasetEntity)
     private readonly secDatasetRepository: Repository<GuruSecDatasetEntity>,
+    @InjectRepository(GuruEdgarFilingEntity)
+    private readonly edgarFilingRepository: Repository<GuruEdgarFilingEntity>,
     private readonly configService: ConfigService,
   ) {}
 
@@ -159,15 +178,28 @@ export class GuruPortfoliosService implements OnModuleInit {
     );
   }
 
-  @Cron('0 10 6 * 2,5,8,11 *', { timeZone: 'Asia/Seoul' })
-  async runScheduledQuarterlyGuruBatch(): Promise<void> {
+  @Cron('0 0 7,13,21 10-25 2,5,8,11 *', { timeZone: 'Asia/Seoul' })
+  async runScheduledEdgarFastGuruBatch(): Promise<void> {
     if (!this.isScheduledJobsEnabled()) {
-      this.logger.log('Scheduled guru 13F batch disabled.');
+      this.logger.log('Scheduled guru EDGAR fast batch disabled.');
       return;
     }
-    const result = await this.refreshFromSecDatasets();
+    const result = await this.refreshFromEdgarFilings();
     this.logger.log(
-      `Scheduled guru 13F batch completed: managers=${result.managers}, holdings=${result.holdings}, skipped=${result.skippedManagers}, generatedAt=${result.generatedAt}.`,
+      `Scheduled guru EDGAR fast batch completed: managers=${result.managers}, holdings=${result.holdings}, skipped=${result.skippedManagers}, failed=${result.failedManagers}, generatedAt=${result.generatedAt}.`,
+    );
+  }
+
+  @Cron('0 10 6 * * 0', { timeZone: 'Asia/Seoul' })
+  async runScheduledWeeklyGuruBackfillBatch(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) {
+      this.logger.log('Scheduled weekly guru 13F backfill disabled.');
+      return;
+    }
+    const edgar = await this.refreshFromEdgarFilings();
+    const sec = edgar.holdings > 0 ? null : await this.refreshFromSecDatasets();
+    this.logger.log(
+      `Scheduled weekly guru 13F backfill completed: edgarHoldings=${edgar.holdings}, edgarSkipped=${edgar.skippedManagers}, edgarFailed=${edgar.failedManagers}, secHoldings=${sec?.holdings ?? 0}, generatedAt=${edgar.generatedAt}.`,
     );
   }
 
@@ -187,12 +219,15 @@ export class GuruPortfoliosService implements OnModuleInit {
     managers: number;
     holdings: number;
     skippedManagers: number;
+    failedManagers: number;
     generatedAt: string;
+    secDataset: { managers: number; holdings: number; skippedManagers: number; generatedAt: string } | null;
     nasdaq: { scanned: number; updated: number; failed: number };
   }> {
-    const guru = await this.refreshFromSecDatasets({ force });
+    const edgar = await this.refreshFromEdgarFilings({ force });
+    const secDataset = edgar.holdings > 0 ? null : await this.refreshFromSecDatasets({ force });
     const nasdaq = await this.refreshNasdaqClassifications();
-    return { ...guru, nasdaq };
+    return { ...edgar, secDataset, nasdaq };
   }
 
   async getManagers(): Promise<GuruSummaryResponse[]> {
@@ -285,6 +320,274 @@ export class GuruPortfoliosService implements OnModuleInit {
     };
   }
 
+  async refreshFromEdgarFilings(options: { force?: boolean } = {}): Promise<EdgarRefreshResult> {
+    const baseSeed = this.readSeed();
+    const current: Record<string, SeedQuarter | undefined> = {};
+    let skippedManagers = 0;
+    let failedManagers = 0;
+
+    for (const definition of baseSeed.managers) {
+      const normalizedCik = this.normalizeCik(definition.cik);
+      try {
+        const latest = await this.fetchLatestEdgar13F(normalizedCik);
+        if (!latest) {
+          skippedManagers += 1;
+          current[definition.cik] =
+            (await this.buildExistingCurrentQuarter(definition)) ??
+            baseSeed.quarters.current[definition.cik];
+          continue;
+        }
+        const managerId = this.stableId(`manager:${definition.slug}`);
+        const existingManager = await this.managerRepository.findOne({ where: { id: managerId } });
+        if (!options.force && existingManager?.accessionNumber === latest.accession) {
+          skippedManagers += 1;
+          current[definition.cik] = {
+            accession: latest.accession,
+            cik: normalizedCik,
+            filingDate: latest.filingDate,
+            reportDate: latest.reportDate,
+            type: latest.form,
+            holdings: [],
+          };
+          continue;
+        }
+
+        const filingBaseUrl = this.edgarFilingBaseUrl(normalizedCik, latest.accession);
+        const filing = await this.upsertEdgarFiling(normalizedCik, latest, filingBaseUrl);
+        const infoTableUrl = await this.findEdgarInfoTableUrl(normalizedCik, latest.accession, latest.primaryDocument);
+        filing.infoTableUrl = infoTableUrl;
+        filing.status = 'downloaded';
+        filing.downloadedAt = new Date();
+        await this.edgarFilingRepository.save(filing);
+
+        const xml = await this.fetchText(infoTableUrl, 'application/xml,text/xml,text/plain,*/*');
+        const holdings = this.parseEdgarInfoTableXml(xml);
+        if (!holdings.length) {
+          throw new Error(`No holdings parsed from EDGAR info table: ${infoTableUrl}`);
+        }
+        filing.status = 'parsed';
+        filing.parsedAt = new Date();
+        filing.holdingsCount = holdings.length;
+        await this.edgarFilingRepository.save(filing);
+
+        current[definition.cik] = {
+          accession: latest.accession,
+          cik: normalizedCik,
+          filingDate: latest.filingDate,
+          reportDate: latest.reportDate,
+          type: latest.form,
+          holdings,
+        };
+      } catch (error) {
+        failedManagers += 1;
+        current[definition.cik] =
+          (await this.buildExistingCurrentQuarter(definition)) ??
+          baseSeed.quarters.current[definition.cik];
+        this.logger.warn(
+          `Failed to refresh EDGAR 13F for ${definition.slug}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    const seed: GuruSeed = {
+      ...baseSeed,
+      generatedAt: new Date().toISOString(),
+      source: 'SEC EDGAR submissions',
+      quarters: {
+        current,
+        previous: await this.buildPreviousQuartersFromCurrentDb(baseSeed),
+      },
+    };
+    const result = await this.applyGuruSeed(seed, options);
+    for (const quarter of Object.values(current)) {
+      if (!quarter?.accession) {
+        continue;
+      }
+      await this.edgarFilingRepository.update(
+        { accessionNumber: quarter.accession },
+        { status: 'applied', appliedAt: new Date(), lastError: null },
+      );
+    }
+    return { ...result, failedManagers };
+  }
+  private async buildExistingCurrentQuarter(definition: GuruSeed['managers'][number]): Promise<SeedQuarter | null> {
+    const manager = await this.managerRepository.findOne({
+      where: { id: this.stableId(`manager:${definition.slug}`) },
+    });
+    if (!manager?.accessionNumber) {
+      return null;
+    }
+    return {
+      accession: manager.accessionNumber,
+      cik: this.normalizeCik(definition.cik),
+      filingDate: manager.filingDate ?? '',
+      reportDate: manager.reportDate ?? '',
+      holdings: [],
+    };
+  }
+
+  private async fetchLatestEdgar13F(cik: string): Promise<EdgarRecentFiling | null> {
+    const payload = await this.fetchJson<{
+      filings?: {
+        recent?: {
+          accessionNumber?: string[];
+          form?: string[];
+          filingDate?: string[];
+          reportDate?: string[];
+          primaryDocument?: string[];
+        };
+      };
+    }>(`https://data.sec.gov/submissions/CIK${cik}.json`);
+    const recent = payload.filings?.recent;
+    const accessions = recent?.accessionNumber ?? [];
+    for (let index = 0; index < accessions.length; index += 1) {
+      const form = recent?.form?.[index] ?? '';
+      if (!form.startsWith('13F-HR')) {
+        continue;
+      }
+      return {
+        accession: accessions[index],
+        form,
+        filingDate: this.normalizeSecDate(recent?.filingDate?.[index] ?? ''),
+        reportDate: this.normalizeSecDate(recent?.reportDate?.[index] ?? ''),
+        primaryDocument: recent?.primaryDocument?.[index] ?? '',
+      };
+    }
+    return null;
+  }
+
+  private async upsertEdgarFiling(
+    cik: string,
+    filing: EdgarRecentFiling,
+    filingBaseUrl: string,
+  ): Promise<GuruEdgarFilingEntity> {
+    const existing = await this.edgarFilingRepository.findOne({
+      where: { accessionNumber: filing.accession },
+    });
+    const entity = existing ?? this.edgarFilingRepository.create({
+      id: this.stableId(`edgar-13f:${filing.accession}`),
+      cik,
+      accessionNumber: filing.accession,
+      formType: filing.form,
+      filingDate: filing.filingDate || null,
+      reportDate: filing.reportDate || null,
+      filingUrl: filingBaseUrl,
+      infoTableUrl: null,
+      status: 'discovered',
+      holdingsCount: 0,
+      lastError: null,
+      downloadedAt: null,
+      parsedAt: null,
+      appliedAt: null,
+    });
+    entity.cik = cik;
+    entity.formType = filing.form;
+    entity.filingDate = filing.filingDate || null;
+    entity.reportDate = filing.reportDate || null;
+    entity.filingUrl = filingBaseUrl;
+    entity.lastError = null;
+    return this.edgarFilingRepository.save(entity);
+  }
+
+  private async findEdgarInfoTableUrl(
+    cik: string,
+    accession: string,
+    primaryDocument: string,
+  ): Promise<string> {
+    const filingBaseUrl = this.edgarFilingBaseUrl(cik, accession);
+    const index = await this.fetchJson<{
+      directory?: { item?: Array<{ name?: string; type?: string; size?: string }> };
+    }>(`${filingBaseUrl}/index.json`);
+    const items = index.directory?.item ?? [];
+    const candidates = items
+      .map((item) => item.name ?? '')
+      .filter((name) => name && name !== primaryDocument)
+      .filter((name) => /\.xml$/i.test(name))
+      .sort((a, b) => this.edgarInfoTableScore(b) - this.edgarInfoTableScore(a));
+    const selected = candidates[0] ?? items.map((item) => item.name ?? '').find((name) => /infotable/i.test(name));
+    if (!selected) {
+      throw new Error(`EDGAR info table XML was not found for ${accession}.`);
+    }
+    return `${filingBaseUrl}/${selected}`;
+  }
+
+  private edgarInfoTableScore(name: string): number {
+    const lower = name.toLowerCase();
+    let score = 0;
+    if (lower.includes('infotable')) score += 100;
+    if (lower.includes('form13f')) score += 50;
+    if (!lower.includes('primary')) score += 10;
+    return score;
+  }
+
+  private parseEdgarInfoTableXml(xml: string): SeedHolding[] {
+    const blocks = [...xml.matchAll(/<infoTable\b[\s\S]*?<\/infoTable>/gi)].map((match) => match[0]);
+    return blocks
+      .map((block): SeedHolding | null => {
+        const value = this.parseSecNumber(this.xmlValue(block, 'value')) * 1000;
+        const shares = this.parseSecNumber(this.xmlValue(block, 'sshPrnamt'));
+        const holding: SeedHolding = {
+          issuer: this.xmlValue(block, 'nameOfIssuer') || 'Unknown issuer',
+          classTitle: this.xmlValue(block, 'titleOfClass') || 'COMMON STOCK',
+          cusip: this.xmlValue(block, 'cusip'),
+          figi: this.xmlValue(block, 'figi') || null,
+          value,
+          shares,
+          shareType: this.xmlValue(block, 'sshPrnamtType') || undefined,
+          putCall: this.xmlValue(block, 'putCall') || null,
+        };
+        return holding.cusip && holding.value > 0 ? holding : null;
+      })
+      .filter((holding): holding is SeedHolding => Boolean(holding));
+  }
+
+  private xmlValue(block: string, tagName: string): string {
+    const match = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i').exec(block);
+    return match ? this.decodeXml(match[1].trim()) : '';
+  }
+
+  private decodeXml(value: string): string {
+    return value
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&#x27;/g, "'");
+  }
+
+  private edgarFilingBaseUrl(cik: string, accession: string): string {
+    const cikNumber = String(Number(cik));
+    return `https://www.sec.gov/Archives/edgar/data/${cikNumber}/${accession.replace(/-/g, '')}`;
+  }
+
+  private async fetchJson<T>(url: string): Promise<T> {
+    const response = await fetch(url, {
+      headers: {
+        accept: 'application/json',
+        'user-agent': this.secUserAgent(),
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`SEC JSON request failed (${response.status}): ${url}`);
+    }
+    return (await response.json()) as T;
+  }
+
+  private async fetchText(url: string, accept: string): Promise<string> {
+    const response = await fetch(url, {
+      headers: {
+        accept,
+        'user-agent': this.secUserAgent(),
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`SEC text request failed (${response.status}): ${url}`);
+    }
+    return response.text();
+  }
   async refreshFromSecDatasets(options: { force?: boolean } = {}): Promise<{
     managers: number;
     holdings: number;
@@ -722,6 +1025,10 @@ export class GuruPortfoliosService implements OnModuleInit {
         !options.force &&
         Boolean(seedAccession) &&
         existingManager?.accessionNumber === seedAccession;
+      if (shouldSkipHoldings) {
+        skippedManagers += 1;
+        continue;
+      }
       const manager = this.managerRepository.create({
         id: managerId,
         ...definition,
@@ -733,10 +1040,6 @@ export class GuruPortfoliosService implements OnModuleInit {
         enabled: true,
       });
       await this.managerRepository.save(manager);
-      if (shouldSkipHoldings) {
-        skippedManagers += 1;
-        continue;
-      }
       await this.holdingRepository.delete({ managerId });
 
       const previousByPosition = new Map(

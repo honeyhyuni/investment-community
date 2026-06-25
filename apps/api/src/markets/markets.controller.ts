@@ -412,7 +412,9 @@ export class MarketsController {
     managers: number;
     holdings: number;
     skippedManagers: number;
+    failedManagers: number;
     generatedAt: string;
+    secDataset: { managers: number; holdings: number; skippedManagers: number; generatedAt: string } | null;
     nasdaq: { scanned: number; updated: number; failed: number };
   }> {
     return this.guruPortfoliosService.refreshOperationalBatch(force === 'true');
