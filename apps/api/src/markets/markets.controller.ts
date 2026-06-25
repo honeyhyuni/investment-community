@@ -408,13 +408,14 @@ export class MarketsController {
   @Post('gurus/batch')
   @UseGuards(RolesGuard)
   @Roles(UserRole.Admin)
-  refreshGuruPortfolios(): Promise<{
+  refreshGuruPortfolios(@Query('force') force?: string): Promise<{
     managers: number;
     holdings: number;
+    skippedManagers: number;
     generatedAt: string;
     nasdaq: { scanned: number; updated: number; failed: number };
   }> {
-    return this.guruPortfoliosService.refreshOperationalBatch();
+    return this.guruPortfoliosService.refreshOperationalBatch(force === 'true');
   }
 
   private formatDateOffset(offsetDays: number): string {

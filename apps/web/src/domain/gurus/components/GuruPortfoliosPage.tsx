@@ -163,7 +163,7 @@ function quarterLabel(reportDate: string | null): string {
   if (!reportDate) return "";
   const date = new Date(`${reportDate}T00:00:00Z`);
   const quarter = Math.floor(date.getUTCMonth() / 3) + 1;
-  return `${date.getUTCFullYear()} .Q${quarter}`.replace(" ", "");
+  return `${date.getUTCFullYear()} Q${quarter}`;
 }
 
 function HoldingRows({
@@ -352,6 +352,9 @@ export function GuruPortfoliosPage({
                 </div>
                 <h2 className="mt-4 text-lg font-semibold">{manager.personName}</h2>
                 <p className="mt-1 truncate text-sm text-muted">{manager.firmName}</p>
+                <p className="mt-2 text-xs font-semibold text-primary">
+                  {manager.reportDate ? `${quarterLabel(manager.reportDate)} ${ko ? "기준" : "as of"}` : ko ? "최근 자료 없음" : "No recent filing"}
+                </p>
                 <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
                   <div><p className="text-xs text-muted">{ko ? "13F 규모" : "13F value"}</p><p className="mt-1 font-semibold">{formatMoney(manager.totalValue)}</p></div>
                   <div><p className="text-xs text-muted">{ko ? "보유 종목" : "Positions"}</p><p className="mt-1 font-semibold">{manager.positionCount}</p></div>
@@ -387,7 +390,7 @@ export function GuruPortfoliosPage({
           <div className="text-right text-sm">
             <p className="font-semibold">{formatMoney(detail.totalValue)} · {detail.positionCount} {ko ? "종목" : "positions"}</p>
             <p className="mt-1 text-xs text-muted">
-              {detail.reportDate ? `${detail.reportDate} ${ko ? "기준" : "as of"}` : ko ? "최근 자료 없음" : "No recent filing"}
+              {detail.reportDate ? `${quarterLabel(detail.reportDate)} ${ko ? "기준" : "as of"}` : ko ? "최근 자료 없음" : "No recent filing"}
             </p>
           </div>
         </div>

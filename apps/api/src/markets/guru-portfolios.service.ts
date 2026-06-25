@@ -158,13 +158,14 @@ export class GuruPortfoliosService implements OnModuleInit {
     );
   }
 
-  async refreshOperationalBatch(): Promise<{
+  async refreshOperationalBatch(force = false): Promise<{
     managers: number;
     holdings: number;
+    skippedManagers: number;
     generatedAt: string;
     nasdaq: { scanned: number; updated: number; failed: number };
   }> {
-    const guru = await this.refreshFromOfficialSeed();
+    const guru = await this.refreshFromOfficialSeed({ force });
     const nasdaq = await this.refreshNasdaqClassifications();
     return { ...guru, nasdaq };
   }
@@ -259,9 +260,10 @@ export class GuruPortfoliosService implements OnModuleInit {
     };
   }
 
-  async refreshFromOfficialSeed(): Promise<{
+  async refreshFromOfficialSeed(options: { force?: boolean } = {}): Promise<{
     managers: number;
     holdings: number;
+    skippedManagers: number;
     generatedAt: string;
   }> {
     const seed = this.readSeed();
@@ -272,6 +274,7 @@ export class GuruPortfoliosService implements OnModuleInit {
       ),
     );
     let holdingCount = 0;
+    let skippedManagers = 0;
 
     for (const definition of seed.managers) {
       const current = seed.quarters.current[definition.cik];
@@ -287,17 +290,29 @@ export class GuruPortfoliosService implements OnModuleInit {
         0,
       );
       const managerId = this.stableId(`manager:${definition.slug}`);
+      const seedAccession = current?.accession ?? null;
+      const existingManager = await this.managerRepository.findOne({
+        where: { id: managerId },
+      });
+      const shouldSkipHoldings =
+        !options.force &&
+        Boolean(seedAccession) &&
+        existingManager?.accessionNumber === seedAccession;
       const manager = this.managerRepository.create({
         id: managerId,
         ...definition,
         reportDate: current?.reportDate ?? null,
         filingDate: current?.filingDate ?? null,
-        accessionNumber: current?.accession ?? null,
+        accessionNumber: seedAccession,
         totalValue,
         positionCount: currentHoldings.length,
         enabled: true,
       });
       await this.managerRepository.save(manager);
+      if (shouldSkipHoldings) {
+        skippedManagers += 1;
+        continue;
+      }
       await this.holdingRepository.delete({ managerId });
 
       const previousByPosition = new Map(
@@ -364,6 +379,7 @@ export class GuruPortfoliosService implements OnModuleInit {
     return {
       managers: seed.managers.length,
       holdings: holdingCount,
+      skippedManagers,
       generatedAt: seed.generatedAt,
     };
   }
@@ -373,7 +389,17 @@ export class GuruPortfoliosService implements OnModuleInit {
     updated: number;
     failed: number;
   }> {
-    const rows = await this.fetchNasdaqRows();
+    let rows: NasdaqScreenerRow[];
+    try {
+      rows = await this.fetchNasdaqRows();
+    } catch (error) {
+      this.logger.warn(
+        `Failed to fetch Nasdaq screener rows for guru classifications: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return { scanned: 0, updated: 0, failed: 1 };
+    }
     const bySymbol = new Map(
       rows
         .filter((row) => row.symbol)
