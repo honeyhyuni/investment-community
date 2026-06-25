@@ -162,6 +162,24 @@ US earnings automation is limited to S&P 500 symbols for Finnhub estimates/actua
 
 S&P 500 financial statements are stored in PostgreSQL from SEC Company Facts. Annual and quarterly results are not Redis-owned data. The stock-detail chart remains annual; `/stocks/US/{symbol}/financials` provides the detailed annual/quarterly view, and `/stocks/US/{symbol}/earnings` provides estimate-versus-actual and historical comparisons.
 
+## Guru 13F Portfolios
+
+The Guru/13F feature lives in `src/markets/guru-portfolios.service.ts` and exposes:
+
+- `GET /api/markets/gurus`
+- `GET /api/markets/gurus/:slug`
+- Admin manual batch: `POST /api/markets/gurus/batch`
+
+Operational schedule uses `Asia/Seoul` and respects `ENABLE_SCHEDULED_JOBS` like other market jobs.
+
+- Quarterly 13F refresh: `06:10` every day only during February, May, August, and November. The current implementation syncs the checked-in SEC seed into PostgreSQL.
+- Nasdaq price/industry refresh: weekly Sunday `04:30`. It updates `guru_security_master.current_price`, `price_updated_at`, sector, industry, and name from the Nasdaq screener payload.
+- The manual admin endpoint runs both steps once: seed sync plus Nasdaq classification/price refresh.
+
+Production has `synchronize: false`. Before deploying the price-aware guru batch, apply `sql/20260625_guru_security_master_prices.sql`.
+
+Do not hard-delete existing guru data before a new batch is known good. For a future full SEC downloader, write into staging or skip unchanged accessions, then atomically swap/update manager holdings only after the download and normalization succeed.
+
 ## PWA Push Notifications
 
 Push notifications use `web-push` with VAPID and are implemented under `src/notifications`.

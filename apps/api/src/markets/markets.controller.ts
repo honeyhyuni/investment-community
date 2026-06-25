@@ -37,6 +37,11 @@ import {
   UsStockFinancialsService,
   type UsStockFinancialResponse,
 } from './us-stock-financials.service';
+import {
+  GuruPortfoliosService,
+  type GuruDetailResponse,
+  type GuruSummaryResponse,
+} from './guru-portfolios.service';
 
 @Controller('markets')
 @UseGuards(JwtAuthGuard)
@@ -49,6 +54,7 @@ export class MarketsController {
     private readonly ipoCalendarBatchService: IpoCalendarBatchService,
     private readonly usEarningsCalendarBatchService: UsEarningsCalendarBatchService,
     private readonly usStockFinancialsService: UsStockFinancialsService,
+    private readonly guruPortfoliosService: GuruPortfoliosService,
   ) {}
 
   @Get('quotes')
@@ -263,6 +269,16 @@ export class MarketsController {
     return this.marketsService.getMarketBriefingById(id);
   }
 
+  @Get('gurus')
+  getGuruManagers(): Promise<GuruSummaryResponse[]> {
+    return this.guruPortfoliosService.getManagers();
+  }
+
+  @Get('gurus/:slug')
+  getGuruManager(@Param('slug') slug: string): Promise<GuruDetailResponse> {
+    return this.guruPortfoliosService.getManager(slug);
+  }
+
   @Patch('briefings/:id')
   @UseGuards(RolesGuard)
   @Roles(UserRole.Admin)
@@ -387,6 +403,18 @@ export class MarketsController {
     confirmed: number;
   }> {
     return this.usEarningsCalendarBatchService.refreshSecConfirmations();
+  }
+
+  @Post('gurus/batch')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  refreshGuruPortfolios(): Promise<{
+    managers: number;
+    holdings: number;
+    generatedAt: string;
+    nasdaq: { scanned: number; updated: number; failed: number };
+  }> {
+    return this.guruPortfoliosService.refreshOperationalBatch();
   }
 
   private formatDateOffset(offsetDays: number): string {

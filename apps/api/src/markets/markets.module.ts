@@ -22,6 +22,10 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { MarketNotificationJobsService } from './market-notification-jobs.service';
 import { UsStockFinancialEntity } from './us-stock-financial.entity';
 import { UsStockFinancialsService } from './us-stock-financials.service';
+import { GuruManagerEntity } from './guru-manager.entity';
+import { GuruHoldingEntity } from './guru-holding.entity';
+import { GuruPortfoliosService } from './guru-portfolios.service';
+import { GuruSecurityMasterEntity } from './guru-security-master.entity';
 
 @Module({
   imports: [
@@ -38,6 +42,9 @@ import { UsStockFinancialsService } from './us-stock-financials.service';
       UsEarningsCalendarEntity,
       User,
       UsStockFinancialEntity,
+      GuruManagerEntity,
+      GuruHoldingEntity,
+      GuruSecurityMasterEntity,
     ]),
   ],
   controllers: [MarketsController],
@@ -51,6 +58,7 @@ import { UsStockFinancialsService } from './us-stock-financials.service';
     UsEarningsCalendarBatchService,
     MarketNotificationJobsService,
     UsStockFinancialsService,
+    GuruPortfoliosService,
   ],
 })
 /** Wires market quotes, stock metadata, financial batches, briefings, and sockets. */

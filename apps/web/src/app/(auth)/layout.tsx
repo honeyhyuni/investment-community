@@ -10,6 +10,7 @@ import {
   ChevronDown,
   FileText,
   LogOut,
+  Landmark,
   MessageSquareText,
   Moon,
   Newspaper,
@@ -27,7 +28,7 @@ import { MarketPulseContainer } from "@/domain/markets/components/MarketPulseCon
 import { NotificationCenter } from "@/domain/notifications/components/NotificationCenter";
 
 const NAV_ITEMS: Array<{
-  id: "stocks" | "favorites" | "news" | "marketBriefing" | "community" | "calendar" | "admin";
+  id: "stocks" | "favorites" | "news" | "marketBriefing" | "community" | "calendar" | "gurus" | "admin";
   href: string;
   label: { en: string; ko: string };
   icon: typeof BarChart3;
@@ -39,6 +40,7 @@ const NAV_ITEMS: Array<{
   { id: "news", href: "/news", label: { en: "News", ko: "뉴스" }, icon: Newspaper },
   { id: "community", href: "/community", label: { en: "Community", ko: "피드" }, icon: MessageSquareText },
   { id: "calendar", href: "/calendar", label: { en: "Calendar", ko: "캘린더" }, icon: CalendarDays },
+  { id: "gurus", href: "/gurus", label: { en: "Gurus", ko: "거장" }, icon: Landmark },
   { id: "admin", href: "/admin", label: { en: "Admin", ko: "관리" }, icon: ShieldCheck, adminOnly: true },
 ];
 
