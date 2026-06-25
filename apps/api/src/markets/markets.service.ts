@@ -319,6 +319,34 @@ export class MarketsService {
     };
   }
 
+  async getFreshStockQuoteForNotification(
+    symbol: string,
+    market: 'US' | 'KR',
+  ): Promise<MarketQuote> {
+    const normalizedSymbol = symbol.toUpperCase().trim();
+    if (market === 'KR') {
+      const masterStock = await this.stockMasterRepository.findOne({
+        where: { symbol: normalizedSymbol, active: true },
+      });
+      const stock: KisStock = {
+        symbol: normalizedSymbol,
+        name: masterStock?.name ?? normalizedSymbol,
+        marketDiv: masterStock?.market === 'KR:KOSDAQ' ? 'Q' : 'J',
+      };
+      const output =
+        await this.getNaverKoreanStockPriceOutput(normalizedSymbol);
+      return this.buildKoreanQuote(stock, output);
+    }
+
+    const masterStock = await this.stockMasterRepository.findOne({
+      where: { symbol: normalizedSymbol, market: 'US', active: true },
+    });
+    return {
+      name: masterStock?.name ?? normalizedSymbol,
+      ...(await this.getQuote(normalizedSymbol)),
+    };
+  }
+
   private async getUsStockQuoteCached(
     symbol: string,
     maxAgeMs = 15_000,
@@ -1424,7 +1452,10 @@ export class MarketsService {
       low: this.toNumber(output.stck_lwpr),
       open: this.toNumber(output.stck_oprc),
       previousClose: this.toNumber(output.prdy_clpr ?? output.stck_prpr),
-      timestamp: Math.floor(Date.now() / 1000),
+      timestamp: output.quote_timestamp
+        ? Math.floor(new Date(output.quote_timestamp).getTime() / 1000)
+        : Math.floor(Date.now() / 1000),
+      marketStatus: output.market_status,
     };
     const profile: CompanyProfile = {
       ticker: normalizedSymbol,
@@ -4296,7 +4327,10 @@ export class MarketsService {
       low: this.toNumber(output.stck_lwpr),
       open: this.toNumber(output.stck_oprc),
       previousClose: this.toNumber(output.prdy_clpr ?? output.stck_prpr),
-      timestamp: Math.floor(Date.now() / 1000),
+      timestamp: output.quote_timestamp
+        ? Math.floor(new Date(output.quote_timestamp).getTime() / 1000)
+        : Math.floor(Date.now() / 1000),
+      marketStatus: output.market_status,
     };
   }
 
@@ -4585,6 +4619,8 @@ export class MarketsService {
       highPrice?: string;
       lowPrice?: string;
       marketValue?: string;
+      marketStatus?: string;
+      localTradedAt?: string;
     };
     return {
       stck_prpr: body.closePrice,
@@ -4594,6 +4630,8 @@ export class MarketsService {
       stck_hgpr: body.highPrice,
       stck_lwpr: body.lowPrice,
       hts_avls: body.marketValue,
+      market_status: body.marketStatus,
+      quote_timestamp: body.localTradedAt,
     };
   }
 

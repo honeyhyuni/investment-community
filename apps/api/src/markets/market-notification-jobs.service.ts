@@ -44,10 +44,11 @@ export class MarketNotificationJobsService {
     for (const group of symbols.values()) {
       const stock = group[0];
       try {
-        const quote = await this.markets.getStockQuote(
+        const quote = await this.markets.getFreshStockQuoteForNotification(
           stock.symbol,
           stock.market,
         );
+        if (!this.isFreshRegularSessionQuote(quote, stock.market)) continue;
         const percent = quote.percentChange;
         const band = Math.floor(Math.abs(percent) / 5) * 5;
         if (!Number.isFinite(percent) || band < 5) continue;
@@ -187,8 +188,46 @@ export class MarketNotificationJobsService {
     if (values.weekday === 'Sat' || values.weekday === 'Sun') return false;
     const minutes = Number(values.hour) * 60 + Number(values.minute);
     return market === 'KR'
-      ? minutes >= 9 * 60 && minutes <= 15 * 60 + 30
-      : minutes >= 9 * 60 + 30 && minutes <= 16 * 60;
+      ? minutes >= 9 * 60 + 5 && minutes <= 15 * 60 + 30
+      : minutes >= 9 * 60 + 35 && minutes <= 16 * 60;
+  }
+
+  private isFreshRegularSessionQuote(
+    quote: { timestamp: number; marketStatus?: string },
+    market: 'US' | 'KR',
+  ): boolean {
+    if (!Number.isFinite(quote.timestamp) || quote.timestamp <= 0) return false;
+    if (market === 'KR' && quote.marketStatus?.toUpperCase() !== 'OPEN') {
+      return false;
+    }
+
+    const zone = market === 'KR' ? 'Asia/Seoul' : 'America/New_York';
+    const toValues = (date: Date) =>
+      Object.fromEntries(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: zone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hourCycle: 'h23',
+        })
+          .formatToParts(date)
+          .map((part) => [part.type, part.value]),
+      );
+    const now = toValues(new Date());
+    const tradedAt = toValues(new Date(quote.timestamp * 1000));
+    if (
+      now.year !== tradedAt.year ||
+      now.month !== tradedAt.month ||
+      now.day !== tradedAt.day
+    ) {
+      return false;
+    }
+    const tradedMinutes = Number(tradedAt.hour) * 60 + Number(tradedAt.minute);
+    const openMinutes = market === 'KR' ? 9 * 60 : 9 * 60 + 30;
+    return tradedMinutes >= openMinutes;
   }
 
   private dateKey(date: Date, timeZone: string): string {

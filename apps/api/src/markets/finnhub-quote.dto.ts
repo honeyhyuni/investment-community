@@ -21,6 +21,7 @@ export type MarketQuote = {
   open: number;
   previousClose: number;
   timestamp: number;
+  marketStatus?: string;
 };
 
 export type StockSymbol = {

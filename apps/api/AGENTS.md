@@ -174,7 +174,7 @@ Push notifications use `web-push` with VAPID and are implemented under `src/noti
 - Preference defaults: earnings, IPO, and market briefing enabled; price, community reactions, and subscribed-author posts disabled.
 - Earnings notifications run daily at 09:00 Asia/Seoul and send only on the report date, only to users who favorited the US symbol and enabled earnings notifications.
 - IPO notifications run daily at 09:00 Asia/Seoul and send only on the subscription start date or listing date, to approved users who enabled IPO notifications. D-1 notifications are intentionally not sent.
-- Price-band checks run every minute during each market's regular session. Favorites are deduplicated by market/symbol before quote lookup. A user receives each direction/5-percent band at most once per trading date.
+- Price-band checks run every minute after a five-minute market-open warm-up (KR 09:05 KST, US 09:35 America/New_York). The job bypasses Redis quote caches and requires a provider timestamp from today's regular session; KR additionally requires Naver `marketStatus=OPEN`. Stale prior-session values are skipped. Favorites are deduplicated by market/symbol, and a user receives each direction/5-percent band at most once per trading date.
 - Comments/replies and first publication of subscribed-author posts notify immediately after DB save. Self-reactions are excluded.
 - Likes are grouped by post every 15 minutes.
 - Market briefings notify only after a briefing row is successfully saved.
