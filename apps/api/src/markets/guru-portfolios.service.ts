@@ -523,7 +523,7 @@ export class GuruPortfoliosService implements OnModuleInit {
   }
 
   private parseEdgarInfoTableXml(xml: string): SeedHolding[] {
-    const blocks = [...xml.matchAll(/<infoTable\b[\s\S]*?<\/infoTable>/gi)].map((match) => match[0]);
+    const blocks = [...xml.matchAll(new RegExp('<(?:\\\\w+:)?infoTable\\\\b[\\\\s\\\\S]*?</(?:\\\\w+:)?infoTable>', 'gi'))].map((match) => match[0]);
     return blocks
       .map((block): SeedHolding | null => {
         const value = this.parseSecNumber(this.xmlValue(block, 'value')) * 1000;
@@ -544,7 +544,7 @@ export class GuruPortfoliosService implements OnModuleInit {
   }
 
   private xmlValue(block: string, tagName: string): string {
-    const match = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i').exec(block);
+    const match = new RegExp(`<(?:\\w+:)?${tagName}[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?${tagName}>`, 'i').exec(block);
     return match ? this.decodeXml(match[1].trim()) : '';
   }
 
