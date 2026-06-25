@@ -26,6 +26,7 @@ import { GuruManagerEntity } from './guru-manager.entity';
 import { GuruHoldingEntity } from './guru-holding.entity';
 import { GuruPortfoliosService } from './guru-portfolios.service';
 import { GuruSecurityMasterEntity } from './guru-security-master.entity';
+import { GuruSecDatasetEntity } from './guru-sec-dataset.entity';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { GuruSecurityMasterEntity } from './guru-security-master.entity';
       GuruManagerEntity,
       GuruHoldingEntity,
       GuruSecurityMasterEntity,
+      GuruSecDatasetEntity,
     ]),
   ],
   controllers: [MarketsController],

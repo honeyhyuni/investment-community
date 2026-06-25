@@ -8,14 +8,16 @@ import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'crypto';
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
+import * as yauzl from 'yauzl';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { basename, join } from 'path';
 import { In, Repository } from 'typeorm';
 import { GuruHoldingEntity } from './guru-holding.entity';
 import { GuruManagerEntity } from './guru-manager.entity';
 import { StockMasterEntity } from './stock-master.entity';
 import { StockProfileEntity } from './stock-profile.entity';
 import { GuruSecurityMasterEntity } from './guru-security-master.entity';
+import { GuruSecDatasetEntity } from './guru-sec-dataset.entity';
 
 type SeedHolding = {
   issuer: string;
@@ -33,6 +35,7 @@ type SeedQuarter = {
   cik: string;
   filingDate: string;
   reportDate: string;
+  type?: string;
   holdings: SeedHolding[];
 };
 
@@ -50,6 +53,26 @@ type GuruSeed = {
     current: Record<string, SeedQuarter | undefined>;
     previous: Record<string, SeedQuarter | undefined>;
   };
+};
+
+type SecDatasetLink = {
+  label: string;
+  url: string;
+  fileName: string;
+};
+
+type SecSubmission = {
+  accession: string;
+  cik: string;
+  filingDate: string;
+  reportDate: string;
+  type: string;
+};
+
+type SecParsedDataset = {
+  generatedAt: string;
+  source: string;
+  quarters: Record<string, SeedQuarter | undefined>;
 };
 
 type NasdaqScreenerRow = {
@@ -120,6 +143,8 @@ export class GuruPortfoliosService implements OnModuleInit {
     private readonly profileRepository: Repository<StockProfileEntity>,
     @InjectRepository(GuruSecurityMasterEntity)
     private readonly securityMasterRepository: Repository<GuruSecurityMasterEntity>,
+    @InjectRepository(GuruSecDatasetEntity)
+    private readonly secDatasetRepository: Repository<GuruSecDatasetEntity>,
     private readonly configService: ConfigService,
   ) {}
 
@@ -140,9 +165,9 @@ export class GuruPortfoliosService implements OnModuleInit {
       this.logger.log('Scheduled guru 13F batch disabled.');
       return;
     }
-    const result = await this.refreshFromOfficialSeed();
+    const result = await this.refreshFromSecDatasets();
     this.logger.log(
-      `Scheduled guru 13F batch completed: managers=${result.managers}, holdings=${result.holdings}, generatedAt=${result.generatedAt}.`,
+      `Scheduled guru 13F batch completed: managers=${result.managers}, holdings=${result.holdings}, skipped=${result.skippedManagers}, generatedAt=${result.generatedAt}.`,
     );
   }
 
@@ -165,7 +190,7 @@ export class GuruPortfoliosService implements OnModuleInit {
     generatedAt: string;
     nasdaq: { scanned: number; updated: number; failed: number };
   }> {
-    const guru = await this.refreshFromOfficialSeed({ force });
+    const guru = await this.refreshFromSecDatasets({ force });
     const nasdaq = await this.refreshNasdaqClassifications();
     return { ...guru, nasdaq };
   }
@@ -260,13 +285,412 @@ export class GuruPortfoliosService implements OnModuleInit {
     };
   }
 
+  async refreshFromSecDatasets(options: { force?: boolean } = {}): Promise<{
+    managers: number;
+    holdings: number;
+    skippedManagers: number;
+    generatedAt: string;
+  }> {
+    const fallbackSeed = this.readSeed();
+    try {
+      const datasets = await this.fetchSecDatasetLinks();
+      const latest = datasets[0];
+      if (!latest) {
+        throw new Error('No SEC 13F ZIP dataset link was found.');
+      }
+
+      const existing = await this.secDatasetRepository.findOne({
+        where: { datasetUrl: latest.url },
+      });
+      if (existing?.status === 'applied' && !options.force) {
+        return {
+          managers: fallbackSeed.managers.length,
+          holdings: 0,
+          skippedManagers: fallbackSeed.managers.length,
+          generatedAt:
+            existing.appliedAt?.toISOString() ?? existing.updatedAt?.toISOString() ?? new Date().toISOString(),
+        };
+      }
+
+      const dataset = existing ?? this.secDatasetRepository.create({
+        id: this.stableId(`sec-13f:${latest.url}`),
+        datasetUrl: latest.url,
+        datasetLabel: latest.label,
+        fileName: latest.fileName,
+        filePath: null,
+        sha256: null,
+        fileSize: null,
+        status: 'discovered',
+        downloadedAt: null,
+        parsedAt: null,
+        appliedAt: null,
+        lastError: null,
+      });
+      dataset.datasetLabel = latest.label;
+      dataset.fileName = latest.fileName;
+      dataset.lastError = null;
+      await this.secDatasetRepository.save(dataset);
+
+      const zipPath = await this.ensureSecDatasetFile(dataset, latest);
+      dataset.status = 'downloaded';
+      await this.secDatasetRepository.save(dataset);
+
+      const parsed = await this.parseSecDatasetZip(zipPath, fallbackSeed);
+      dataset.status = 'parsed';
+      dataset.parsedAt = new Date();
+      await this.secDatasetRepository.save(dataset);
+
+      const seed: GuruSeed = {
+        ...fallbackSeed,
+        generatedAt: parsed.generatedAt,
+        source: parsed.source,
+        quarters: {
+          current: parsed.quarters,
+          previous: await this.buildPreviousQuartersFromCurrentDb(fallbackSeed),
+        },
+      };
+      const result = await this.applyGuruSeed(seed, options);
+      dataset.status = 'applied';
+      dataset.appliedAt = new Date();
+      dataset.lastError = null;
+      await this.secDatasetRepository.save(dataset);
+      return result;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to refresh guru 13F data from SEC datasets; using checked-in seed without force: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return this.refreshFromOfficialSeed({ force: false });
+    }
+  }
+
+  private async fetchSecDatasetLinks(): Promise<SecDatasetLink[]> {
+    const url = 'https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets';
+    const response = await fetch(url, {
+      headers: {
+        accept: 'text/html,application/xhtml+xml',
+        'user-agent': this.secUserAgent(),
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`SEC 13F dataset page request failed: ${response.status}`);
+    }
+    const html = await response.text();
+    const links: SecDatasetLink[] = [];
+    const pattern = /<a[^>]+href="([^"]+form13f\.zip)"[^>]*>([^<]*13F[^<]*)<\/a>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(html))) {
+      const rawUrl = match[1].replace(/&amp;/g, '&');
+      const absoluteUrl = rawUrl.startsWith('http')
+        ? rawUrl
+        : `https://www.sec.gov${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+      links.push({
+        label: this.decodeHtml(match[2]).trim(),
+        url: absoluteUrl,
+        fileName: basename(absoluteUrl.split('?')[0]),
+      });
+    }
+    return links;
+  }
+
+  private async ensureSecDatasetFile(
+    dataset: GuruSecDatasetEntity,
+    link: SecDatasetLink,
+  ): Promise<string> {
+    const cacheDir = this.secDatasetCacheDir();
+    mkdirSync(cacheDir, { recursive: true });
+    const filePath = dataset.filePath ?? join(cacheDir, link.fileName);
+    if (existsSync(filePath)) {
+      dataset.filePath = filePath;
+      if (!dataset.sha256) {
+        const buffer = readFileSync(filePath);
+        dataset.sha256 = createHash('sha256').update(buffer).digest('hex');
+        dataset.fileSize = buffer.length;
+      }
+      return filePath;
+    }
+
+    const response = await fetch(link.url, {
+      headers: {
+        accept: 'application/zip,application/octet-stream,*/*',
+        'user-agent': this.secUserAgent(),
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`SEC 13F dataset download failed: ${response.status}`);
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    writeFileSync(filePath, buffer);
+    dataset.filePath = filePath;
+    dataset.sha256 = createHash('sha256').update(buffer).digest('hex');
+    dataset.fileSize = buffer.length;
+    dataset.downloadedAt = new Date();
+    return filePath;
+  }
+
+  private async parseSecDatasetZip(
+    zipPath: string,
+    seed: GuruSeed,
+  ): Promise<SecParsedDataset> {
+    const [submissionText, infotableText] = await Promise.all([
+      this.readZipEntryText(zipPath, (name) => name.toLowerCase().endsWith('submission.tsv')),
+      this.readZipEntryText(zipPath, (name) => name.toLowerCase().endsWith('infotable.tsv')),
+    ]);
+    const submissions = this.parseTsv(submissionText)
+      .map((row): SecSubmission | null => {
+        const accession = this.rowValue(row, ['ACCESSIONNUMBER', 'ACCESSION_NUMBER']);
+        const cik = this.normalizeCik(this.rowValue(row, ['CIK']));
+        const filingDate = this.normalizeSecDate(this.rowValue(row, ['FILINGDATE', 'FILING_DATE']));
+        const reportDate = this.normalizeSecDate(
+          this.rowValue(row, ['PERIODOFREPORT', 'PERIOD_OF_REPORT', 'REPORTCALENDARORQUARTER']),
+        );
+        const type = this.rowValue(row, ['SUBMISSIONTYPE', 'SUBMISSION_TYPE', 'FORMTYPE']).toUpperCase();
+        return accession && cik && type.startsWith('13F-HR')
+          ? { accession, cik, filingDate, reportDate, type }
+          : null;
+      })
+      .filter((row): row is SecSubmission => Boolean(row));
+    const latestByCik = new Map<string, SecSubmission>();
+    for (const submission of submissions) {
+      const current = latestByCik.get(submission.cik);
+      if (!current || this.submissionScore(submission) > this.submissionScore(current)) {
+        latestByCik.set(submission.cik, submission);
+      }
+    }
+
+    const targetCiks = new Set(seed.managers.map((manager) => this.normalizeCik(manager.cik)));
+    const targetAccessions = new Map(
+      [...latestByCik.values()]
+        .filter((submission) => targetCiks.has(submission.cik))
+        .map((submission) => [submission.accession, submission] as const),
+    );
+    const holdingsByAccession = new Map<string, SeedHolding[]>();
+    for (const row of this.parseTsv(infotableText)) {
+      const accession = this.rowValue(row, ['ACCESSIONNUMBER', 'ACCESSION_NUMBER']);
+      const submission = targetAccessions.get(accession);
+      if (!submission) {
+        continue;
+      }
+      const holding: SeedHolding = {
+        issuer: this.rowValue(row, ['NAMEOFISSUER', 'NAME_OF_ISSUER']) || 'Unknown issuer',
+        classTitle: this.rowValue(row, ['TITLEOFCLASS', 'TITLE_OF_CLASS']) || 'COMMON STOCK',
+        cusip: this.rowValue(row, ['CUSIP']),
+        figi: this.rowValue(row, ['FIGI']) || null,
+        value: this.parseSecNumber(this.rowValue(row, ['VALUE'])) * 1000,
+        shares: this.parseSecNumber(this.rowValue(row, ['SSHPRNAMT', 'SSH_PRN_AMT', 'SHRSORPRNAMT'])) || 0,
+        shareType: this.rowValue(row, ['SSHPRNAMTTYPE', 'SSH_PRN_AMT_TYPE', 'SHRSORPRNAMTTYPE']) || undefined,
+        putCall: this.rowValue(row, ['PUTCALL', 'PUT_CALL']) || null,
+      };
+      if (!holding.cusip || holding.value <= 0) {
+        continue;
+      }
+      const holdings = holdingsByAccession.get(accession) ?? [];
+      holdings.push(holding);
+      holdingsByAccession.set(accession, holdings);
+    }
+
+    const quarters: Record<string, SeedQuarter | undefined> = {};
+    for (const submission of latestByCik.values()) {
+      if (!targetCiks.has(submission.cik)) {
+        continue;
+      }
+      quarters[submission.cik] = {
+        accession: submission.accession,
+        cik: submission.cik,
+        filingDate: submission.filingDate,
+        reportDate: submission.reportDate,
+        type: submission.type,
+        holdings: holdingsByAccession.get(submission.accession) ?? [],
+      };
+    }
+    return {
+      generatedAt: new Date().toISOString(),
+      source: 'SEC Form 13F Data Sets',
+      quarters,
+    };
+  }
+
+  private async buildPreviousQuartersFromCurrentDb(
+    seed: GuruSeed,
+  ): Promise<Record<string, SeedQuarter | undefined>> {
+    const previous: Record<string, SeedQuarter | undefined> = {};
+    for (const definition of seed.managers) {
+      const managerId = this.stableId(`manager:${definition.slug}`);
+      const manager = await this.managerRepository.findOne({ where: { id: managerId } });
+      if (!manager?.accessionNumber) {
+        previous[definition.cik] = seed.quarters.previous[definition.cik];
+        continue;
+      }
+      const holdings = await this.holdingRepository.find({ where: { managerId } });
+      const activeHoldings = holdings.filter((holding) => holding.weight > 0 && holding.value > 0);
+      previous[definition.cik] = {
+        accession: manager.accessionNumber,
+        cik: definition.cik,
+        filingDate: manager.filingDate ?? '',
+        reportDate: manager.reportDate ?? '',
+        type: '13F-HR',
+        holdings: activeHoldings.map((holding) => ({
+          issuer: holding.issuerName,
+          classTitle: holding.classTitle,
+          cusip: holding.cusip,
+          figi: holding.figi,
+          value: holding.value * 1000,
+          shares: holding.shares,
+          putCall: holding.putCall,
+        })),
+      };
+    }
+    return previous;
+  }
+
+  private readZipEntryText(
+    zipPath: string,
+    predicate: (entryName: string) => boolean,
+  ): Promise<string> {
+    return new Promise((resolve, reject) => {
+      yauzl.open(zipPath, { lazyEntries: true }, (openError, zipfile) => {
+        if (openError || !zipfile) {
+          reject(openError ?? new Error('Could not open SEC dataset ZIP.'));
+          return;
+        }
+        zipfile.readEntry();
+        zipfile.on('entry', (entry) => {
+          if (!predicate(entry.fileName)) {
+            zipfile.readEntry();
+            return;
+          }
+          zipfile.openReadStream(entry, (streamError, stream) => {
+            if (streamError || !stream) {
+              zipfile.close();
+              reject(streamError ?? new Error(`Could not read ${entry.fileName}.`));
+              return;
+            }
+            const chunks: Buffer[] = [];
+            stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+            stream.on('error', (error) => {
+              zipfile.close();
+              reject(error);
+            });
+            stream.on('end', () => {
+              zipfile.close();
+              resolve(Buffer.concat(chunks).toString('utf8'));
+            });
+          });
+        });
+        zipfile.on('end', () => {
+          reject(new Error(`SEC dataset ZIP entry was not found: ${zipPath}`));
+        });
+        zipfile.on('error', reject);
+      });
+    });
+  }
+
+  private parseTsv(text: string): Array<Record<string, string>> {
+    const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
+    const headers = (lines.shift() ?? '').split('\t').map((header) => this.normalizeHeader(header));
+    return lines.map((line) => {
+      const values = line.split('\t');
+      const row: Record<string, string> = {};
+      headers.forEach((header, index) => {
+        row[header] = this.cleanTsvValue(values[index] ?? '');
+      });
+      return row;
+    });
+  }
+
+  private rowValue(row: Record<string, string>, candidates: string[]): string {
+    for (const candidate of candidates) {
+      const value = row[this.normalizeHeader(candidate)];
+      if (value !== undefined && value !== '') {
+        return value;
+      }
+    }
+    return '';
+  }
+
+  private cleanTsvValue(value: string): string {
+    const trimmed = value.trim();
+    return trimmed.startsWith('"') && trimmed.endsWith('"')
+      ? trimmed.slice(1, -1).replace(/""/g, '"').trim()
+      : trimmed;
+  }
+
+  private normalizeHeader(value: string): string {
+    return value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+
+  private parseSecNumber(value: string): number {
+    const parsed = Number(value.replace(/[$,]/g, '').trim());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private normalizeCik(value: string): string {
+    const digits = value.replace(/\D/g, '');
+    return digits ? digits.padStart(10, '0') : '';
+  }
+
+  private normalizeSecDate(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return '';
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+    const monthMap: Record<string, string> = {
+      JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
+      JUL: '07', AUG: '08', SEP: '09', OCT: '10', NOV: '11', DEC: '12',
+    };
+    const secMatch = /^(\d{1,2})-([A-Z]{3})-(\d{4})$/i.exec(trimmed);
+    if (secMatch) {
+      return `${secMatch[3]}-${monthMap[secMatch[2].toUpperCase()] ?? '01'}-${secMatch[1].padStart(2, '0')}`;
+    }
+    const slashMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+    if (slashMatch) {
+      return `${slashMatch[3]}-${slashMatch[1].padStart(2, '0')}-${slashMatch[2].padStart(2, '0')}`;
+    }
+    return trimmed;
+  }
+
+  private submissionScore(submission: SecSubmission): string {
+    return `${submission.reportDate || '0000-00-00'}:${submission.filingDate || '0000-00-00'}:${submission.accession}`;
+  }
+
+  private decodeHtml(value: string): string {
+    return value
+      .replace(/&amp;/g, '&')
+      .replace(/&#039;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/&nbsp;/g, ' ');
+  }
+
+  private secDatasetCacheDir(): string {
+    return this.configService.get<string>('SEC_13F_CACHE_DIR') || '/tmp/sec-13f-cache';
+  }
+
+  private secUserAgent(): string {
+    return (
+      this.configService.get<string>('SEC_USER_AGENT') ||
+      '15F investment-community admin@15f.local'
+    );
+  }
+
   async refreshFromOfficialSeed(options: { force?: boolean } = {}): Promise<{
     managers: number;
     holdings: number;
     skippedManagers: number;
     generatedAt: string;
   }> {
-    const seed = this.readSeed();
+    return this.applyGuruSeed(this.readSeed(), options);
+  }
+
+  private async applyGuruSeed(seed: GuruSeed, options: { force?: boolean } = {}): Promise<{
+    managers: number;
+    holdings: number;
+    skippedManagers: number;
+    generatedAt: string;
+  }> {
     const tickerMap = await this.buildTickerMap();
     const cusipTickerMap = new Map(
       (await this.securityMasterRepository.find()).flatMap((security) =>
