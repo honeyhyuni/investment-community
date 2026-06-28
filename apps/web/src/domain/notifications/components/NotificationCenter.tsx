@@ -7,6 +7,7 @@ import { apiRequest } from "@/common/lib/api";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { AppNotification, NotificationList } from "../types";
 import { enablePush, pushSupported } from "../push";
+import { useDismissibleDetails } from "@/common/hooks/useDismissibleDetails";
 import { NotificationPreferenceControls } from "./NotificationPreferenceControls";
 
 export function NotificationCenter({ accessToken }: { accessToken: string }) {
@@ -40,6 +41,8 @@ export function NotificationCenter({ accessToken }: { accessToken: string }) {
       window.removeEventListener("notifications:changed", refresh);
     };
   }, [load]);
+
+  useDismissibleDetails(menuRef);
 
   async function openNotification(item: AppNotification) {
     if (!item.readAt) {

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BellRing } from "lucide-react";
 import { apiRequest } from "@/common/lib/api";
 import { Button } from "@/common/components/Button";
+import { Switch } from "@/common/components/Switch";
 import { NotificationPreferences } from "../types";
 import { disablePush, enablePush, pushSupported } from "../push";
 
@@ -133,18 +134,17 @@ export function NotificationSettings({
       </div>
       <div className="mt-4 divide-y divide-border rounded-md border border-border">
         {rows.map((row) => (
-          <label
+          <div
             key={row.key}
-            className="flex cursor-pointer items-center justify-between gap-4 px-4 py-3"
+            className="flex items-center justify-between gap-4 px-4 py-3"
           >
             <span className="text-sm font-medium">{ko ? row.ko : row.en}</span>
-            <input
-              type="checkbox"
+            <Switch
               checked={preferences[row.key]}
-              onChange={(event) => void update(row.key, event.target.checked)}
-              className="size-5 accent-[var(--primary)]"
+              onChange={(next) => void update(row.key, next)}
+              aria-label={ko ? row.ko : row.en}
             />
-          </label>
+          </div>
         ))}
       </div>
       {message ? <p className="mt-3 text-sm text-muted">{message}</p> : null}

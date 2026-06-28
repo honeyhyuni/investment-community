@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Switch } from "@/common/components/Switch";
 import { apiRequest } from "@/common/lib/api";
 import { NotificationPreferences } from "../types";
 
@@ -109,23 +110,22 @@ export function NotificationPreferenceControls({
       }
     >
       {preferenceRows.map((row) => (
-        <label
+        <div
           key={row.key}
-          className={`flex cursor-pointer items-center justify-between gap-4 ${
+          className={`flex items-center justify-between gap-4 ${
             compact ? "px-3 py-2.5" : "px-4 py-3"
           }`}
         >
           <span className="text-sm font-medium text-foreground">
             {ko ? row.ko : row.en}
           </span>
-          <input
-            type="checkbox"
+          <Switch
             checked={preferences[row.key]}
             disabled={savingKey !== null}
-            onChange={(event) => void update(row.key, event.target.checked)}
-            className="size-5 shrink-0 accent-[var(--primary)] disabled:opacity-50"
+            onChange={(next) => void update(row.key, next)}
+            aria-label={ko ? row.ko : row.en}
           />
-        </label>
+        </div>
       ))}
     </div>
   );

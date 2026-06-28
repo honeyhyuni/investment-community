@@ -69,7 +69,7 @@ export function IpoCalendarPage({
   return (
     <div className="grid min-w-0 flex-1 gap-4 py-4 sm:gap-6 sm:py-6">
       <section className="min-w-0">
-        <div className="flex flex-col gap-4 pb-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <SegmentedControl<CalendarTab>
             className="w-full sm:inline-flex sm:w-auto"
             aria-label={language === 'ko' ? '캘린더 선택' : 'Calendar view'}
@@ -195,10 +195,10 @@ function IpoCalendarSection({
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-foreground">
-                      {day.label}
-                    </p>
-                    <p className="text-xs font-medium text-muted">
-                      {day.weekday}
+                      {day.label}{' '}
+                      <span className="text-xs font-medium text-muted">
+                        ({day.weekday})
+                      </span>
                     </p>
                   </div>
                   {day.events.length ? (

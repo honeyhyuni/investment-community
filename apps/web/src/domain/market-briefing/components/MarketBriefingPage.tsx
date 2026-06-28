@@ -213,7 +213,7 @@ export function MarketBriefingPage({
             onChange={setMarket}
           />
 
-          <div className="mt-5">
+          <div className="mt-4">
             {selectedBriefing ? (
               <BriefingDetail
                 briefing={selectedBriefing}

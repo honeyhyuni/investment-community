@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { SessionLoading } from '@/common/components/SessionLoading';
 import { PullToRefresh } from '@/common/components/PullToRefresh';
+import { useDismissibleDetails } from '@/common/hooks/useDismissibleDetails';
 import { MARKET_TABS } from '@/common/config/marketNav';
 import { apiRequest } from '@/common/lib/api';
 import { useSessionStore } from '@/common/stores/session';
@@ -27,11 +28,10 @@ import { MarketPulseContainer } from '@/domain/markets/components/MarketPulseCon
 import { NotificationCenter } from '@/domain/notifications/components/NotificationCenter';
 
 const NAV_ITEMS: Array<{
-  id: 'market' | 'stocks' | 'favorites' | 'community' | 'gurus' | 'admin';
+  id: 'market' | 'stocks' | 'favorites' | 'community' | 'gurus';
   href: string;
   label: { en: string; ko: string };
   icon: typeof BarChart3;
-  adminOnly?: boolean;
 }> = [
   {
     id: 'market',
@@ -48,7 +48,7 @@ const NAV_ITEMS: Array<{
   {
     id: 'favorites',
     href: '/favorites',
-    label: { en: 'Portfolio', ko: '포트폴리오 대쉬보드' },
+    label: { en: 'My', ko: 'My' },
     icon: Star,
   },
   {
@@ -62,13 +62,6 @@ const NAV_ITEMS: Array<{
     href: '/gurus',
     label: { en: 'Gurus', ko: '거장' },
     icon: Landmark,
-  },
-  {
-    id: 'admin',
-    href: '/admin',
-    label: { en: 'Admin', ko: '관리' },
-    icon: ShieldCheck,
-    adminOnly: true,
   },
 ];
 
@@ -144,38 +137,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('scroll', syncHeaderState);
   }, []);
 
-  useEffect(() => {
-    const closeAccountMenu = () => {
-      if (accountMenuRef.current) {
-        accountMenuRef.current.open = false;
-      }
-    };
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const menu = accountMenuRef.current;
-      if (
-        !menu?.open ||
-        !(event.target instanceof Node) ||
-        menu.contains(event.target)
-      ) {
-        return;
-      }
-      closeAccountMenu();
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closeAccountMenu();
-      }
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
+  useDismissibleDetails(accountMenuRef);
 
   useEffect(() => {
     if (accountMenuRef.current) {
@@ -229,18 +191,13 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                 className="size-10 shrink-0 rounded-lg shadow-sm"
                 priority
               />
-              <div className="min-w-0 leading-tight">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
-                  Private Investment Community
-                </p>
-                <h1 className="truncate text-lg font-semibold tracking-tight sm:text-xl">
-                  15F
-                </h1>
-              </div>
+              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+                15F
+              </h1>
             </div>
 
             <nav className="hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2 [scrollbar-width:none] sm:flex [&::-webkit-scrollbar]:hidden">
-              {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map(
+              {NAV_ITEMS.map(
                 (item) => {
                   const active = isItemActive(item);
 
@@ -332,6 +289,21 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                           : 'Dark mode'}
                     </button>
                   </div>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (accountMenuRef.current) {
+                          accountMenuRef.current.open = false;
+                        }
+                        router.push('/admin');
+                      }}
+                      className="mt-1 flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    >
+                      <ShieldCheck size={16} />
+                      {language === 'ko' ? '관리' : 'Admin'}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => {
@@ -340,7 +312,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                       }
                       router.push('/profile');
                     }}
-                    className="mt-1 flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    className={`flex h-10 w-full cursor-pointer items-center gap-2 rounded-md px-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-surface-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${isAdmin ? '' : 'mt-1'}`}
                   >
                     <UserPen size={16} />
                     {language === 'ko' ? '프로필 수정' : 'Profile'}
@@ -376,7 +348,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       </section>
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(21,25,35,0.08)] backdrop-blur sm:hidden">
         <div className="mx-auto flex h-16 max-w-md gap-1 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin).map(
+          {NAV_ITEMS.map(
             (item) => {
               const active = isItemActive(item);
               const Icon = item.icon;
