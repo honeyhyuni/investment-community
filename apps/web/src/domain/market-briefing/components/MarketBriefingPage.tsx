@@ -1,19 +1,24 @@
-"use client";
+'use client';
 
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
-import { Notice } from "@/common/components/Notice";
-import { Button } from "@/common/components/Button";
-import { SectionHeader } from "@/common/components/SectionHeader";
-import { SegmentedControl } from "@/common/components/SegmentedControl";
-import { Skeleton } from "@/common/components/Skeleton";
-import { apiRequest } from "@/common/lib/api";
-import { useSessionStore } from "@/common/stores/session";
-import { usePreferencesStore } from "@/common/stores/preferences";
-import { BriefingMarket, MarketBriefing } from "@/domain/market-briefing/types";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import { useRouter } from 'next/navigation';
+import { ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
+import { Notice } from '@/common/components/Notice';
+import { Button } from '@/common/components/Button';
+import { SegmentedControl } from '@/common/components/SegmentedControl';
+import { Skeleton } from '@/common/components/Skeleton';
+import { apiRequest } from '@/common/lib/api';
+import { useSessionStore } from '@/common/stores/session';
+import { usePreferencesStore } from '@/common/stores/preferences';
+import { BriefingMarket, MarketBriefing } from '@/domain/market-briefing/types';
 
-type Lang = "ko" | "en";
+type Lang = 'ko' | 'en';
 
 const briefingTabs: Array<{
   id: BriefingMarket;
@@ -21,30 +26,30 @@ const briefingTabs: Array<{
   caption: Record<Lang, string>;
 }> = [
   {
-    id: "KR",
-    label: { ko: "한국시황", en: "KR Market" },
-    caption: { ko: "오늘장 주식 요약", en: "Today's session" },
+    id: 'KR',
+    label: { ko: '한국시황', en: 'KR Market' },
+    caption: { ko: '오늘장 주식 요약', en: "Today's session" },
   },
   {
-    id: "US",
-    label: { ko: "미국시황", en: "US Market" },
-    caption: { ko: "전날 미국장 요약", en: "Prev. US session" },
+    id: 'US',
+    label: { ko: '미국시황', en: 'US Market' },
+    caption: { ko: '전날 미국장 요약', en: 'Prev. US session' },
   },
 ];
 
 // 시장 이름(리스트 카드·상세 헤더에서 공유).
 function marketLabel(market: BriefingMarket, ko: boolean): string {
-  if (market === "KR") {
-    return ko ? "한국시황" : "KR Market";
+  if (market === 'KR') {
+    return ko ? '한국시황' : 'KR Market';
   }
-  return ko ? "미국시황" : "US Market";
+  return ko ? '미국시황' : 'US Market';
 }
 
 function marketCaption(market: BriefingMarket, ko: boolean): string {
-  if (market === "KR") {
-    return ko ? "오늘장 주식 요약" : "Today's session recap";
+  if (market === 'KR') {
+    return ko ? '오늘장 주식 요약' : "Today's session recap";
   }
-  return ko ? "전날 미국장 요약" : "Previous US session recap";
+  return ko ? '전날 미국장 요약' : 'Previous US session recap';
 }
 
 const pageSize = 10;
@@ -59,15 +64,17 @@ export function MarketBriefingPage({
   const router = useRouter();
   const accessToken = useSessionStore((s) => s.accessToken);
   const user = useSessionStore((s) => s.user);
-  const ko = usePreferencesStore((s) => s.language) === "ko";
-  const lang: Lang = ko ? "ko" : "en";
-  const [market, setMarket] = useState<BriefingMarket>("KR");
+  const ko = usePreferencesStore((s) => s.language) === 'ko';
+  const lang: Lang = ko ? 'ko' : 'en';
+  const [market, setMarket] = useState<BriefingMarket>('KR');
   const [briefings, setBriefings] = useState<MarketBriefing[]>([]);
-  const [detailBriefing, setDetailBriefing] = useState<MarketBriefing | null>(null);
+  const [detailBriefing, setDetailBriefing] = useState<MarketBriefing | null>(
+    null,
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   const selectedBriefing = useMemo(
     () =>
@@ -82,7 +89,7 @@ export function MarketBriefingPage({
     (safePage - 1) * pageSize,
     safePage * pageSize,
   );
-  const isAdmin = user?.role === "ADMIN";
+  const isAdmin = user?.role === 'ADMIN';
 
   const applyBriefing = useCallback((nextBriefing: MarketBriefing) => {
     setDetailBriefing(nextBriefing);
@@ -100,11 +107,11 @@ export function MarketBriefingPage({
       }
 
       setLoading(true);
-      setError("");
+      setError('');
       try {
         const nextBriefings = await apiRequest<MarketBriefing[]>(
           `/markets/briefings?market=${nextMarket}`,
-          "GET",
+          'GET',
           { accessToken: token },
         );
         setBriefings(nextBriefings);
@@ -120,8 +127,8 @@ export function MarketBriefingPage({
           briefingError instanceof Error
             ? briefingError.message
             : ko
-              ? "마켓 브리핑을 불러오지 못했습니다."
-              : "Could not load market briefings.",
+              ? '마켓 브리핑을 불러오지 못했습니다.'
+              : 'Could not load market briefings.',
         );
       } finally {
         setLoading(false);
@@ -145,8 +152,8 @@ export function MarketBriefingPage({
 
     let cancelled = false;
     setLoading(true);
-    setError("");
-    apiRequest<MarketBriefing>(`/markets/briefings/${briefingId}`, "GET", {
+    setError('');
+    apiRequest<MarketBriefing>(`/markets/briefings/${briefingId}`, 'GET', {
       accessToken,
     })
       .then((briefing) => {
@@ -167,8 +174,8 @@ export function MarketBriefingPage({
           briefingError instanceof Error
             ? briefingError.message
             : ko
-              ? "마켓 브리핑을 불러오지 못했습니다."
-              : "Could not load market briefings.",
+              ? '마켓 브리핑을 불러오지 못했습니다.'
+              : 'Could not load market briefings.',
         );
       })
       .finally(() => {
@@ -187,20 +194,10 @@ export function MarketBriefingPage({
       {error ? <Notice message="" error={error} /> : null}
 
       <div className="grid flex-1 gap-4 py-4 sm:gap-6 sm:py-6 lg:grid-cols-[1fr]">
-        <section className="-mx-4 border-y border-border bg-surface p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
-          <SectionHeader
-            eyebrow="AI Market Briefing"
-            title={ko ? "마켓 브리핑" : "Market Briefing"}
-            action={
-              <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                {briefings.length}
-              </span>
-            }
-          />
-
+        <section className="min-w-0">
           <SegmentedControl
-            className="mt-4 w-full sm:inline-flex sm:w-auto"
-            aria-label={ko ? "시황 시장 선택" : "Briefing market"}
+            className="w-full sm:inline-flex sm:w-auto"
+            aria-label={ko ? '시황 시장 선택' : 'Briefing market'}
             options={briefingTabs.map((item) => ({
               value: item.id,
               label: (
@@ -225,15 +222,17 @@ export function MarketBriefingPage({
                 ko={ko}
                 onSaved={applyBriefing}
                 onDeleted={(deletedId) => {
-                  setBriefings((items) => items.filter((item) => item.id !== deletedId));
+                  setBriefings((items) =>
+                    items.filter((item) => item.id !== deletedId),
+                  );
                   setSelectedId(null);
                   setDetailBriefing(null);
-                  router.push("/market-briefing");
+                  router.push('/market-briefing');
                 }}
                 onBack={() => {
                   setSelectedId(null);
                   setDetailBriefing(null);
-                  router.push("/market-briefing");
+                  router.push('/market-briefing');
                 }}
               />
             ) : (
@@ -284,7 +283,7 @@ function BriefingList({
   if (!briefings.length) {
     return (
       <p className="rounded-md border border-border p-6 text-center text-base text-muted">
-        {ko ? "표시할 마켓 브리핑이 없습니다." : "No market briefings to show."}
+        {ko ? '표시할 마켓 브리핑이 없습니다.' : 'No market briefings to show.'}
       </p>
     );
   }
@@ -299,9 +298,9 @@ function BriefingList({
             className="block cursor-pointer rounded-md border border-border bg-surface p-3 text-left shadow-sm transition-all duration-150 ease-out will-change-transform hover:scale-[1.01] hover:bg-surface-muted hover:shadow-md sm:p-4"
           >
             <p className="text-xs font-semibold text-muted sm:text-sm">
-              {marketLabel(briefing.market, ko)} ·{" "}
+              {marketLabel(briefing.market, ko)} ·{' '}
               {new Date(briefing.generatedAt * 1000).toLocaleString(
-                ko ? "ko-KR" : "en-US",
+                ko ? 'ko-KR' : 'en-US',
               )}
             </p>
             <h3 className="mt-1 flex flex-wrap items-center gap-2 text-base font-semibold leading-6 text-foreground sm:text-lg">
@@ -328,7 +327,7 @@ function BriefingList({
             disabled={page === 1}
             onClick={() => onPageChange(Math.max(1, page - 1))}
           >
-            {ko ? "이전" : "Previous"}
+            {ko ? '이전' : 'Previous'}
           </Button>
           <span className="text-sm font-medium text-muted sm:text-base">
             {page} / {totalPages}
@@ -340,7 +339,7 @@ function BriefingList({
             disabled={page === totalPages}
             onClick={() => onPageChange(Math.min(totalPages, page + 1))}
           >
-            {ko ? "다음" : "Next"}
+            {ko ? '다음' : 'Next'}
           </Button>
         </div>
       ) : null}
@@ -379,7 +378,7 @@ function BriefingDetail({
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
-  const [formError, setFormError] = useState("");
+  const [formError, setFormError] = useState('');
 
   const handleDelete = async () => {
     if (!accessToken || deletePending) {
@@ -387,26 +386,30 @@ function BriefingDetail({
     }
     if (
       !window.confirm(
-        ko ? "이 마켓 브리핑을 삭제할까요?" : "Delete this market briefing?",
+        ko ? '이 마켓 브리핑을 삭제할까요?' : 'Delete this market briefing?',
       )
     ) {
       return;
     }
 
     setDeletePending(true);
-    setFormError("");
+    setFormError('');
     try {
-      await apiRequest<{ ok: true }>(`/markets/briefings/${briefing.id}`, "DELETE", {
-        accessToken,
-      });
+      await apiRequest<{ ok: true }>(
+        `/markets/briefings/${briefing.id}`,
+        'DELETE',
+        {
+          accessToken,
+        },
+      );
       onDeleted(briefing.id);
     } catch (error) {
       setFormError(
         error instanceof Error
           ? error.message
           : ko
-            ? "삭제하지 못했습니다."
-            : "Could not delete.",
+            ? '삭제하지 못했습니다.'
+            : 'Could not delete.',
       );
     } finally {
       setDeletePending(false);
@@ -422,7 +425,7 @@ function BriefingDetail({
         onClick={onBack}
         className="mb-4"
       >
-        {ko ? "목록으로" : "Back to list"}
+        {ko ? '목록으로' : 'Back to list'}
       </Button>
 
       {isAdmin ? (
@@ -433,10 +436,16 @@ function BriefingDetail({
             leftIcon={<Pencil />}
             onClick={() => {
               setEditing((value) => !value);
-              setFormError("");
+              setFormError('');
             }}
           >
-            {editing ? (ko ? "수정 취소" : "Cancel edit") : ko ? "수정" : "Edit"}
+            {editing
+              ? ko
+                ? '수정 취소'
+                : 'Cancel edit'
+              : ko
+                ? '수정'
+                : 'Edit'}
           </Button>
           <Button
             variant="soft-danger"
@@ -445,7 +454,13 @@ function BriefingDetail({
             loading={deletePending}
             onClick={handleDelete}
           >
-            {deletePending ? (ko ? "삭제 중" : "Deleting") : ko ? "삭제" : "Delete"}
+            {deletePending
+              ? ko
+                ? '삭제 중'
+                : 'Deleting'
+              : ko
+                ? '삭제'
+                : 'Delete'}
           </Button>
         </div>
       ) : null}
@@ -470,21 +485,22 @@ function BriefingDetail({
 
       <div className="border-b border-border pb-5">
         <p className="text-sm font-semibold text-muted">
-          {marketLabel(briefing.market, ko)} · {marketCaption(briefing.market, ko)}
+          {marketLabel(briefing.market, ko)} ·{' '}
+          {marketCaption(briefing.market, ko)}
         </p>
         <h3 className="mt-2 text-2xl font-semibold leading-tight text-foreground sm:text-3xl">
           {briefing.title}
         </h3>
         <p className="mt-2 text-sm font-medium text-muted">
           {new Date(briefing.generatedAt * 1000).toLocaleString(
-            ko ? "ko-KR" : "en-US",
+            ko ? 'ko-KR' : 'en-US',
           )}
         </p>
       </div>
 
       <section className="mt-5 space-y-4 rounded-md border border-border bg-surface p-4 sm:mt-6 sm:p-5">
         <h4 className="text-base font-semibold text-foreground sm:text-lg">
-          {ko ? "시장 전체 요약" : "Market overview"}
+          {ko ? '시장 전체 요약' : 'Market overview'}
         </h4>
         <div className="space-y-4 text-[15px] leading-7 text-foreground sm:space-y-5 sm:text-base sm:leading-8">
           {(briefing.summaryLines ?? []).map((line) => (
@@ -496,7 +512,7 @@ function BriefingDetail({
       {(briefing.macroLines ?? []).length ? (
         <section className="mt-5 space-y-4 rounded-md border border-border bg-surface p-4 sm:p-5">
           <h4 className="text-base font-semibold text-foreground sm:text-lg">
-            {ko ? "매크로 점검" : "Macro check"}
+            {ko ? '매크로 점검' : 'Macro check'}
           </h4>
           <div className="space-y-4 text-[15px] leading-7 text-foreground sm:space-y-5 sm:text-base sm:leading-8">
             {(briefing.macroLines ?? []).map((line, index) => (
@@ -508,7 +524,7 @@ function BriefingDetail({
 
       <section className="mt-5 space-y-4 rounded-md border border-border bg-surface p-4 sm:p-5">
         <h4 className="text-base font-semibold text-foreground sm:text-lg">
-          {ko ? "주요 종목/기업 뉴스" : "Key stock & company news"}
+          {ko ? '주요 종목/기업 뉴스' : 'Key stock & company news'}
         </h4>
         <div className="grid gap-4">
           {(briefing.companyNews ?? []).map((item, index) => {
@@ -521,14 +537,20 @@ function BriefingDetail({
                 : item.headline
                   ? [item.headline]
                   : [];
-            const headline = cleanCompanyHeadline(item.headline, companyName, ticker);
+            const headline = cleanCompanyHeadline(
+              item.headline,
+              companyName,
+              ticker,
+            );
             return (
               <div
-                key={`${ticker || item.symbol || "symbol"}-${item.headline ?? "headline"}-${index}`}
+                key={`${ticker || item.symbol || 'symbol'}-${item.headline ?? 'headline'}-${index}`}
                 className="border-b border-border pb-4 last:border-0 last:pb-0"
               >
                 <h5 className="text-[15px] font-semibold text-foreground sm:text-base">
-                  {companyName || item.symbol || (ko ? "종목/기업" : "Stock/Company")}{" "}
+                  {companyName ||
+                    item.symbol ||
+                    (ko ? '종목/기업' : 'Stock/Company')}{' '}
                   {ticker ? (
                     <a
                       href={stockHref(ticker, briefing.market)}
@@ -540,7 +562,9 @@ function BriefingDetail({
                   {change ? (
                     <span
                       className={`ml-1 font-semibold ${
-                        change.startsWith("-") ? "text-negative" : "text-positive"
+                        change.startsWith('-')
+                          ? 'text-negative'
+                          : 'text-positive'
                       }`}
                     >
                       ({change})
@@ -563,8 +587,8 @@ function BriefingDetail({
           {!(briefing.companyNews ?? []).length ? (
             <p className="text-base leading-8 text-muted">
               {ko
-                ? "표시할 주요 종목/기업 뉴스가 없습니다."
-                : "No key stock/company news to show."}
+                ? '표시할 주요 종목/기업 뉴스가 없습니다.'
+                : 'No key stock/company news to show.'}
             </p>
           ) : null}
         </div>
@@ -573,7 +597,7 @@ function BriefingDetail({
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <section className="rounded-md border border-border bg-surface p-4 sm:p-5">
           <h4 className="text-base font-semibold text-foreground sm:text-lg">
-            {ko ? "오늘의 핵심 키워드" : "Key keywords"}
+            {ko ? '오늘의 핵심 키워드' : 'Key keywords'}
           </h4>
           <div className="mt-3 flex flex-wrap gap-2">
             {(briefing.keywords ?? []).map((keyword) => (
@@ -589,7 +613,7 @@ function BriefingDetail({
 
         <section className="rounded-md border border-border bg-surface p-4 sm:p-5">
           <h4 className="text-base font-semibold text-foreground sm:text-lg">
-            {ko ? "단기 관전 포인트" : "Short-term watch points"}
+            {ko ? '단기 관전 포인트' : 'Short-term watch points'}
           </h4>
           <div className="mt-3 space-y-3 text-[15px] leading-7 text-foreground sm:space-y-4 sm:text-base sm:leading-8">
             {(briefing.watchPoints ?? []).map((point) => (
@@ -602,7 +626,7 @@ function BriefingDetail({
       {briefing.sources?.length ? (
         <section className="mt-5 rounded-md border border-border bg-surface p-4 sm:p-5">
           <h4 className="text-base font-semibold text-foreground sm:text-lg">
-            {ko ? "참고 뉴스" : "Reference news"}
+            {ko ? '참고 뉴스' : 'Reference news'}
           </h4>
           <div className="mt-3 grid gap-2">
             {briefing.sources.map((item) => (
@@ -617,9 +641,9 @@ function BriefingDetail({
                   {item.headline}
                 </span>
                 <span className="ml-2 text-sm text-muted">
-                  {item.source} ·{" "}
+                  {item.source} ·{' '}
                   {new Date(item.datetime * 1000).toLocaleDateString(
-                    ko ? "ko-KR" : "en-US",
+                    ko ? 'ko-KR' : 'en-US',
                   )}
                 </span>
               </a>
@@ -651,13 +675,21 @@ function BriefingEditForm({
   onError: (message: string) => void;
 }) {
   const [title, setTitle] = useState(briefing.title);
-  const [summaryLines, setSummaryLines] = useState(linesToText(briefing.summaryLines));
-  const [macroLines, setMacroLines] = useState(linesToText(briefing.macroLines ?? []));
+  const [summaryLines, setSummaryLines] = useState(
+    linesToText(briefing.summaryLines),
+  );
+  const [macroLines, setMacroLines] = useState(
+    linesToText(briefing.macroLines ?? []),
+  );
   const [companyNews, setCompanyNews] = useState(
     JSON.stringify(briefing.companyNews ?? [], null, 2),
   );
-  const [keywords, setKeywords] = useState((briefing.keywords ?? []).join(", "));
-  const [watchPoints, setWatchPoints] = useState(linesToText(briefing.watchPoints));
+  const [keywords, setKeywords] = useState(
+    (briefing.keywords ?? []).join(', '),
+  );
+  const [watchPoints, setWatchPoints] = useState(
+    linesToText(briefing.watchPoints),
+  );
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -665,27 +697,29 @@ function BriefingEditForm({
       return;
     }
 
-    let parsedCompanyNews: MarketBriefing["companyNews"];
+    let parsedCompanyNews: MarketBriefing['companyNews'];
     try {
-      parsedCompanyNews = JSON.parse(companyNews) as MarketBriefing["companyNews"];
+      parsedCompanyNews = JSON.parse(
+        companyNews,
+      ) as MarketBriefing['companyNews'];
       if (!Array.isArray(parsedCompanyNews)) {
-        throw new Error("companyNews must be an array.");
+        throw new Error('companyNews must be an array.');
       }
     } catch {
       onError(
         ko
-          ? "종목/기업 뉴스 JSON 형식이 올바르지 않습니다."
-          : "Invalid JSON format for stock/company news.",
+          ? '종목/기업 뉴스 JSON 형식이 올바르지 않습니다.'
+          : 'Invalid JSON format for stock/company news.',
       );
       return;
     }
 
     setSaving(true);
-    onError("");
+    onError('');
     try {
       const updated = await apiRequest<MarketBriefing>(
         `/markets/briefings/${briefing.id}`,
-        "PATCH",
+        'PATCH',
         {
           accessToken,
           body: {
@@ -707,8 +741,8 @@ function BriefingEditForm({
         error instanceof Error
           ? error.message
           : ko
-            ? "저장하지 못했습니다."
-            : "Could not save.",
+            ? '저장하지 못했습니다.'
+            : 'Could not save.',
       );
     } finally {
       setSaving(false);
@@ -721,7 +755,7 @@ function BriefingEditForm({
       className="mb-6 grid gap-4 rounded-md border border-border bg-surface p-4"
     >
       <label className="grid gap-1 text-sm font-semibold text-foreground">
-        {ko ? "제목" : "Title"}
+        {ko ? '제목' : 'Title'}
         <input
           value={title}
           onChange={(event) => setTitle(event.target.value)}
@@ -729,37 +763,39 @@ function BriefingEditForm({
         />
       </label>
       <EditTextarea
-        label={ko ? "시장 전체 요약" : "Market overview"}
+        label={ko ? '시장 전체 요약' : 'Market overview'}
         value={summaryLines}
         onChange={setSummaryLines}
       />
       <EditTextarea
-        label={ko ? "매크로 점검" : "Macro check"}
+        label={ko ? '매크로 점검' : 'Macro check'}
         value={macroLines}
         onChange={setMacroLines}
       />
       <EditTextarea
-        label={ko ? "주요 종목/기업 뉴스 JSON" : "Key stock/company news (JSON)"}
+        label={
+          ko ? '주요 종목/기업 뉴스 JSON' : 'Key stock/company news (JSON)'
+        }
         value={companyNews}
         onChange={setCompanyNews}
         minHeight="260px"
       />
       <EditTextarea
-        label={ko ? "핵심 키워드" : "Keywords"}
+        label={ko ? '핵심 키워드' : 'Keywords'}
         value={keywords}
         onChange={setKeywords}
       />
       <EditTextarea
-        label={ko ? "단기 관전 포인트" : "Watch points"}
+        label={ko ? '단기 관전 포인트' : 'Watch points'}
         value={watchPoints}
         onChange={setWatchPoints}
       />
       <div className="flex flex-wrap justify-end gap-2">
         <Button type="button" variant="secondary" size="sm" onClick={onCancel}>
-          {ko ? "취소" : "Cancel"}
+          {ko ? '취소' : 'Cancel'}
         </Button>
         <Button type="submit" variant="primary" size="sm" loading={saving}>
-          {saving ? (ko ? "저장 중" : "Saving") : ko ? "저장" : "Save"}
+          {saving ? (ko ? '저장 중' : 'Saving') : ko ? '저장' : 'Save'}
         </Button>
       </div>
     </form>
@@ -770,7 +806,7 @@ function EditTextarea({
   label,
   value,
   onChange,
-  minHeight = "150px",
+  minHeight = '150px',
 }: {
   label: string;
   value: string;
@@ -791,12 +827,12 @@ function EditTextarea({
 }
 
 function linesToText(value: string[] | undefined): string {
-  return (value ?? []).join("\n");
+  return (value ?? []).join('\n');
 }
 
 function textToLines(value: string): string[] {
   return value
-    .split("\n")
+    .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
 }
@@ -806,7 +842,7 @@ function isNewBriefing(briefing: MarketBriefing): boolean {
 }
 
 function briefingCompanyTicker(
-  item: MarketBriefing["companyNews"][number],
+  item: MarketBriefing['companyNews'][number],
 ): string {
   const explicitSymbol = extractTickerTag(item.symbol);
   if (explicitSymbol) {
@@ -814,35 +850,39 @@ function briefingCompanyTicker(
   }
 
   return extractTickerTag(
-    [item.name, item.headline, ...(item.lines ?? [])].filter(Boolean).join(" "),
+    [item.name, item.headline, ...(item.lines ?? [])].filter(Boolean).join(' '),
   );
 }
 
 function briefingCompanyName(
-  item: MarketBriefing["companyNews"][number],
+  item: MarketBriefing['companyNews'][number],
   ticker: string,
 ): string {
-  const source = item.name || item.headline || item.symbol || "";
+  const source = item.name || item.headline || item.symbol || '';
   const escapedTicker = escapeRegExp(ticker);
   if (!item.name && escapedTicker) {
-    const prefix = source.match(new RegExp(`^(.+?)\\s*#${escapedTicker}\\b`, "i"))?.[1];
+    const prefix = source.match(
+      new RegExp(`^(.+?)\\s*#${escapedTicker}\\b`, 'i'),
+    )?.[1];
     if (prefix?.trim()) {
       return prefix.trim();
     }
   }
 
   return stripTickerTags(source, ticker)
-    .replace(changePattern, "")
-    .replace(/\s{2,}/g, " ")
-    .replace(/[,\s]+$/g, "")
+    .replace(changePattern, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/[,\s]+$/g, '')
     .trim();
 }
 
-function briefingCompanyChange(item: MarketBriefing["companyNews"][number]): string {
+function briefingCompanyChange(
+  item: MarketBriefing['companyNews'][number],
+): string {
   const source = [item.name, item.headline, ...(item.lines ?? [])]
     .filter(Boolean)
-    .join(" ");
-  return source.match(changePattern)?.[1] ?? "";
+    .join(' ');
+  return source.match(changePattern)?.[1] ?? '';
 }
 
 function cleanCompanyHeadline(
@@ -850,46 +890,52 @@ function cleanCompanyHeadline(
   companyName: string,
   ticker: string,
 ): string {
-  let nextHeadline = (headline ?? "").trim();
+  let nextHeadline = (headline ?? '').trim();
   if (!nextHeadline) {
-    return "";
+    return '';
   }
 
   const escapedName = escapeRegExp(companyName);
   const escapedTicker = escapeRegExp(ticker);
   if (escapedName && escapedTicker) {
     nextHeadline = nextHeadline.replace(
-      new RegExp(`^${escapedName}\\s*(?:#${escapedTicker})?(?:\\s+#${escapedTicker})*\\s*(?:\\([+-]\\s*\\d+(?:\\.\\d+)?%[^)]*\\))?\\s*[,，:-]?\\s*`, "i"),
-      "",
+      new RegExp(
+        `^${escapedName}\\s*(?:#${escapedTicker})?(?:\\s+#${escapedTicker})*\\s*(?:\\([+-]\\s*\\d+(?:\\.\\d+)?%[^)]*\\))?\\s*[,，:-]?\\s*`,
+        'i',
+      ),
+      '',
     );
   }
 
   if (escapedTicker) {
     nextHeadline = nextHeadline.replace(
-      new RegExp(`^#${escapedTicker}\\s*(?:\\([+-]\\s*\\d+(?:\\.\\d+)?%[^)]*\\))?\\s*[,，:-]?\\s*`, "i"),
-      "",
+      new RegExp(
+        `^#${escapedTicker}\\s*(?:\\([+-]\\s*\\d+(?:\\.\\d+)?%[^)]*\\))?\\s*[,，:-]?\\s*`,
+        'i',
+      ),
+      '',
     );
   }
 
-  return nextHeadline.replace(changePattern, "").trim();
+  return nextHeadline.replace(changePattern, '').trim();
 }
 
 function stripTickerTags(value: string, ticker: string): string {
   const escapedTicker = escapeRegExp(ticker);
   if (!escapedTicker) {
-    return value.replace(/#[A-Z0-9.]{1,12}|#\d{6}/gi, "").trim();
+    return value.replace(/#[A-Z0-9.]{1,12}|#\d{6}/gi, '').trim();
   }
 
   return value
-    .replace(new RegExp(`#${escapedTicker}\\b`, "gi"), "")
-    .replace(/#[A-Z0-9.]{1,12}|#\d{6}/gi, "")
+    .replace(new RegExp(`#${escapedTicker}\\b`, 'gi'), '')
+    .replace(/#[A-Z0-9.]{1,12}|#\d{6}/gi, '')
     .trim();
 }
 
 function extractTickerTag(value: string | undefined): string {
-  const text = (value ?? "").trim();
+  const text = (value ?? '').trim();
   if (!text) {
-    return "";
+    return '';
   }
 
   const tagged = text.match(/#([A-Z0-9.]{1,12}|\d{6})/i)?.[1];
@@ -897,17 +943,17 @@ function extractTickerTag(value: string | undefined): string {
     return tagged.toUpperCase();
   }
 
-  const clean = text.replace(/^#/, "").trim().toUpperCase();
-  return /^[A-Z0-9.]{1,12}$/.test(clean) || /^\d{6}$/.test(clean) ? clean : "";
+  const clean = text.replace(/^#/, '').trim().toUpperCase();
+  return /^[A-Z0-9.]{1,12}$/.test(clean) || /^\d{6}$/.test(clean) ? clean : '';
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function stockHref(symbol: string, fallbackMarket: BriefingMarket): string {
   const cleanSymbol = extractTickerTag(symbol);
-  const market = /^\d{6}$/.test(cleanSymbol) ? "KR" : fallbackMarket;
-  const currency = market === "KR" ? "KRW" : "USD";
+  const market = /^\d{6}$/.test(cleanSymbol) ? 'KR' : fallbackMarket;
+  const currency = market === 'KR' ? 'KRW' : 'USD';
   return `/?symbol=${encodeURIComponent(cleanSymbol)}&market=${market}&currency=${currency}`;
 }
