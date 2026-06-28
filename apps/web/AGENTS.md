@@ -27,6 +27,9 @@ Important shareable routes:
 - `/community/<postId>`: shareable full post.
 - `/community/<postId>/edit`: post editor.
 - `/community/users/<userId>`: shareable user feed.
+- `/calendar`: calendar shell, defaults to IPO.
+- `/calendar/ipo`: shareable IPO subscription/listing calendar.
+- `/calendar/earnings`: shareable US earnings calendar.
 - `/market-briefing/<briefingId>`: shareable briefing.
 
 Use router navigation and URL state for cross-feature navigation. Do not introduce hidden view-only state that prevents menu navigation or link sharing.
@@ -123,6 +126,16 @@ Do not replace TipTap with ad hoc paragraph/image block controls.
 - Check safe-area spacing, sticky headers, bottom navigation, text overflow, chart sizing, editor usability, and image behavior on mobile.
 - Production PWA may cache old frontend assets. After deployment, a full app close/reopen or service-worker refresh may be required during verification.
 
+## Push Notification And Mobile Refresh UI
+
+- `NotificationCenter` is rendered in the authenticated header. Device Push permission and notification-type preferences are separate controls.
+- Never request notification permission automatically after login. Request it only after an explicit user action such as "Enable on this device".
+- Users can independently enable or disable watchlist price bands, earnings, IPO, market briefing, community reactions, and subscribed-author posts.
+- `public/sw.js` handles `push` and `notificationclick`. Notification URLs must remain shareable authenticated routes.
+- iOS Push requires iOS 16.4+ and an installed Home Screen PWA. Android and desktop Chromium PWAs are also supported.
+- Service workers are registered only in production. After changing `sw.js`, bump `CACHE_NAME` and fully close/reopen an installed PWA during verification.
+- `PullToRefresh` is mounted in the authenticated layout for screens below 640px. It activates only at page scroll position zero, ignores horizontal gestures and form/open-menu interactions, and reloads after a 72px pull threshold.
+
 ## Styling Rules
 
 - Reuse design tokens and existing common components.
@@ -138,6 +151,36 @@ Do not replace TipTap with ad hoc paragraph/image block controls.
   `/markets/stocks/news?symbol=<six-digit>&market=KR&language=ko`
 - Render the API response; do not independently invent company-name news queries in the Web.
 - Stock/news/briefing loading failures should fail visibly or to an intentional empty state, not silently switch to unrelated content.
+
+## Calendar And Earnings UI
+
+- The main navigation label is `캘린더` / `Calendar`.
+- Calendar tabs use the same segmented-control style as portfolio dashboard tabs.
+- `공모주` shows IPO subscription/listing events.
+- `미국실적` shows US earnings events from the API, not from direct browser calls to Alpha Vantage.
+- Earnings routes must remain shareable: `/calendar/ipo` and `/calendar/earnings`.
+- Earnings views:
+  - Daily and weekly views exclude Saturday/Sunday.
+  - Monthly view supports search. Searching a ticker/company should keep the calendar layout and show/highlight matching result cards on their report dates.
+  - Monthly previous/next buttons must not navigate outside the DB bounds returned by `/markets/calendar/earnings/us/bounds`.
+  - The UI should also respect the backend retention model: only the previous month and newer retained data should be reachable.
+- US stock detail displays `nextEarnings` near the stock title action area, beside the watchlist/currency controls, not inside the company overview box.
+- Hide `nextEarnings` if the report date is before today, even if stale data is accidentally returned.
+- Translate earnings time labels in the UI:
+  - `pre-market` -> `프리마켓`
+  - `post-market` / after-market variants -> `애프터마켓`
+  - unknown/missing -> `시간 미정`
+- Keep the next-earnings badge responsive; do not truncate the text to `...` when Korean/English labels are longer.
+
+## S&P 500 Financial And Earnings UI
+
+- The stock-detail annual chart is shown only when S&P 500 financial data exists. Its More link routes to `/stocks/US/{symbol}/financials?currency=USD|KRW`.
+- The detailed financial page supports annual/quarterly data and USD/KRW conversion.
+- The earnings page route is `/stocks/US/{symbol}/earnings`. It displays revenue and EPS actual/estimate, estimate surprise, previous-quarter values/change, and year-ago values/change.
+- Positive percentages use `text-positive` (green), and negative percentages use `text-negative` (red). Null comparisons render as `-`.
+- Korean-friendly quarter labels are derived from the reporting period/date rather than blindly displaying a provider fiscal-quarter number. This is important for non-calendar fiscal years such as NVIDIA.
+- All US-to-KRW values on stock prices, charts, financial details, and earnings use the shared Zustand `exchangeRate` loaded from the market-pulse quote `KIS_FX:USDKRW`. Conversion is USD x rate for KRW and KRW / rate for USD.
+- The stock-detail earnings badge is a link to the earnings route. It shows the next scheduled event before release and a recent-period earnings link after actual data arrives.
 
 ## Verification
 
@@ -159,10 +202,12 @@ Before finishing market/community changes, manually verify:
 
 ## Deployment
 
-- Working branch for requested changes: `LSH`.
+- Working branch for requested changes: `LSH6` unless the user explicitly creates a newer branch.
 - Docker image: `honeyhyuni12/investment-community-web:latest`
-- Operating VM: `172.16.11.126`
+- Current operating VM: `172.16.11.137` (Ubuntu). The previous Rocky VM `172.16.11.126` was replaced after storage/VM corruption.
 - Deployment directory: `/home/ncloud/investment-community`
 - Public site: `https://15f.kro.kr/`
+- Direct-IP fallback for infrastructure checks: `http://172.16.11.137/`
+- Production VM `.env` should use `WEB_ORIGIN=https://15f.kro.kr`, `NEXT_PUBLIC_API_BASE_URL=/api`, and `REFRESH_COOKIE_SECURE=true`.
 
 Never commit `.env`, credentials, tokens, passwords, generated logs, or local `.next` output.

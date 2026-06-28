@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth-user.type';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -15,12 +25,23 @@ import {
   Portfolio,
   StockDetail,
   StockSymbol,
+  UsEarningsCalendarItem,
 } from './finnhub-quote.dto';
 import { IpoCalendarBatchService } from './ipo-calendar-batch.service';
 import type { ChartPeriod, PortfolioInput } from './finnhub-quote.dto';
 import { MarketsService } from './markets.service';
 import { StockFinancialBatchService } from './stock-financial-batch.service';
 import { StockMasterBatchService } from './stock-master-batch.service';
+import { UsEarningsCalendarBatchService } from './us-earnings-calendar-batch.service';
+import {
+  UsStockFinancialsService,
+  type UsStockFinancialResponse,
+} from './us-stock-financials.service';
+import {
+  GuruPortfoliosService,
+  type GuruDetailResponse,
+  type GuruSummaryResponse,
+} from './guru-portfolios.service';
 
 @Controller('markets')
 @UseGuards(JwtAuthGuard)
@@ -31,10 +52,15 @@ export class MarketsController {
     private readonly stockMasterBatchService: StockMasterBatchService,
     private readonly stockFinancialBatchService: StockFinancialBatchService,
     private readonly ipoCalendarBatchService: IpoCalendarBatchService,
+    private readonly usEarningsCalendarBatchService: UsEarningsCalendarBatchService,
+    private readonly usStockFinancialsService: UsStockFinancialsService,
+    private readonly guruPortfoliosService: GuruPortfoliosService,
   ) {}
 
   @Get('quotes')
-  getQuotes(@Query('symbols') symbols = 'AAPL,MSFT,NVDA'): Promise<MarketQuote[]> {
+  getQuotes(
+    @Query('symbols') symbols = 'AAPL,MSFT,NVDA',
+  ): Promise<MarketQuote[]> {
     return this.marketsService.getQuotes(
       symbols
         .split(',')
@@ -160,6 +186,13 @@ export class MarketsController {
     return this.marketsService.getStockQuote(symbol, market);
   }
 
+  @Get('stocks/financials/us')
+  getUsStockFinancials(
+    @Query('symbol') symbol: string,
+  ): Promise<UsStockFinancialResponse> {
+    return this.usStockFinancialsService.getRequired(symbol);
+  }
+
   @Get('stocks/news')
   // 종목 상세 하단의 "이 종목의 최신 뉴스" 목록을 조회한다.
   getStockNews(
@@ -185,6 +218,34 @@ export class MarketsController {
     return this.ipoCalendarBatchService.getUpcomingIpos();
   }
 
+  @Get('calendar/earnings/us')
+  getUsEarningsCalendar(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('query') query?: string,
+  ): Promise<UsEarningsCalendarItem[]> {
+    return this.usEarningsCalendarBatchService.getUsEarningsCalendar({
+      from: from ?? this.formatDateOffset(0),
+      to: to ?? this.formatDateOffset(31),
+      query,
+    });
+  }
+
+  @Get('calendar/earnings/us/bounds')
+  getUsEarningsBounds(): Promise<{
+    minDate: string | null;
+    maxDate: string | null;
+  }> {
+    return this.usEarningsCalendarBatchService.getUsEarningsBounds();
+  }
+
+  @Get('stocks/earnings/us')
+  getUsStockEarnings(
+    @Query('symbol') symbol: string,
+  ): Promise<UsEarningsCalendarItem[]> {
+    return this.usEarningsCalendarBatchService.getUsEarningsForSymbol(symbol);
+  }
+
   @Get('briefing')
   // 마켓브리핑 메뉴에서 시장별 최신 브리핑 하나를 조회한다.
   getMarketBriefing(
@@ -208,6 +269,16 @@ export class MarketsController {
     return this.marketsService.getMarketBriefingById(id);
   }
 
+  @Get('gurus')
+  getGuruManagers(): Promise<GuruSummaryResponse[]> {
+    return this.guruPortfoliosService.getManagers();
+  }
+
+  @Get('gurus/:slug')
+  getGuruManager(@Param('slug') slug: string): Promise<GuruDetailResponse> {
+    return this.guruPortfoliosService.getManager(slug);
+  }
+
   @Patch('briefings/:id')
   @UseGuards(RolesGuard)
   @Roles(UserRole.Admin)
@@ -229,9 +300,7 @@ export class MarketsController {
   @Post('briefings/run')
   @UseGuards(RolesGuard)
   @Roles(UserRole.Admin)
-  runMarketBriefing(
-    @Query('market') market = 'US',
-  ): Promise<MarketBriefing> {
+  runMarketBriefing(@Query('market') market = 'US'): Promise<MarketBriefing> {
     return this.marketsService.runMarketBriefing(market);
   }
 
@@ -269,6 +338,26 @@ export class MarketsController {
     );
   }
 
+  @Post('financials/backfill')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  backfillStockFinancials(
+    @Query('startYear') startYear?: string,
+    @Query('endYear') endYear?: string,
+    @Query('limit') limit?: string,
+  ): Promise<{
+    stocks: number;
+    rows: number;
+    failed: number;
+    years: number[];
+  }> {
+    return this.stockFinancialBatchService.backfillAnnualFinancials(
+      startYear ? Number(startYear) : undefined,
+      endYear ? Number(endYear) : undefined,
+      limit ? Number(limit) : undefined,
+    );
+  }
+
   @Post('ipos/batch')
   @UseGuards(RolesGuard)
   @Roles(UserRole.Admin)
@@ -278,5 +367,65 @@ export class MarketsController {
     failed: number;
   }> {
     return this.ipoCalendarBatchService.refreshUpcomingIpos();
+  }
+
+  @Post('calendar/earnings/us/batch')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  refreshUsEarningsCalendar(): Promise<{
+    fetched: number;
+    updated: number;
+    deleted: number;
+    finnhubFetched: number;
+    finnhubUpdated: number;
+    actualUpdated: number;
+  }> {
+    return this.usEarningsCalendarBatchService.refreshUsEarningsCalendar();
+  }
+
+  @Post('calendar/earnings/us/actuals')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  refreshDueUsEarningsActuals(): Promise<{
+    checkedDates: string[];
+    fetched: number;
+    updated: number;
+    actualUpdated: number;
+  }> {
+    return this.usEarningsCalendarBatchService.refreshDueFinnhubActuals();
+  }
+
+  @Post('calendar/earnings/us/sec-confirmations')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  refreshUsEarningsSecConfirmations(): Promise<{
+    checked: number;
+    confirmed: number;
+  }> {
+    return this.usEarningsCalendarBatchService.refreshSecConfirmations();
+  }
+
+  @Post('gurus/batch')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.Admin)
+  refreshGuruPortfolios(@Query('force') force?: string): Promise<{
+    managers: number;
+    holdings: number;
+    skippedManagers: number;
+    failedManagers: number;
+    generatedAt: string;
+    secDataset: { managers: number; holdings: number; skippedManagers: number; generatedAt: string } | null;
+    nasdaq: { scanned: number; updated: number; failed: number };
+  }> {
+    return this.guruPortfoliosService.refreshOperationalBatch(force === 'true');
+  }
+
+  private formatDateOffset(offsetDays: number): string {
+    const date = new Date();
+    date.setDate(date.getDate() + offsetDays);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+      2,
+      '0',
+    )}-${String(date.getDate()).padStart(2, '0')}`;
   }
 }

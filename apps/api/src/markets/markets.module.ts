@@ -15,9 +15,23 @@ import { StockFinancialEntity } from './stock-financial.entity';
 import { StockMasterBatchService } from './stock-master-batch.service';
 import { StockMasterEntity } from './stock-master.entity';
 import { StockProfileEntity } from './stock-profile.entity';
+import { UsEarningsCalendarBatchService } from './us-earnings-calendar-batch.service';
+import { UsEarningsCalendarEntity } from './us-earnings-calendar.entity';
+import { User } from '../users/user.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { MarketNotificationJobsService } from './market-notification-jobs.service';
+import { UsStockFinancialEntity } from './us-stock-financial.entity';
+import { UsStockFinancialsService } from './us-stock-financials.service';
+import { GuruManagerEntity } from './guru-manager.entity';
+import { GuruHoldingEntity } from './guru-holding.entity';
+import { GuruPortfoliosService } from './guru-portfolios.service';
+import { GuruSecurityMasterEntity } from './guru-security-master.entity';
+import { GuruSecDatasetEntity } from './guru-sec-dataset.entity';
+import { GuruEdgarFilingEntity } from './guru-edgar-filing.entity';
 
 @Module({
   imports: [
+    NotificationsModule,
     TypeOrmModule.forFeature([
       StockProfileEntity,
       StockMasterEntity,
@@ -27,6 +41,14 @@ import { StockProfileEntity } from './stock-profile.entity';
       PortfolioEntity,
       PortfolioPositionEntity,
       IpoCalendarEntity,
+      UsEarningsCalendarEntity,
+      User,
+      UsStockFinancialEntity,
+      GuruManagerEntity,
+      GuruHoldingEntity,
+      GuruSecurityMasterEntity,
+      GuruSecDatasetEntity,
+      GuruEdgarFilingEntity,
     ]),
   ],
   controllers: [MarketsController],
@@ -37,6 +59,10 @@ import { StockProfileEntity } from './stock-profile.entity';
     StockMasterBatchService,
     StockFinancialBatchService,
     IpoCalendarBatchService,
+    UsEarningsCalendarBatchService,
+    MarketNotificationJobsService,
+    UsStockFinancialsService,
+    GuruPortfoliosService,
   ],
 })
 /** Wires market quotes, stock metadata, financial batches, briefings, and sockets. */

@@ -37,6 +37,7 @@ import { apiRequest } from "@/common/lib/api";
 import { Button } from "@/common/components/Button";
 import { Notice } from "@/common/components/Notice";
 import { SectionHeader } from "@/common/components/SectionHeader";
+import { SegmentedControl } from "@/common/components/SegmentedControl";
 import { Skeleton } from "@/common/components/Skeleton";
 import { useSessionStore } from "@/common/stores/session";
 import { useMarketDataStore } from "@/common/stores/market-data";
@@ -52,6 +53,7 @@ import {
 } from "@/common/types";
 
 type PortfolioTab = "watchlist" | "portfolio";
+type PortfolioSort = "weight" | "profit";
 
 type PositionDraft = {
   key: string;
@@ -88,11 +90,18 @@ export function FavoritesPage({
   const usSymbols = useMarketDataStore((s) => s.usSymbols);
   const krSymbols = useMarketDataStore((s) => s.krSymbols);
   const livePrices = useMarketDataStore((s) => s.livePrices);
+  const loadStockSymbols = useMarketDataStore((s) => s.loadStockSymbols);
   const [activeTab, setActiveTab] = useState<PortfolioTab>(initialTab);
 
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
+
+  useEffect(() => {
+    if (accessToken && activeTab === "portfolio") {
+      void loadStockSymbols(accessToken);
+    }
+  }, [accessToken, activeTab, loadStockSymbols]);
 
   function switchTab(tab: PortfolioTab) {
     setActiveTab(tab);
@@ -107,32 +116,37 @@ export function FavoritesPage({
             eyebrow={language === "ko" ? "Portfolio" : "Portfolio"}
             title={language === "ko" ? "포트폴리오 대쉬보드" : "Portfolio Dashboard"}
           />
-          <div className="grid grid-cols-2 rounded-md border border-border bg-surface-muted p-1 sm:w-auto">
-            <button
-              type="button"
-              onClick={() => switchTab("watchlist")}
-              className={cn(
-                "h-9 cursor-pointer rounded-md px-4 text-sm font-semibold transition-colors",
-                activeTab === "watchlist"
-                  ? "bg-surface text-primary shadow-sm"
-                  : "text-muted hover:text-primary",
-              )}
-            >
-              내관심종목
-            </button>
-            <button
-              type="button"
-              onClick={() => switchTab("portfolio")}
-              className={cn(
-                "h-9 cursor-pointer rounded-md px-4 text-sm font-semibold transition-colors",
-                activeTab === "portfolio"
-                  ? "bg-surface text-primary shadow-sm"
-                  : "text-muted hover:text-primary",
-              )}
-            >
-              포트폴리오
-            </button>
-          </div>        </div>
+          <SegmentedControl<PortfolioTab>
+            className="w-full sm:inline-flex sm:w-auto"
+            aria-label={language === "ko" ? "포트폴리오 화면 선택" : "Portfolio view"}
+            options={[
+              {
+                value: "watchlist",
+                label: (
+                  <span className="flex flex-col items-center leading-tight">
+                    <span>{language === "ko" ? "내 관심종목" : "Watchlist"}</span>
+                    <span className="text-[11px] font-medium opacity-80">
+                      {language === "ko" ? "저장한 종목" : "Saved stocks"}
+                    </span>
+                  </span>
+                ),
+              },
+              {
+                value: "portfolio",
+                label: (
+                  <span className="flex flex-col items-center leading-tight">
+                    <span>{language === "ko" ? "포트폴리오" : "Portfolio"}</span>
+                    <span className="text-[11px] font-medium opacity-80">
+                      {language === "ko" ? "비중/수익률" : "Allocation"}
+                    </span>
+                  </span>
+                ),
+              },
+            ]}
+            value={activeTab}
+            onChange={switchTab}
+          />
+        </div>
 
         {activeTab === "watchlist" ? (
           <WatchlistSection
@@ -293,7 +307,7 @@ function WatchlistSection({
       <div className="flex items-center justify-between gap-3">
         <SectionHeader
           eyebrow="Watchlist"
-          title={language === "ko" ? "내관심종목" : "My Watchlist"}
+          title={language === "ko" ? "내 관심종목" : "My Watchlist"}
         />
         {favorites.length ? (
           <Button
@@ -385,7 +399,7 @@ function WatchlistSection({
       ) : (
         <div className="mt-4 rounded-md border border-dashed border-border bg-surface-muted px-4 py-12 text-center">
           <Star size={28} className="mx-auto text-[#f4b400]" fill="currentColor" />
-                    <p className="mt-3 text-base font-semibold text-foreground">
+          <p className="mt-3 text-base font-semibold text-foreground">
             아직 관심종목이 없습니다.
           </p>
           <p className="mt-1 text-sm text-muted">
@@ -422,6 +436,7 @@ function PortfolioSection({  accessToken,
   const [portfolioName, setPortfolioName] = useState("");
   const [drafts, setDrafts] = useState<PositionDraft[]>([makeDraft()]);
   const [displayCurrency, setDisplayCurrency] = useState<"USD" | "KRW">("KRW");
+  const [portfolioSort, setPortfolioSort] = useState<PortfolioSort>("weight");
   const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
 
   const stockSymbols = useMemo(() => [...krSymbols, ...usSymbols], [krSymbols, usSymbols]);
@@ -433,6 +448,20 @@ function PortfolioSection({  accessToken,
     () => buildPortfolioRows(selectedPortfolios, displayCurrency, exchangeRate, livePrices),
     [selectedPortfolios, displayCurrency, exchangeRate, livePrices],
   );
+  const sortedRows = useMemo(() => {
+    const nextRows = [...rows];
+    if (portfolioSort === "profit") {
+      return nextRows.sort((a, b) => {
+        const profitA = a.profitRate ?? Number.NEGATIVE_INFINITY;
+        const profitB = b.profitRate ?? Number.NEGATIVE_INFINITY;
+        if (profitB !== profitA) {
+          return profitB - profitA;
+        }
+        return b.displayValue - a.displayValue;
+      });
+    }
+    return nextRows.sort((a, b) => b.percent - a.percent);
+  }, [portfolioSort, rows]);
   const totalValue = rows.reduce((sum, row) => sum + row.displayValue, 0);
   const totalCost = rows.reduce((sum, row) => sum + row.displayCost, 0);
   const totalProfitAmount = totalValue - totalCost;
@@ -794,12 +823,33 @@ function PortfolioSection({  accessToken,
             </div>
 
             <div className="rounded-lg border border-border bg-surface-muted p-4">
-              <div className="flex items-center gap-2">
-                <PieChart size={17} className="text-primary" />
-                <p className="text-sm font-semibold text-foreground">구성 비중</p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <PieChart size={17} className="text-primary" />
+                  <p className="text-sm font-semibold text-foreground">
+                    {language === "ko" ? "구성비중" : "Allocation"}
+                  </p>
+                </div>
+                <SegmentedControl<PortfolioSort>
+                  className="w-full sm:w-auto"
+                  buttonClassName="px-3 py-1.5 text-xs"
+                  aria-label={language === "ko" ? "포트폴리오 정렬" : "Portfolio sort"}
+                  options={[
+                    {
+                      value: "weight",
+                      label: language === "ko" ? "보유비중순" : "Weight",
+                    },
+                    {
+                      value: "profit",
+                      label: language === "ko" ? "평가수익률순" : "Return",
+                    },
+                  ]}
+                  value={portfolioSort}
+                  onChange={setPortfolioSort}
+                />
               </div>
-              <div className="mt-4 grid gap-2">
-                {rows.map((row) => (
+              <div className="mt-4 grid max-h-[28rem] gap-2 overflow-y-auto pr-1">
+                {sortedRows.map((row) => (
                   <button
                     key={`${row.market}-${row.symbol}`}
                     type="button"
@@ -1125,7 +1175,9 @@ function PortfolioPieChart({
 }) {
   if (!rows.length || totalValue <= 0) {
     return (
-      <div className="mt-6 grid aspect-square max-h-72 place-items-center rounded-full border border-dashed border-border text-sm font-semibold text-muted">`r`n        데이터 없음`r`n      </div>
+      <div className="mt-6 grid aspect-square max-h-72 place-items-center rounded-full border border-dashed border-border text-sm font-semibold text-muted">
+        데이터 없음
+      </div>
     );
   }
 
@@ -1234,25 +1286,37 @@ function portfolioSearchScore(item: StockSymbol, rawQuery: string): number {
   if (!query) {
     return 0;
   }
-  const symbol = item.symbol.toLowerCase();
-  const name = item.description.toLowerCase();
+  const symbol = (item.symbol ?? "").toLowerCase();
+  const displaySymbol = (item.displaySymbol ?? item.symbol ?? "").toLowerCase();
+  const name = (item.description ?? "").toLowerCase();
   const compactQuery = query.replace(/[^a-z0-9가-힣]/g, "");
   const compactSymbol = symbol.replace(/[^a-z0-9]/g, "");
-  const compactName = name.replace(/\s+/g, "");
+  const compactDisplaySymbol = displaySymbol.replace(/[^a-z0-9]/g, "");
+  const normalizedQuery = normalizePortfolioSearchText(query);
+  const normalizedName = normalizePortfolioSearchText(name);
+  const compactName = name.replace(/[^a-z0-9가-힣]/g, "");
 
-  if (compactSymbol === compactQuery || compactName === compactQuery) return 150;
-  if (compactSymbol.startsWith(compactQuery)) return 130;
-  if (compactName.startsWith(compactQuery)) return 125;
-  if (compactSymbol.includes(compactQuery)) return 110;
-  if (compactName.includes(compactQuery)) return 100;
+  if (
+    compactSymbol === normalizedQuery ||
+    compactDisplaySymbol === normalizedQuery ||
+    normalizedName === normalizedQuery
+  ) return 150;
+  if (compactSymbol.startsWith(normalizedQuery) || compactDisplaySymbol.startsWith(normalizedQuery)) return 130;
+  if (normalizedName.startsWith(normalizedQuery)) return 125;
+  if (compactSymbol.includes(normalizedQuery) || compactDisplaySymbol.includes(normalizedQuery)) return 110;
+  if (normalizedName.includes(normalizedQuery)) return 100;
 
   const baseScore = stockSearchScore(item, rawQuery);
-  const symbolDistance = editDistance(compactSymbol, compactQuery);
+  const symbolDistance = editDistance(compactSymbol, normalizedQuery);
   const transposed =
-    compactSymbol.length === compactQuery.length &&
-    [...compactSymbol].sort().join("") === [...compactQuery].sort().join("");
+    compactSymbol.length === normalizedQuery.length &&
+    [...compactSymbol].sort().join("") === [...normalizedQuery].sort().join("");
   const fuzzyScore = transposed ? 95 : symbolDistance <= 2 ? 90 - symbolDistance * 10 : 0;
   return Math.max(baseScore, fuzzyScore);
+}
+
+function normalizePortfolioSearchText(value: string): string {
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 function editDistance(a: string, b: string): number {
@@ -1374,7 +1438,7 @@ function FavoriteStockCard({
       <FavoriteCardContent stock={stock} language={language} exchangeRate={exchangeRate} />
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-surface/50 opacity-0 backdrop-blur-[1px] transition-opacity duration-200 group-hover:opacity-100">
         <span className="text-sm font-semibold text-foreground">
-          {language === "ko" ? "?곸꽭 蹂닿린" : "Show detail"}
+          {language === "ko" ? "상세 보기" : "Show detail"}
         </span>
       </div>
     </button>
@@ -1428,8 +1492,8 @@ function SortableFavoriteCard({
           event.stopPropagation();
           onRemove();
         }}
-        title={language === "ko" ? "愿?ъ쥌紐??쒓굅" : "Remove favorite"}
-        aria-label={language === "ko" ? "愿?ъ쥌紐??쒓굅" : "Remove favorite"}
+        title={language === "ko" ? "관심종목 제거" : "Remove favorite"}
+        aria-label={language === "ko" ? "관심종목 제거" : "Remove favorite"}
         className={cn("absolute right-2 top-2 text-muted", isDragging && "invisible")}
       >
         <Trash2 size={16} />

@@ -3,7 +3,8 @@ FROM node:24-alpine AS deps
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+COPY apps/api/package*.json ./apps/api/
+RUN npm ci --workspace api --include-workspace-root
 
 FROM node:24-alpine AS builder
 
@@ -11,8 +12,7 @@ WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
-RUN npm prune --omit=dev
+RUN npm run build --workspace api
 
 FROM node:24-alpine AS runner
 
@@ -24,8 +24,9 @@ ENV PORT=4000
 RUN addgroup -S nestjs && adduser -S nestjs -G nestjs
 
 COPY --from=builder --chown=nestjs:nestjs /app/node_modules ./node_modules
-COPY --from=builder --chown=nestjs:nestjs /app/dist ./dist
-COPY --from=builder --chown=nestjs:nestjs /app/package*.json ./
+COPY --from=builder --chown=nestjs:nestjs /app/apps/api/dist ./dist
+COPY --from=builder --chown=nestjs:nestjs /app/apps/api/src/markets/data ./dist/markets/data
+COPY --from=builder --chown=nestjs:nestjs /app/apps/api/package*.json ./
 
 USER nestjs
 

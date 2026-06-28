@@ -1,12 +1,6 @@
-﻿"use client";
+"use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MessageSquareText,
   Newspaper,
@@ -25,6 +19,7 @@ import {
   ISeriesApi,
   Time,
 } from "lightweight-charts";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiRequest } from "@/common/lib/api";
 import { Notice } from "@/common/components/Notice";
@@ -35,8 +30,13 @@ import { Skeleton } from "@/common/components/Skeleton";
 import { useSessionStore } from "@/common/stores/session";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { usePreferencesStore } from "@/common/stores/preferences";
-import { formatMoney, formatNumber } from "@/common/utils/format";
+import {
+  convertMoneyValue,
+  formatMoney,
+  formatNumber,
+} from "@/common/utils/format";
 import { applyLiveTrade } from "@/common/utils/market";
+import { stockSearchScore } from "@/common/utils/stock-search";
 import {
   DisplayCurrency,
   FavoriteStock,
@@ -214,11 +214,13 @@ export function StocksPage() {
     }
 
     return source
-      .filter(
-        (item) =>
-          item.symbol.toLowerCase().includes(query) ||
-          item.description.toLowerCase().includes(query),
+      .map((item) => ({ item, score: stockSearchScore(item, debouncedSearch) }))
+      .filter(({ score }) => score > 0)
+      .sort(
+        (a, b) =>
+          b.score - a.score || a.item.symbol.localeCompare(b.item.symbol),
       )
+      .map(({ item }) => item)
       .slice(0, 24);
   }, [debouncedSearch, usStocks, usSymbols]);
 
@@ -229,11 +231,13 @@ export function StocksPage() {
     }
 
     return krSymbols
-      .filter(
-        (item) =>
-          item.symbol.toLowerCase().includes(query) ||
-          item.description.toLowerCase().includes(query),
+      .map((item) => ({ item, score: stockSearchScore(item, debouncedSearch) }))
+      .filter(({ score }) => score > 0)
+      .sort(
+        (a, b) =>
+          b.score - a.score || a.item.symbol.localeCompare(b.item.symbol),
       )
+      .map(({ item }) => item)
       .slice(0, 24);
   }, [debouncedSearch, krSymbols]);
 
@@ -289,7 +293,8 @@ export function StocksPage() {
         );
         setFavoriteStocks((items) =>
           items.filter(
-            (item) => !(item.symbol === selectedSymbol && item.market === stockTab),
+            (item) =>
+              !(item.symbol === selectedSymbol && item.market === stockTab),
           ),
         );
       } else {
@@ -308,7 +313,11 @@ export function StocksPage() {
         setFavoriteStocks((items) => [
           favorite,
           ...items.filter(
-            (item) => !(item.symbol === favorite.symbol && item.market === favorite.market),
+            (item) =>
+              !(
+                item.symbol === favorite.symbol &&
+                item.market === favorite.market
+              ),
           ),
         ]);
       }
@@ -741,30 +750,34 @@ function StockDetailPanel({
   }
 
   const quote = applyLiveTrade(detail.quote, live);
-    const detailSourceCurrency = detail.profile.currency === "KRW" ? "KRW" : (detail.quote.currency ?? "USD");
-    const displayMarketCap = detail.profile.marketCapitalization
+  const detailSourceCurrency =
+    detail.profile.currency === "KRW"
+      ? "KRW"
+      : (detail.quote.currency ?? "USD");
+  const displayMarketCap = detail.profile.marketCapitalization
     ? formatMarketCap(
         detail.profile.marketCapitalization,
         priceCurrency,
         detailSourceCurrency,
         exchangeRate,
       )
-      : "-";
-    const metricItems = buildMetricItems(
-      detail.metrics,
-      language,
-      priceCurrency,
-      detailSourceCurrency,
-      exchangeRate,
-    );
-    const isKoreanMarket =
-      detail.profile.currency === "KRW" && detail.profile.country === "대한민국";
-    const logoUrl =
-      detail.profile.logo ||
-      (isKoreanMarket
-        ? `https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${detail.symbol}.svg`
-        : getFallbackLogoUrl(detail.profile.weburl));
-    const valuationItems = [
+    : "-";
+  const metricItems = buildMetricItems(
+    detail.metrics,
+    language,
+    priceCurrency,
+    detailSourceCurrency,
+    exchangeRate,
+  );
+  const isKoreanMarket =
+    detail.profile.currency === "KRW" && detail.profile.country === "대한민국";
+  const logoUrl =
+    detail.profile.logo ||
+    (isKoreanMarket
+      ? `https://ssl.pstatic.net/imgstock/fn/real/logo/stock/Stock${detail.symbol}.svg`
+      : getFallbackLogoUrl(detail.profile.weburl));
+  const nextEarningsLabel = formatNextEarnings(detail.nextEarnings, language);
+  const valuationItems = [
     {
       label: translateDetailLabel(language, "marketCap"),
       value: displayMarketCap,
@@ -787,6 +800,28 @@ function StockDetailPanel({
           </p>
         </div>
         <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
+          {nextEarningsLabel ? (
+            detail.isSp500 ? (
+              <Link
+                href={
+                  "/stocks/US/" +
+                  encodeURIComponent(detail.symbol) +
+                  "/earnings"
+                }
+                className="inline-flex max-w-[260px] items-center rounded-md border border-primary/25 bg-primary/10 px-2.5 py-2 text-xs font-semibold leading-5 text-primary hover:underline sm:max-w-md"
+              >
+                <span className="whitespace-normal break-keep">
+                  {nextEarningsLabel}
+                </span>
+              </Link>
+            ) : (
+              <span className="inline-flex max-w-[260px] items-center rounded-md border border-primary/25 bg-primary/10 px-2.5 py-2 text-xs font-semibold leading-5 text-primary sm:max-w-md">
+                <span className="whitespace-normal break-keep">
+                  {nextEarningsLabel}
+                </span>
+              </span>
+            )
+          ) : null}
           <Button
             variant="secondary"
             size="icon"
@@ -821,7 +856,9 @@ function StockDetailPanel({
             <Button
               variant="secondary"
               size="icon"
-              onClick={() => setPriceCurrency(priceCurrency === "USD" ? "KRW" : "USD")}
+              onClick={() =>
+                setPriceCurrency(priceCurrency === "USD" ? "KRW" : "USD")
+              }
             >
               {priceCurrency === "USD" ? "원" : "$"}
             </Button>
@@ -850,7 +887,10 @@ function StockDetailPanel({
           <SegmentedControl
             className="w-full sm:w-auto"
             aria-label={translateDetailLabel(language, "realtimeChart")}
-            options={chartPeriods.map((period) => ({ value: period, label: period }))}
+            options={chartPeriods.map((period) => ({
+              value: period,
+              label: period,
+            }))}
             value={chartPeriod}
             onChange={setChartPeriod}
           />
@@ -874,14 +914,15 @@ function StockDetailPanel({
           </p>
         </>
       </div>
-       <div className="mt-5 rounded-md border border-border p-3 sm:p-4">
+      <div className="mt-5 rounded-md border border-border p-3 sm:p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-foreground">
               {translateDetailLabel(language, "companyOverview")}
             </p>
             <p className="mt-1 text-xs text-muted">
-              {translateDetailLabel(language, "source")}: {detail.overview.source}
+              {translateDetailLabel(language, "source")}:{" "}
+              {detail.overview.source}
               {detail.overview.fetchedAt
                 ? ` · ${new Date(detail.overview.fetchedAt).toLocaleDateString()}`
                 : ""}
@@ -891,7 +932,7 @@ function StockDetailPanel({
         <p className="mt-4 text-sm leading-6 text-foreground">
           {language === "en" ? detail.overview.en : detail.overview.ko}
         </p>
-         <div className="mt-3 grid gap-2 sm:gap-3 md:grid-cols-2">
+        <div className="mt-3 grid gap-2 sm:gap-3 md:grid-cols-2">
           <InfoBox
             label={translateDetailLabel(language, "country")}
             value={detail.profile.country || "-"}
@@ -914,19 +955,24 @@ function StockDetailPanel({
           />
         </div>
         <div className="mt-3 grid gap-2 sm:gap-3 md:grid-cols-2">
-            <InfoBox
-              label={translateDetailLabel(language, "open")}
-              value={formatMoney(quote.open, priceCurrency, quote.currency, exchangeRate)}
-            />
-            <InfoBox
-              label={translateDetailLabel(language, "previousClose")}
-              value={formatMoney(
-                quote.previousClose,
-                priceCurrency,
-                quote.currency,
-                exchangeRate,
-              )}
-            />
+          <InfoBox
+            label={translateDetailLabel(language, "open")}
+            value={formatMoney(
+              quote.open,
+              priceCurrency,
+              quote.currency,
+              exchangeRate,
+            )}
+          />
+          <InfoBox
+            label={translateDetailLabel(language, "previousClose")}
+            value={formatMoney(
+              quote.previousClose,
+              priceCurrency,
+              quote.currency,
+              exchangeRate,
+            )}
+          />
         </div>
       </div>
       <div className="mt-5 rounded-md border border-border p-3 sm:p-4">
@@ -939,9 +985,29 @@ function StockDetailPanel({
           ))}
         </div>
       </div>
-      <FinancialBarChart financials={detail.financials ?? []} language={language} />
+      <FinancialBarChart
+        financials={detail.financials ?? []}
+        language={language}
+        symbol={detail.symbol}
+        currency={priceCurrency}
+        sourceCurrency={detail.profile.currency === "KRW" ? "KRW" : "USD"}
+        exchangeRate={exchangeRate}
+        showMore={!!detail.isSp500}
+      />
     </div>
   );
+}
+
+function earningsPeriodLabel(item: NonNullable<StockDetail["nextEarnings"]>) {
+  const baseDate = item.fiscalDateEnding || item.reportDate;
+  const date = new Date(baseDate.slice(0, 10) + "T00:00:00Z");
+  if (!Number.isNaN(date.getTime())) {
+    date.setUTCMonth(date.getUTCMonth() - 1);
+    return (
+      date.getUTCFullYear() + " Q" + (Math.floor(date.getUTCMonth() / 3) + 1)
+    );
+  }
+  return item.reportDate.slice(0, 7);
 }
 
 function StockSearchPopover({
@@ -1027,7 +1093,10 @@ function StockSearchPopover({
           className="min-w-0 flex-1 bg-transparent text-base font-semibold text-foreground outline-none placeholder:font-medium placeholder:text-muted sm:text-sm"
         />
         {isDebouncing ? (
-          <span className="size-2 shrink-0 rounded-full bg-primary/70" aria-hidden />
+          <span
+            className="size-2 shrink-0 rounded-full bg-primary/70"
+            aria-hidden
+          />
         ) : null}
         {search ? (
           <button
@@ -1070,8 +1139,10 @@ function StockSearchPopover({
                         exchangeRate,
                       )
                     : "";
-                const primary = market === "KR" ? item.description : item.symbol;
-                const secondary = market === "KR" ? item.symbol : item.description;
+                const primary =
+                  market === "KR" ? item.description : item.symbol;
+                const secondary =
+                  market === "KR" ? item.symbol : item.description;
 
                 return (
                   <button
@@ -1097,7 +1168,9 @@ function StockSearchPopover({
               })
             ) : (
               <p className="px-3 py-6 text-center text-sm text-muted">
-                {language === "ko" ? "검색 결과가 없습니다." : "No matches found."}
+                {language === "ko"
+                  ? "검색 결과가 없습니다."
+                  : "No matches found."}
               </p>
             )}
           </div>
@@ -1141,7 +1214,8 @@ function FavoriteStockList({
             const displayCurrency =
               favorite.market === "KR" ? "KRW" : priceCurrency;
             const active =
-              favorite.symbol === selectedSymbol && favorite.market === selectedMarket;
+              favorite.symbol === selectedSymbol &&
+              favorite.market === selectedMarket;
             const primary =
               favorite.market === "KR"
                 ? favorite.name || favorite.symbol
@@ -1193,7 +1267,9 @@ function FavoriteStockList({
         ) : (
           <div className="rounded-md border border-dashed border-border px-3 py-8 text-center">
             <p className="text-sm font-semibold text-foreground">
-              {language === "ko" ? "아직 관심종목이 없습니다." : "No favorites yet."}
+              {language === "ko"
+                ? "아직 관심종목이 없습니다."
+                : "No favorites yet."}
             </p>
             <p className="mt-1 text-xs text-muted">
               {language === "ko"
@@ -1285,12 +1361,12 @@ function RealtimeChart({
     const data: CandlestickData<Time>[] = [...candles]
       .sort((a, b) => a.time - b.time)
       .map((candle) => ({
-      time: toChartTime(candle.time, period),
-      open: candle.open,
-      high: candle.high,
-      low: candle.low,
-      close: candle.close,
-    }));
+        time: toChartTime(candle.time, period),
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+      }));
     seriesRef.current.setData(data);
     chartRef.current?.timeScale().fitContent();
     chartRef.current?.applyOptions({
@@ -1377,7 +1453,13 @@ function QuoteCard({
           <TrendingDown size={18} className="text-negative" />
         )}
       </div>
-      <p className={compact ? "mt-2 text-xl font-semibold" : "mt-3 text-2xl font-semibold sm:text-3xl"}>
+      <p
+        className={
+          compact
+            ? "mt-2 text-xl font-semibold"
+            : "mt-3 text-2xl font-semibold sm:text-3xl"
+        }
+      >
         {currentText}
       </p>
       <p
@@ -1411,7 +1493,9 @@ function RelatedPosts({
     <div className="rounded-md border border-border bg-surface-muted p-3">
       <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
         <MessageSquareText size={14} className="text-primary" />
-        {language === "ko" ? "이 종목과 관련된 피드" : "Related community posts"}
+        {language === "ko"
+          ? "이 종목과 관련된 피드"
+          : "Related community posts"}
       </p>
       <div className="mt-2 space-y-2">
         {posts.length ? (
@@ -1432,14 +1516,17 @@ function RelatedPosts({
                   </p>
                 </div>
                 <p className="mt-0.5 text-xs text-muted">
-                  {post.author.nickname} · {new Date(post.createdAt).toLocaleDateString()}
+                  {post.author.nickname} ·{" "}
+                  {new Date(post.createdAt).toLocaleDateString()}
                 </p>
               </button>
             );
           })
         ) : (
           <p className="text-xs text-muted">
-            {language === "ko" ? "아직 관련 게시글이 없습니다." : "No related posts yet."}
+            {language === "ko"
+              ? "아직 관련 게시글이 없습니다."
+              : "No related posts yet."}
           </p>
         )}
       </div>
@@ -1487,7 +1574,9 @@ function getFallbackLogoUrl(weburl?: string): string | null {
   }
 
   try {
-    const url = new URL(weburl.startsWith("http") ? weburl : `https://${weburl}`);
+    const url = new URL(
+      weburl.startsWith("http") ? weburl : `https://${weburl}`,
+    );
     return `https://logo.clearbit.com/${url.hostname.replace(/^www\./, "")}`;
   } catch {
     return null;
@@ -1513,16 +1602,26 @@ function getInitials(value: string): string {
 }
 
 function getRelatedPostPreview(post: CommunityPost): string {
-  const text = htmlToPlainText(getPostHtml(post).replace(/<img\b[^>]*>/gi, " "));
+  const text = htmlToPlainText(
+    getPostHtml(post).replace(/<img\b[^>]*>/gi, " "),
+  );
   return text || "본문 글 없음";
 }
 
-function RelatedNews({ news, language }: { news: MarketNews[]; language: Language }) {
+function RelatedNews({
+  news,
+  language,
+}: {
+  news: MarketNews[];
+  language: Language;
+}) {
   return (
     <div className="mt-2 rounded-md border border-border bg-surface-muted p-3">
       <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
         <Newspaper size={14} className="text-primary" />
-        {language === "ko" ? "이 종목의 최신 뉴스" : "Latest news for this stock"}
+        {language === "ko"
+          ? "이 종목의 최신 뉴스"
+          : "Latest news for this stock"}
       </p>
       <div className="mt-2 space-y-2">
         {news.length ? (
@@ -1538,13 +1637,16 @@ function RelatedNews({ news, language }: { news: MarketNews[]; language: Languag
                 {item.translatedHeadline || item.headline}
               </p>
               <p className="mt-0.5 text-xs text-muted">
-                {item.source} · {new Date(item.datetime * 1000).toLocaleDateString()}
+                {item.source} ·{" "}
+                {new Date(item.datetime * 1000).toLocaleDateString()}
               </p>
             </a>
           ))
         ) : (
           <p className="text-xs text-muted">
-            {language === "ko" ? "관련 최신 뉴스가 없습니다." : "No related news."}
+            {language === "ko"
+              ? "관련 최신 뉴스가 없습니다."
+              : "No related news."}
           </p>
         )}
       </div>
@@ -1555,9 +1657,19 @@ function RelatedNews({ news, language }: { news: MarketNews[]; language: Languag
 function FinancialBarChart({
   financials,
   language,
+  symbol,
+  currency,
+  sourceCurrency,
+  exchangeRate,
+  showMore,
 }: {
   financials: NonNullable<StockDetail["financials"]>;
   language: Language;
+  symbol: string;
+  currency: DisplayCurrency;
+  sourceCurrency: DisplayCurrency;
+  exchangeRate: number | null;
+  showMore: boolean;
 }) {
   const rows = [...financials]
     .filter((item) => item.revenue !== null || item.operatingProfit !== null)
@@ -1565,8 +1677,22 @@ function FinancialBarChart({
     .slice(-5);
   const maxValue = Math.max(
     ...rows.flatMap((item) => [
-      Math.abs(item.revenue ?? 0),
-      Math.abs(item.operatingProfit ?? 0),
+      Math.abs(
+        convertFinancialValue(
+          item.revenue,
+          currency,
+          sourceCurrency,
+          exchangeRate,
+        ) ?? 0,
+      ),
+      Math.abs(
+        convertFinancialValue(
+          item.operatingProfit,
+          currency,
+          sourceCurrency,
+          exchangeRate,
+        ) ?? 0,
+      ),
     ]),
     0,
   );
@@ -1575,7 +1701,10 @@ function FinancialBarChart({
     return null;
   }
 
-  const title = language === "ko" ? "5개년 실적 (원)" : "5Y financials (KRW)";
+  const title =
+    language === "ko"
+      ? `5개년 실적 (${currency})`
+      : `5Y financials (${currency})`;
   const revenueLabel = language === "ko" ? "매출액" : "Revenue";
   const operatingProfitLabel =
     language === "ko" ? "영업이익" : "Operating profit";
@@ -1583,7 +1712,17 @@ function FinancialBarChart({
   return (
     <div className="mt-5 rounded-md border border-border p-3 sm:p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <div className="flex items-center gap-3">
+          <p className="text-sm font-semibold text-foreground">{title}</p>
+          {showMore ? (
+            <Link
+              href={`/stocks/US/${encodeURIComponent(symbol)}/financials?currency=${currency}`}
+              className="text-xs font-semibold text-primary hover:underline"
+            >
+              {language === "ko" ? "\uB354\uBCF4\uAE30" : "More"}
+            </Link>
+          ) : null}
+        </div>
         <div className="flex gap-3 text-xs text-muted">
           <span className="flex items-center gap-1">
             <span className="h-2 w-2 rounded-sm bg-primary" />
@@ -1597,9 +1736,21 @@ function FinancialBarChart({
       </div>
       <div className="mt-4 grid grid-cols-5 items-end gap-2 sm:gap-4">
         {rows.map((item) => {
-          const revenueHeight = getFinancialBarHeight(item.revenue, maxValue);
-          const operatingProfitHeight = getFinancialBarHeight(
+          const revenueValue = convertFinancialValue(
+            item.revenue,
+            currency,
+            sourceCurrency,
+            exchangeRate,
+          );
+          const operatingProfitValue = convertFinancialValue(
             item.operatingProfit,
+            currency,
+            sourceCurrency,
+            exchangeRate,
+          );
+          const revenueHeight = getFinancialBarHeight(revenueValue, maxValue);
+          const operatingProfitHeight = getFinancialBarHeight(
+            operatingProfitValue,
             maxValue,
           );
 
@@ -1609,28 +1760,83 @@ function FinancialBarChart({
                 <div
                   className="w-4 rounded-t-sm bg-primary sm:w-5"
                   style={{ height: `${revenueHeight}%` }}
-                  title={`${revenueLabel}: ${formatFinancialAmount(item.revenue)}`}
+                  title={`${revenueLabel}: ${formatFinancialAmount(item.revenue, currency, sourceCurrency, exchangeRate)}`}
                 />
                 <div
                   className="w-4 rounded-t-sm bg-positive sm:w-5"
                   style={{ height: `${operatingProfitHeight}%` }}
                   title={`${operatingProfitLabel}: ${formatFinancialAmount(
                     item.operatingProfit,
+                    currency,
+                    sourceCurrency,
+                    exchangeRate,
                   )}`}
                 />
               </div>
               <p className="mt-2 text-center text-xs font-semibold text-foreground">
-                {item.fiscalYear}
+                {financialPeriodLabel(item)}
               </p>
-              <p className="mt-1 truncate text-center text-[11px] text-muted">
-                {formatFinancialAmount(item.revenue)}
-              </p>
+              <div className="mt-1 space-y-0.5 text-center text-[11px] text-muted">
+                <p className="truncate">
+                  {revenueLabel}{" "}
+                  {formatFinancialAmount(
+                    item.revenue,
+                    currency,
+                    sourceCurrency,
+                    exchangeRate,
+                  )}
+                </p>
+                <p className="truncate">
+                  {operatingProfitLabel}{" "}
+                  {formatFinancialAmount(
+                    item.operatingProfit,
+                    currency,
+                    sourceCurrency,
+                    exchangeRate,
+                  )}
+                </p>
+              </div>
             </div>
           );
         })}
       </div>
     </div>
   );
+}
+
+function financialPeriodLabel(
+  item: NonNullable<StockDetail["financials"]>[number],
+) {
+  const middleDate = getFinancialPeriodMiddleDate(
+    item.periodStart,
+    item.periodEnd,
+  );
+  return String(middleDate?.getUTCFullYear() ?? item.fiscalYear);
+}
+
+function getFinancialPeriodMiddleDate(
+  start: string | null | undefined,
+  end: string | null | undefined,
+) {
+  const endDate = parseFinancialDate(end);
+  if (!endDate) {
+    return null;
+  }
+
+  const startDate = parseFinancialDate(start);
+  if (!startDate) {
+    return endDate;
+  }
+
+  return new Date((startDate.getTime() + endDate.getTime()) / 2);
+}
+
+function parseFinancialDate(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value.slice(0, 10) + "T00:00:00Z");
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function getFinancialBarHeight(value: number | null, maxValue: number) {
@@ -1641,13 +1847,51 @@ function getFinancialBarHeight(value: number | null, maxValue: number) {
   return Math.max(4, Math.min(100, (Math.abs(value) / maxValue) * 100));
 }
 
-function formatFinancialAmount(value: number | null) {
+function convertFinancialValue(
+  value: number | null,
+  currency: DisplayCurrency,
+  sourceCurrency: DisplayCurrency,
+  exchangeRate?: number | null,
+) {
   if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+  const converted = convertMoneyValue(
+    value,
+    currency,
+    sourceCurrency,
+    exchangeRate,
+  );
+  return Number.isFinite(converted) ? converted : null;
+}
+
+function formatFinancialAmount(
+  value: number | null,
+  currency: DisplayCurrency = "KRW",
+  sourceCurrency: DisplayCurrency = currency,
+  exchangeRate?: number | null,
+) {
+  const converted = convertFinancialValue(
+    value,
+    currency,
+    sourceCurrency,
+    exchangeRate,
+  );
+  if (converted === null) {
     return "-";
   }
 
-  const abs = Math.abs(value);
-  const sign = value < 0 ? "-" : "";
+  const abs = Math.abs(converted);
+  const sign = converted < 0 ? "-" : "";
+  if (currency === "USD") {
+    if (abs >= 1_000_000_000_000)
+      return `${sign}\$${formatFinancialDecimal(abs / 1_000_000_000_000)}T`;
+    if (abs >= 1_000_000_000)
+      return `${sign}\$${formatFinancialDecimal(abs / 1_000_000_000)}B`;
+    if (abs >= 1_000_000)
+      return `${sign}\$${formatFinancialDecimal(abs / 1_000_000)}M`;
+    return `${sign}\$${formatFinancialDecimal(abs)}`;
+  }
   if (abs >= 1_000_000_000_000) {
     return `${sign}${formatFinancialDecimal(abs / 1_000_000_000_000)}조`;
   }
@@ -1678,6 +1922,92 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
   return debounced;
 }
 
+function formatNextEarnings(
+  nextEarnings: StockDetail["nextEarnings"],
+  language: "en" | "ko",
+): string | null {
+  if (!nextEarnings?.reportDate) {
+    return null;
+  }
+
+  const hasActual =
+    nextEarnings.epsActual !== null || nextEarnings.revenueActual !== null;
+  if (hasActual) {
+    const label = earningsPeriodLabel(nextEarnings);
+    return language === "ko"
+      ? label + " \uC2E4\uC801 \uBCF4\uAE30"
+      : "View " + label + " earnings";
+  }
+
+  const date = new Date(nextEarnings.reportDate.slice(0, 10) + "T00:00:00");
+  const today = new Date();
+  const todayStart = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  );
+  if (date < todayStart) {
+    return null;
+  }
+  const formattedDate = new Intl.DateTimeFormat(
+    language === "ko" ? "ko-KR" : "en-US",
+    {
+      month: "short",
+      day: "numeric",
+    },
+  ).format(date);
+  const time = formatEarningsTime(nextEarnings.timeOfTheDay, language);
+  const estimate =
+    nextEarnings.estimate !== null && nextEarnings.currency
+      ? " \u00B7 EPS " +
+        nextEarnings.estimate.toFixed(2) +
+        " " +
+        nextEarnings.currency
+      : "";
+  return (
+    (language === "ko" ? "\uB2E4\uC74C \uC2E4\uC801 " : "Next earnings ") +
+    formattedDate +
+    " \u00B7 " +
+    time +
+    estimate
+  );
+}
+function formatEarningsTime(
+  timeOfTheDay: string | null | undefined,
+  language: "en" | "ko",
+): string {
+  const normalized = timeOfTheDay?.trim().toLowerCase();
+  if (!normalized) {
+    return language === "ko" ? "\uC2DC\uAC04 \uBBF8\uC815" : "Time TBD";
+  }
+
+  const koLabels: Record<string, string> = {
+    "pre-market": "\uD504\uB9AC\uB9C8\uCF13",
+    premarket: "\uD504\uB9AC\uB9C8\uCF13",
+    "before-market": "\uD504\uB9AC\uB9C8\uCF13",
+    bmo: "\uD504\uB9AC\uB9C8\uCF13",
+    "post-market": "\uC560\uD504\uD130\uB9C8\uCF13",
+    postmarket: "\uC560\uD504\uD130\uB9C8\uCF13",
+    "after-market": "\uC560\uD504\uD130\uB9C8\uCF13",
+    "after hours": "\uC560\uD504\uD130\uB9C8\uCF13",
+    amc: "\uC560\uD504\uD130\uB9C8\uCF13",
+  };
+  const enLabels: Record<string, string> = {
+    "pre-market": "Pre-market",
+    premarket: "Pre-market",
+    "before-market": "Pre-market",
+    bmo: "Pre-market",
+    "post-market": "After-market",
+    postmarket: "After-market",
+    "after-market": "After-market",
+    "after hours": "After-market",
+    amc: "After-market",
+  };
+
+  return language === "ko"
+    ? (koLabels[normalized] ?? timeOfTheDay ?? "\uC2DC\uAC04 \uBBF8\uC815")
+    : (enLabels[normalized] ?? timeOfTheDay ?? "Time TBD");
+}
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-md border border-border bg-surface-muted p-3">

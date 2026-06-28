@@ -10,3 +10,5 @@ Dockerfile.local
 postgres-data
 redis-data
 .gstack/
+.cloudflared.*.log
+.next-dev*.log

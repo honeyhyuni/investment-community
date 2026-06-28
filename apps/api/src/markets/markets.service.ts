@@ -33,6 +33,11 @@ import { StockFinancialEntity } from './stock-financial.entity';
 import { FavoriteStockEntity } from './favorite-stock.entity';
 import { PortfolioEntity } from './portfolio.entity';
 import { PortfolioPositionEntity } from './portfolio-position.entity';
+import { UsEarningsCalendarEntity } from './us-earnings-calendar.entity';
+import { User } from '../users/user.entity';
+import { UserStatus } from '../users/user-status.enum';
+import { NotificationsService } from '../notifications/notifications.service';
+import { UsStockFinancialsService } from './us-stock-financials.service';
 
 const MARKET_PULSE = [
   { symbol: '^IXIC', name: 'Nasdaq Composite' },
@@ -226,6 +231,12 @@ export class MarketsService {
     private readonly portfoliosRepository: Repository<PortfolioEntity>,
     @InjectRepository(PortfolioPositionEntity)
     private readonly portfolioPositionsRepository: Repository<PortfolioPositionEntity>,
+    @InjectRepository(UsEarningsCalendarEntity)
+    private readonly usEarningsRepository: Repository<UsEarningsCalendarEntity>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
+    private readonly notifications: NotificationsService,
+    private readonly usStockFinancials: UsStockFinancialsService,
   ) {
     this.redis = new Redis(
       this.configService.get<string>('REDIS_URL') ?? 'redis://redis:6379',
@@ -305,6 +316,34 @@ export class MarketsService {
     return {
       name: masterStock?.name ?? normalizedSymbol,
       ...(await this.getUsStockQuoteCached(normalizedSymbol)),
+    };
+  }
+
+  async getFreshStockQuoteForNotification(
+    symbol: string,
+    market: 'US' | 'KR',
+  ): Promise<MarketQuote> {
+    const normalizedSymbol = symbol.toUpperCase().trim();
+    if (market === 'KR') {
+      const masterStock = await this.stockMasterRepository.findOne({
+        where: { symbol: normalizedSymbol, active: true },
+      });
+      const stock: KisStock = {
+        symbol: normalizedSymbol,
+        name: masterStock?.name ?? normalizedSymbol,
+        marketDiv: masterStock?.market === 'KR:KOSDAQ' ? 'Q' : 'J',
+      };
+      const output =
+        await this.getNaverKoreanStockPriceOutput(normalizedSymbol);
+      return this.buildKoreanQuote(stock, output);
+    }
+
+    const masterStock = await this.stockMasterRepository.findOne({
+      where: { symbol: normalizedSymbol, market: 'US', active: true },
+    });
+    return {
+      name: masterStock?.name ?? normalizedSymbol,
+      ...(await this.getQuote(normalizedSymbol)),
     };
   }
 
@@ -966,7 +1005,7 @@ export class MarketsService {
       const nextQuantity = (current?.quantity ?? 0) + quantity;
       const nextAveragePrice =
         nextQuantity > 0
-          ? (((current?.averagePrice ?? 0) * (current?.quantity ?? 0)) +
+          ? ((current?.averagePrice ?? 0) * (current?.quantity ?? 0) +
               averagePrice * quantity) /
             nextQuantity
           : averagePrice;
@@ -1018,9 +1057,10 @@ export class MarketsService {
       previousClose: 0,
       timestamp: Math.floor(Date.now() / 1000),
     };
-    const quote = await this.getStockQuote(position.symbol, position.market).catch(
-      () => fallback,
-    );
+    const quote = await this.getStockQuote(
+      position.symbol,
+      position.market,
+    ).catch(() => fallback);
 
     return {
       ...quote,
@@ -1095,12 +1135,49 @@ export class MarketsService {
       }
     }
 
-    const metrics = await this.getMetrics(normalizedSymbol).catch(() => null);
+    const [metrics, nextEarnings, usFinancials] = await Promise.all([
+      this.getMetrics(normalizedSymbol).catch(() => null),
+      this.getNextUsEarnings(normalizedSymbol),
+      this.usStockFinancials.getIfSp500(normalizedSymbol).catch((error) => {
+        this.logger.warn(
+          `US financial statements skipped for ${normalizedSymbol}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+        return null;
+      }),
+    ]);
+
+    const displayMetrics = usFinancials
+      ? this.buildUsSp500Metrics(usFinancials, quote.current, profile, metrics)
+      : metrics;
 
     return {
       symbol: normalizedSymbol,
       profile,
-      metrics,
+      metrics: displayMetrics,
+      nextEarnings,
+      isSp500: !!usFinancials,
+      financials: usFinancials?.annual.map((row) => ({
+        fiscalYear: row.fiscalYear,
+        revenue: row.revenue,
+        operatingProfit: row.operatingIncome,
+        netIncome: row.netIncome,
+        equity: row.equity,
+        eps: row.eps,
+        periodStart: row.periodStart,
+        periodEnd: row.periodEnd,
+        marketCap: null,
+        per: null,
+        pbr: null,
+        psr: null,
+        roe:
+          row.netIncome !== null && row.equity !== null && row.equity > 0
+            ? (row.netIncome / row.equity) * 100
+            : null,
+        source: row.source,
+        fetchedAt: row.filedAt ? new Date(row.filedAt) : null,
+      })),
       overview: cachedProfile
         ? {
             en: cachedProfile.overviewEn,
@@ -1116,6 +1193,133 @@ export class MarketsService {
           },
       quote,
     };
+  }
+
+  private buildUsSp500Metrics(
+    financials: import('./us-stock-financials.service').UsStockFinancialResponse,
+    currentPrice: number,
+    profile: CompanyProfile,
+    fallback: CompanyMetrics | null,
+  ): CompanyMetrics {
+    const quarters = [...financials.quarterly].sort(
+      (a, b) =>
+        a.fiscalYear - b.fiscalYear || a.fiscalQuarter - b.fiscalQuarter,
+    );
+    const latestAnnual = [...financials.annual]
+      .sort((a, b) => a.fiscalYear - b.fiscalYear)
+      .at(-1);
+    const latestQuarter = [...quarters]
+      .reverse()
+      .find((row) => row.equity !== null);
+    const lastFour = quarters.slice(-4);
+    const revenueTtm = this.sumIfComplete(lastFour.map((row) => row.revenue));
+    const netIncomeTtm = this.sumIfComplete(
+      lastFour.map((row) => row.netIncome),
+    );
+    const quarterlyEpsTtm = this.sumIfComplete(lastFour.map((row) => row.eps));
+    const epsTtm = quarterlyEpsTtm ?? latestAnnual?.eps ?? null;
+    const equity = latestQuarter?.equity ?? latestAnnual?.equity ?? null;
+    const marketCap = this.getUsMarketCap(profile, currentPrice);
+
+    return {
+      peTTM: this.safeDivide(currentPrice, epsTtm),
+      pbAnnual: this.safeDivide(marketCap, equity),
+      epsTTM: epsTtm,
+      psTTM: this.safeDivide(marketCap, revenueTtm),
+      roeTTM:
+        netIncomeTtm !== null && equity !== null && equity > 0
+          ? (netIncomeTtm / equity) * 100
+          : null,
+      dividendYieldTTM: this.pickFallbackMetric(fallback, [
+        'currentDividendYieldTTM',
+        'dividendYieldTTM',
+      ]),
+      '52WeekHigh': this.pickFallbackMetric(fallback, ['52WeekHigh']),
+      '52WeekLow': this.pickFallbackMetric(fallback, ['52WeekLow']),
+      currentPrice,
+    };
+  }
+
+  private sumIfComplete(values: Array<number | null>): number | null {
+    if (!values.length || values.some((value) => value === null)) {
+      return null;
+    }
+    return values.reduce<number>((sum, value) => sum + Number(value), 0);
+  }
+
+  private getUsMarketCap(
+    profile: CompanyProfile,
+    currentPrice: number,
+  ): number | null {
+    if (profile.marketCapitalization && profile.marketCapitalization > 0) {
+      return profile.marketCapitalization * 1_000_000;
+    }
+    if (
+      profile.shareOutstanding &&
+      profile.shareOutstanding > 0 &&
+      currentPrice > 0
+    ) {
+      return profile.shareOutstanding * 1_000_000 * currentPrice;
+    }
+    return null;
+  }
+
+  private pickFallbackMetric(
+    metrics: CompanyMetrics | null,
+    keys: string[],
+  ): number | null {
+    if (!metrics) {
+      return null;
+    }
+    for (const key of keys) {
+      const value = metrics[key];
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+      }
+      if (typeof value === 'string') {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+    }
+    return null;
+  }
+
+  private async getNextUsEarnings(
+    symbol: string,
+  ): Promise<UsEarningsCalendarEntity | null> {
+    const normalized = symbol.toUpperCase();
+    const today = new Date();
+    const recentStart = new Date(today);
+    recentStart.setDate(recentStart.getDate() - 15);
+
+    const recentActual = await this.usEarningsRepository
+      .createQueryBuilder('earnings')
+      .where('earnings.symbol = :symbol', { symbol: normalized })
+      .andWhere('earnings.report_date between :from and :to', {
+        from: this.toDateKey(recentStart),
+        to: this.toDateKey(today),
+      })
+      .andWhere(
+        '(earnings.eps_actual is not null or earnings.revenue_actual is not null)',
+      )
+      .orderBy('earnings.report_date', 'DESC')
+      .getOne()
+      .catch(() => null);
+    if (recentActual) {
+      return recentActual;
+    }
+
+    return this.usEarningsRepository
+      .createQueryBuilder('earnings')
+      .where('earnings.symbol = :symbol', { symbol: normalized })
+      .andWhere('earnings.report_date >= :today', {
+        today: this.toDateKey(today),
+      })
+      .orderBy('earnings.report_date', 'ASC')
+      .getOne()
+      .catch(() => null);
   }
 
   private async enrichCachedProfileLogo(
@@ -1248,7 +1452,10 @@ export class MarketsService {
       low: this.toNumber(output.stck_lwpr),
       open: this.toNumber(output.stck_oprc),
       previousClose: this.toNumber(output.prdy_clpr ?? output.stck_prpr),
-      timestamp: Math.floor(Date.now() / 1000),
+      timestamp: output.quote_timestamp
+        ? Math.floor(new Date(output.quote_timestamp).getTime() / 1000)
+        : Math.floor(Date.now() / 1000),
+      marketStatus: output.market_status,
     };
     const profile: CompanyProfile = {
       ticker: normalizedSymbol,
@@ -1548,7 +1755,36 @@ export class MarketsService {
         generatedAt: new Date(),
       }),
     );
+    void this.notifyMarketBriefing(saved).catch((error) => {
+      this.logger.warn(
+        `Market briefing notification failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    });
     return this.toMarketBriefingDto(saved);
+  }
+
+  private async notifyMarketBriefing(
+    briefing: MarketBriefingEntity,
+  ): Promise<void> {
+    const users = await this.usersRepository.find({
+      where: { status: UserStatus.Approved },
+      select: { id: true },
+    });
+    await this.notifications.sendToUsers(
+      users.map((user) => user.id),
+      {
+        type: 'MARKET_BRIEFING',
+        title:
+          briefing.market === 'KR'
+            ? '\uD55C\uAD6D \uC2DC\uD669 \uC694\uC57D'
+            : '\uBBF8\uAD6D \uC2DC\uD669 \uC694\uC57D',
+        body: `${briefing.title}`,
+        url: `/market-briefing/${briefing.id}`,
+        data: { briefingId: briefing.id, market: briefing.market },
+        tag: `market-briefing:${briefing.market}`,
+      },
+      (userId) => `market-briefing:${briefing.id}:${userId}`,
+    );
   }
 
   private async getMarketBriefingNews(
@@ -3233,7 +3469,9 @@ export class MarketsService {
       }
 
       const preview = rawOutput.replace(/\s+/g, ' ').slice(0, 600);
-      this.logger.warn(`OpenAI briefing JSON parse failed. Preview: ${preview}`);
+      this.logger.warn(
+        `OpenAI briefing JSON parse failed. Preview: ${preview}`,
+      );
       throw firstError;
     }
   }
@@ -3576,7 +3814,9 @@ export class MarketsService {
   }
 
   private isScheduledJobsEnabled(): boolean {
-    const explicitValue = this.configService.get<string>('ENABLE_SCHEDULED_JOBS');
+    const explicitValue = this.configService.get<string>(
+      'ENABLE_SCHEDULED_JOBS',
+    );
     if (explicitValue !== undefined) {
       return explicitValue === 'true';
     }
@@ -3591,6 +3831,13 @@ export class MarketsService {
       month: '2-digit',
       day: '2-digit',
     }).format(date);
+  }
+
+  private toDateKey(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+      2,
+      '0',
+    )}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
   private toMarketBriefingDto(entity: MarketBriefingEntity): MarketBriefing {
@@ -4080,7 +4327,10 @@ export class MarketsService {
       low: this.toNumber(output.stck_lwpr),
       open: this.toNumber(output.stck_oprc),
       previousClose: this.toNumber(output.prdy_clpr ?? output.stck_prpr),
-      timestamp: Math.floor(Date.now() / 1000),
+      timestamp: output.quote_timestamp
+        ? Math.floor(new Date(output.quote_timestamp).getTime() / 1000)
+        : Math.floor(Date.now() / 1000),
+      marketStatus: output.market_status,
     };
   }
 
@@ -4369,6 +4619,8 @@ export class MarketsService {
       highPrice?: string;
       lowPrice?: string;
       marketValue?: string;
+      marketStatus?: string;
+      localTradedAt?: string;
     };
     return {
       stck_prpr: body.closePrice,
@@ -4378,6 +4630,8 @@ export class MarketsService {
       stck_hgpr: body.highPrice,
       stck_lwpr: body.lowPrice,
       hts_avls: body.marketValue,
+      market_status: body.marketStatus,
+      quote_timestamp: body.localTradedAt,
     };
   }
 

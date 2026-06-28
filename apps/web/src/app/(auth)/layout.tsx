@@ -10,6 +10,7 @@ import {
   ChevronDown,
   FileText,
   LogOut,
+  Landmark,
   MessageSquareText,
   Moon,
   Newspaper,
@@ -19,12 +20,15 @@ import {
   UserPen,
 } from "lucide-react";
 import { SessionLoading } from "@/common/components/SessionLoading";
+import { PullToRefresh } from "@/common/components/PullToRefresh";
+import { apiRequest } from "@/common/lib/api";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { MarketPulseContainer } from "@/domain/markets/components/MarketPulseContainer";
+import { NotificationCenter } from "@/domain/notifications/components/NotificationCenter";
 
 const NAV_ITEMS: Array<{
-  id: "stocks" | "favorites" | "news" | "marketBriefing" | "community" | "ipo" | "admin";
+  id: "stocks" | "favorites" | "news" | "marketBriefing" | "community" | "calendar" | "gurus" | "admin";
   href: string;
   label: { en: string; ko: string };
   icon: typeof BarChart3;
@@ -35,7 +39,8 @@ const NAV_ITEMS: Array<{
   { id: "favorites", href: "/favorites", label: { en: "Portfolio", ko: "포트폴리오 대쉬보드" }, icon: Star },
   { id: "news", href: "/news", label: { en: "News", ko: "뉴스" }, icon: Newspaper },
   { id: "community", href: "/community", label: { en: "Community", ko: "피드" }, icon: MessageSquareText },
-  { id: "ipo", href: "/ipo", label: { en: "IPO", ko: "공모주" }, icon: CalendarDays },
+  { id: "calendar", href: "/calendar", label: { en: "Calendar", ko: "캘린더" }, icon: CalendarDays },
+  { id: "gurus", href: "/gurus", label: { en: "Gurus", ko: "거장" }, icon: Landmark },
   { id: "admin", href: "/admin", label: { en: "Admin", ko: "관리" }, icon: ShieldCheck, adminOnly: true },
 ];
 
@@ -67,6 +72,31 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       router.replace("/login");
     }
   }, [authChecking, user?.status, router]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+    const url = new URL(window.location.href);
+    const notificationId = url.searchParams.get("notificationId");
+    if (!notificationId) {
+      return;
+    }
+
+    url.searchParams.delete("notificationId");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      url.pathname + url.search + url.hash,
+    );
+    void apiRequest<{ ok: true }>(
+      "/notifications/" + encodeURIComponent(notificationId) + "/read",
+      "PATCH",
+      { accessToken },
+    )
+      .then(() => window.dispatchEvent(new Event("notifications:changed")))
+      .catch(() => undefined);
+  }, [accessToken, pathname]);
 
   useEffect(() => {
     const syncHeaderState = () => {
@@ -138,6 +168,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
     <main
       className={`min-h-dvh overflow-x-clip bg-[#f6f7fb] text-[#161a22] ${darkMode ? "dark-app" : ""}`}
     >
+      <PullToRefresh ko={language === "ko"} />
       <section className="mx-auto flex min-h-dvh w-full max-w-7xl flex-col px-4 pb-[calc(5.75rem+env(safe-area-inset-bottom))] pt-0 sm:px-8 sm:pb-6">
         <header
           className={`sticky top-0 z-40 w-screen self-center border-b transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300 ${
@@ -191,6 +222,8 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                   {darkMode ? <Sun size={18} /> : <Moon size={18} />}
                 </button>
               </div>
+
+              {accessToken ? <NotificationCenter accessToken={accessToken} /> : null}
 
               <details ref={accountMenuRef} className="group relative">
               <summary

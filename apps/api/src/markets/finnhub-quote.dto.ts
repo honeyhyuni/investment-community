@@ -21,6 +21,7 @@ export type MarketQuote = {
   open: number;
   previousClose: number;
   timestamp: number;
+  marketStatus?: string;
 };
 
 export type StockSymbol = {
@@ -98,15 +99,19 @@ export type StockFinancial = {
   pbr: number | null;
   psr: number | null;
   roe: number | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
   source: string;
   fetchedAt: Date | null;
 };
 
 export type StockDetail = {
   symbol: string;
+  isSp500?: boolean;
   profile: CompanyProfile;
   metrics: CompanyMetrics | null;
   financials?: StockFinancial[];
+  nextEarnings?: UsEarningsCalendarItem | null;
   overview: {
     en: string;
     ko: string;
@@ -174,6 +179,31 @@ export type IpoCalendarItem = {
   confirmedOfferPrice: string | null;
   underwriter: string | null;
   dartUrl: string;
+  source: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type UsEarningsCalendarItem = {
+  id: string;
+  symbol: string;
+  companyName: string;
+  reportDate: string;
+  fiscalDateEnding: string | null;
+  estimate: number | null;
+  revenueEstimate: number | null;
+  epsActual: number | null;
+  revenueActual: number | null;
+  actualCheckedAt: Date | null;
+  estimateSource: string | null;
+  actualSource: string | null;
+  finnhubYear: number | null;
+  finnhubQuarter: number | null;
+  secConfirmedAt: Date | null;
+  secFinancialId: string | null;
+  currency: string | null;
+  timeOfTheDay: string | null;
+  stockMasterId: string | null;
   source: string;
   createdAt: Date;
   updatedAt: Date;
