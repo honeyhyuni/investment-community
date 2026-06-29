@@ -1,20 +1,22 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Notice } from "@/common/components/Notice";
-import { Button } from "@/common/components/Button";
-import { SegmentedControl } from "@/common/components/SegmentedControl";
-import { SectionHeader } from "@/common/components/SectionHeader";
-import { Skeleton } from "@/common/components/Skeleton";
-import { usePreferencesStore } from "@/common/stores/preferences";
-import { useSessionStore } from "@/common/stores/session";
-import { apiRequest } from "@/common/lib/api";
-import { MarketNews, NewsCategory } from "@/domain/news/types";
+import { useCallback, useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Notice } from '@/common/components/Notice';
+import { Button } from '@/common/components/Button';
+import { SegmentedControl } from '@/common/components/SegmentedControl';
+import { Skeleton } from '@/common/components/Skeleton';
+import { usePreferencesStore } from '@/common/stores/preferences';
+import { useSessionStore } from '@/common/stores/session';
+import { apiRequest } from '@/common/lib/api';
+import { MarketNews, NewsCategory } from '@/domain/news/types';
 
-const newsCategories: Array<{ id: NewsCategory; label: Record<"en" | "ko", string> }> = [
-  { id: "us", label: { ko: "미국뉴스", en: "US News" } },
-  { id: "kr", label: { ko: "한국뉴스", en: "Korea News" } },
+const newsCategories: Array<{
+  id: NewsCategory;
+  label: Record<'en' | 'ko', string>;
+}> = [
+  { id: 'us', label: { ko: '미국뉴스', en: 'US News' } },
+  { id: 'kr', label: { ko: '한국뉴스', en: 'Korea News' } },
 ];
 
 export function NewsPage() {
@@ -23,32 +25,39 @@ export function NewsPage() {
 
   const [news, setNews] = useState<MarketNews[]>([]);
   const [page, setPage] = useState(1);
-  const [category, setCategory] = useState<NewsCategory>("us");
+  const [category, setCategory] = useState<NewsCategory>('us');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
-  const loadNews = useCallback(async (token = accessToken, nextCategory: NewsCategory = category) => {
-    if (!token) {
-      return;
-    }
+  const loadNews = useCallback(
+    async (token = accessToken, nextCategory: NewsCategory = category) => {
+      if (!token) {
+        return;
+      }
 
-    setLoading(true);
-    setError("");
-    try {
-      const newsLanguage = nextCategory === "us" ? "ko" : language;
-      const nextNews = await apiRequest<MarketNews[]>(
-        `/markets/news?market=${nextCategory === "kr" ? "KR" : "US"}&language=${newsLanguage}`,
-        "GET",
-        { accessToken: token },
-      );
-      setNews(nextNews.slice(0, 100));
-      setPage(1);
-    } catch (newsError) {
-      setError(newsError instanceof Error ? newsError.message : "Could not load news.");
-    } finally {
-      setLoading(false);
-    }
-  }, [accessToken, category, language]);
+      setLoading(true);
+      setError('');
+      try {
+        const newsLanguage = nextCategory === 'us' ? 'ko' : language;
+        const nextNews = await apiRequest<MarketNews[]>(
+          `/markets/news?market=${nextCategory === 'kr' ? 'KR' : 'US'}&language=${newsLanguage}`,
+          'GET',
+          { accessToken: token },
+        );
+        setNews(nextNews.slice(0, 100));
+        setPage(1);
+      } catch (newsError) {
+        setError(
+          newsError instanceof Error
+            ? newsError.message
+            : 'Could not load news.',
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [accessToken, category, language],
+  );
 
   useEffect(() => {
     if (!accessToken) {
@@ -93,28 +102,25 @@ function NewsList({
   setPage: (page: number) => void;
   category: NewsCategory;
   setCategory: (category: NewsCategory) => void;
-  language: "en" | "ko";
+  language: 'en' | 'ko';
 }) {
   const pageSize = 10;
   const totalPages = Math.max(1, Math.ceil(news.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const visibleNews = news.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const visibleNews = news.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize,
+  );
 
   return (
-    <section className="-mx-4 border-y border-[#d9dee8] bg-surface p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
-      <SectionHeader
-        eyebrow={language === "ko" ? "미국 · 한국 증시" : "US & Korea markets"}
-        title={language === "ko" ? "뉴스" : "News"}
-        action={
-          <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-            {news.length}
-          </span>
-        }
-      />
+    <section className="min-w-0">
       <SegmentedControl
-        className="mt-4 sm:inline-flex"
-        aria-label={language === "ko" ? "뉴스 지역" : "News region"}
-        options={newsCategories.map((item) => ({ value: item.id, label: item.label[language] }))}
+        className="sm:inline-flex"
+        aria-label={language === 'ko' ? '뉴스 지역' : 'News region'}
+        options={newsCategories.map((item) => ({
+          value: item.id,
+          label: item.label[language],
+        }))}
         value={category}
         onChange={setCategory}
       />
@@ -127,7 +133,7 @@ function NewsList({
           ))
         ) : news.length === 0 ? (
           <p className="rounded-md border border-[#d9dee8] p-6 text-center text-sm text-[#607086]">
-            {language === "ko" ? "표시할 뉴스가 없습니다." : "No news loaded."}
+            {language === 'ko' ? '표시할 뉴스가 없습니다.' : 'No news loaded.'}
           </p>
         ) : (
           visibleNews.map((item) => (
@@ -148,7 +154,8 @@ function NewsList({
                 ) : null}
                 <div className="min-w-0">
                   <p className="text-[11px] font-semibold text-[#607086] sm:text-xs">
-                    {item.source} · {new Date(item.datetime * 1000).toLocaleString()}
+                    {item.source} ·{' '}
+                    {new Date(item.datetime * 1000).toLocaleString()}
                   </p>
                   <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-5 sm:text-base sm:leading-6">
                     {item.translatedHeadline || item.headline}
@@ -171,7 +178,7 @@ function NewsList({
             disabled={safePage === 1}
             onClick={() => setPage(Math.max(1, safePage - 1))}
           >
-            {language === "ko" ? "이전" : "Previous"}
+            {language === 'ko' ? '이전' : 'Previous'}
           </Button>
           <span className="text-sm font-medium text-[#607086]">
             {safePage} / {totalPages}
@@ -183,7 +190,7 @@ function NewsList({
             disabled={safePage === totalPages}
             onClick={() => setPage(Math.min(totalPages, safePage + 1))}
           >
-            {language === "ko" ? "다음" : "Next"}
+            {language === 'ko' ? '다음' : 'Next'}
           </Button>
         </div>
       ) : null}

@@ -112,6 +112,7 @@ export function ProfilePage() {
       <ProfilePanel
         user={user}
         ko={ko}
+        accessToken={accessToken}
         nicknameDraft={nicknameDraft}
         setNicknameDraft={setNicknameDraft}
         loading={loading}
@@ -127,7 +128,6 @@ export function ProfilePage() {
         onPasswordSubmit={changePassword}
         onBack={() => router.push("/")}
       />
-      {accessToken ? <NotificationSettings accessToken={accessToken} ko={ko} /> : null}
     </div>
   );
 }
@@ -135,6 +135,7 @@ export function ProfilePage() {
 function ProfilePanel({
   user,
   ko,
+  accessToken,
   nicknameDraft,
   setNicknameDraft,
   loading,
@@ -152,6 +153,7 @@ function ProfilePanel({
 }: {
   user: User;
   ko: boolean;
+  accessToken: string | null;
   nicknameDraft: string;
   setNicknameDraft: (value: string) => void;
   loading: boolean;
@@ -244,6 +246,10 @@ function ProfilePanel({
       </form>
 
       <Notice message={message} error={error} />
+
+      {accessToken ? (
+        <NotificationSettings accessToken={accessToken} ko={ko} />
+      ) : null}
     </section>
   );
 }

@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Check,
   Pencil,
@@ -13,7 +13,7 @@ import {
   TrendingDown,
   TrendingUp,
   X,
-} from "lucide-react";
+} from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
@@ -24,62 +24,66 @@ import {
   useSensors,
   type DragEndEvent,
   type DragStartEvent,
-} from "@dnd-kit/core";
+} from '@dnd-kit/core';
 import {
   SortableContext,
   arrayMove,
   rectSortingStrategy,
   useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { cn } from "@/common/utils/cn";
-import { apiRequest } from "@/common/lib/api";
-import { Button } from "@/common/components/Button";
-import { Notice } from "@/common/components/Notice";
-import { SectionHeader } from "@/common/components/SectionHeader";
-import { SegmentedControl } from "@/common/components/SegmentedControl";
-import { Skeleton } from "@/common/components/Skeleton";
-import { useSessionStore } from "@/common/stores/session";
-import { useMarketDataStore } from "@/common/stores/market-data";
-import { usePreferencesStore } from "@/common/stores/preferences";
-import { convertMoneyValue, formatMoney, formatNumber } from "@/common/utils/format";
-import { stockSearchScore } from "@/common/utils/stock-search";
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { cn } from '@/common/utils/cn';
+import { apiRequest } from '@/common/lib/api';
+import { Button } from '@/common/components/Button';
+import { Notice } from '@/common/components/Notice';
+import { SectionHeader } from '@/common/components/SectionHeader';
+import { SegmentedControl } from '@/common/components/SegmentedControl';
+import { Skeleton } from '@/common/components/Skeleton';
+import { useSessionStore } from '@/common/stores/session';
+import { useMarketDataStore } from '@/common/stores/market-data';
+import { usePreferencesStore } from '@/common/stores/preferences';
+import {
+  convertMoneyValue,
+  formatMoney,
+  formatNumber,
+} from '@/common/utils/format';
+import { stockSearchScore } from '@/common/utils/stock-search';
 import {
   FavoriteStock,
   Portfolio,
   PortfolioPosition,
   PortfolioPositionInput,
   StockSymbol,
-} from "@/common/types";
+} from '@/common/types';
 
-type PortfolioTab = "watchlist" | "portfolio";
-type PortfolioSort = "weight" | "profit";
+type PortfolioTab = 'watchlist' | 'portfolio';
+type PortfolioSort = 'weight' | 'profit';
 
 type PositionDraft = {
   key: string;
   query: string;
   symbol: string;
-  market: "US" | "KR";
+  market: 'US' | 'KR';
   name: string;
   quantity: string;
   averagePrice: string;
 };
 
 const PIE_COLORS = [
-  "#2563eb",
-  "#16a34a",
-  "#f97316",
-  "#9333ea",
-  "#dc2626",
-  "#0891b2",
-  "#ca8a04",
-  "#4f46e5",
-  "#db2777",
-  "#0f766e",
+  '#2563eb',
+  '#16a34a',
+  '#f97316',
+  '#9333ea',
+  '#dc2626',
+  '#0891b2',
+  '#ca8a04',
+  '#4f46e5',
+  '#db2777',
+  '#0f766e',
 ];
 
 export function FavoritesPage({
-  initialTab = "watchlist",
+  initialTab = 'watchlist',
 }: {
   initialTab?: PortfolioTab;
 }) {
@@ -98,14 +102,14 @@ export function FavoritesPage({
   }, [initialTab]);
 
   useEffect(() => {
-    if (accessToken && activeTab === "portfolio") {
+    if (accessToken && activeTab === 'portfolio') {
       void loadStockSymbols(accessToken);
     }
   }, [accessToken, activeTab, loadStockSymbols]);
 
   function switchTab(tab: PortfolioTab) {
     setActiveTab(tab);
-    router.push(tab === "portfolio" ? "/favorites/portfolio" : "/favorites");
+    router.push(tab === 'portfolio' ? '/favorites/portfolio' : '/favorites');
   }
 
   return (
@@ -113,31 +117,37 @@ export function FavoritesPage({
       <section className="-mx-4 min-w-0 border-y border-border bg-surface p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
         <div className="flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
           <SectionHeader
-            eyebrow={language === "ko" ? "Portfolio" : "Portfolio"}
-            title={language === "ko" ? "포트폴리오 대쉬보드" : "Portfolio Dashboard"}
+            eyebrow="Portfolio Dashboard"
+            title="My"
           />
           <SegmentedControl<PortfolioTab>
             className="w-full sm:inline-flex sm:w-auto"
-            aria-label={language === "ko" ? "포트폴리오 화면 선택" : "Portfolio view"}
+            aria-label={
+              language === 'ko' ? '포트폴리오 화면 선택' : 'Portfolio view'
+            }
             options={[
               {
-                value: "watchlist",
+                value: 'watchlist',
                 label: (
                   <span className="flex flex-col items-center leading-tight">
-                    <span>{language === "ko" ? "내 관심종목" : "Watchlist"}</span>
+                    <span>
+                      {language === 'ko' ? '내 관심종목' : 'Watchlist'}
+                    </span>
                     <span className="text-[11px] font-medium opacity-80">
-                      {language === "ko" ? "저장한 종목" : "Saved stocks"}
+                      {language === 'ko' ? '저장한 종목' : 'Saved stocks'}
                     </span>
                   </span>
                 ),
               },
               {
-                value: "portfolio",
+                value: 'portfolio',
                 label: (
                   <span className="flex flex-col items-center leading-tight">
-                    <span>{language === "ko" ? "포트폴리오" : "Portfolio"}</span>
+                    <span>
+                      {language === 'ko' ? '포트폴리오' : 'Portfolio'}
+                    </span>
                     <span className="text-[11px] font-medium opacity-80">
-                      {language === "ko" ? "비중/수익률" : "Allocation"}
+                      {language === 'ko' ? '비중/수익률' : 'Allocation'}
                     </span>
                   </span>
                 ),
@@ -148,7 +158,7 @@ export function FavoritesPage({
           />
         </div>
 
-        {activeTab === "watchlist" ? (
+        {activeTab === 'watchlist' ? (
           <WatchlistSection
             accessToken={accessToken}
             language={language}
@@ -175,13 +185,13 @@ function WatchlistSection({
   exchangeRate,
 }: {
   accessToken: string | null;
-  language: "en" | "ko";
+  language: 'en' | 'ko';
   exchangeRate: number | null;
 }) {
   const [favorites, setFavorites] = useState<FavoriteStock[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [removingKey, setRemovingKey] = useState("");
+  const [error, setError] = useState('');
+  const [removingKey, setRemovingKey] = useState('');
   const [editing, setEditing] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -193,7 +203,7 @@ function WatchlistSection({
   );
 
   const activeStock = activeId
-    ? favorites.find((s) => s.favoriteId === activeId) ?? null
+    ? (favorites.find((s) => s.favoriteId === activeId) ?? null)
     : null;
 
   useEffect(() => {
@@ -203,11 +213,11 @@ function WatchlistSection({
 
     let active = true;
     setLoading(true);
-    apiRequest<FavoriteStock[]>("/markets/favorites", "GET", { accessToken })
+    apiRequest<FavoriteStock[]>('/markets/favorites', 'GET', { accessToken })
       .then((items) => {
         if (active) {
           setFavorites(items);
-          setError("");
+          setError('');
         }
       })
       .catch((loadError) => {
@@ -215,9 +225,9 @@ function WatchlistSection({
           setError(
             loadError instanceof Error
               ? loadError.message
-              : language === "ko"
-                ? "愿?ъ쥌紐⑹쓣 遺덈윭?ㅼ? 紐삵뻽?듬땲??"
-                : "Could not load watchlist.",
+              : language === 'ko'
+                ? '愿?ъ쥌紐⑹쓣 遺덈윭?ㅼ? 紐삵뻽?듬땲??'
+                : 'Could not load watchlist.',
           );
         }
       })
@@ -233,7 +243,7 @@ function WatchlistSection({
   }, [accessToken, language]);
 
   function openStock(stock: FavoriteStock) {
-    const currency = stock.market === "KR" ? "KRW" : "USD";
+    const currency = stock.market === 'KR' ? 'KRW' : 'USD';
     window.location.assign(
       `/?symbol=${encodeURIComponent(stock.symbol)}&market=${stock.market}&currency=${currency}`,
     );
@@ -249,16 +259,17 @@ function WatchlistSection({
     try {
       await apiRequest<{ ok: true }>(
         `/markets/favorites/${stock.market}/${encodeURIComponent(stock.symbol)}`,
-        "DELETE",
+        'DELETE',
         { accessToken },
       );
       setFavorites((items) =>
         items.filter(
-          (item) => !(item.symbol === stock.symbol && item.market === stock.market),
+          (item) =>
+            !(item.symbol === stock.symbol && item.market === stock.market),
         ),
       );
     } finally {
-      setRemovingKey("");
+      setRemovingKey('');
     }
   }
 
@@ -286,7 +297,7 @@ function WatchlistSection({
       return;
     }
     try {
-      await apiRequest<{ ok: true }>("/markets/favorites/reorder", "PATCH", {
+      await apiRequest<{ ok: true }>('/markets/favorites/reorder', 'PATCH', {
         accessToken,
         body: { favoriteIds: reordered.map((s) => s.favoriteId) },
       });
@@ -294,9 +305,9 @@ function WatchlistSection({
       setError(
         reorderError instanceof Error
           ? reorderError.message
-          : language === "ko"
-            ? "?쒖꽌瑜???ν븯吏 紐삵뻽?듬땲??"
-            : "Could not save the new order.",
+          : language === 'ko'
+            ? '?쒖꽌瑜???ν븯吏 紐삵뻽?듬땲??'
+            : 'Could not save the new order.',
       );
     }
   }
@@ -307,17 +318,17 @@ function WatchlistSection({
       <div className="flex items-center justify-between gap-3">
         <SectionHeader
           eyebrow="Watchlist"
-          title={language === "ko" ? "내 관심종목" : "My Watchlist"}
+          title={language === 'ko' ? '내 관심종목' : 'My Watchlist'}
         />
         {favorites.length ? (
           <Button
-            variant={editing ? "primary" : "secondary"}
+            variant={editing ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setEditing((prev) => !prev)}
             leftIcon={editing ? <Check size={16} /> : <Pencil size={16} />}
             className="shrink-0"
           >
-            {editing ? "완료" : "편집"}
+            {editing ? '완료' : '편집'}
           </Button>
         ) : null}
       </div>
@@ -331,7 +342,9 @@ function WatchlistSection({
       ) : favorites.length ? (
         editing ? (
           <>
-            <p className="mb-5 mt-5 text-xs text-muted">카드를 드래그해 순서를 바꾸거나 휴지통으로 제거하세요.</p>
+            <p className="mb-5 mt-5 text-xs text-muted">
+              카드를 드래그해 순서를 바꾸거나 휴지통으로 제거하세요.
+            </p>
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -347,8 +360,8 @@ function WatchlistSection({
                   <div
                     aria-hidden
                     className={cn(
-                      "pointer-events-none absolute -inset-3 rounded-xl border-2 border-primary/40 bg-primary/5 transition-opacity duration-200",
-                      activeId ? "opacity-100" : "opacity-0",
+                      'pointer-events-none absolute -inset-3 rounded-xl border-2 border-primary/40 bg-primary/5 transition-opacity duration-200',
+                      activeId ? 'opacity-100' : 'opacity-0',
                     )}
                   />
                   <div className="relative grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -358,7 +371,9 @@ function WatchlistSection({
                         stock={stock}
                         language={language}
                         exchangeRate={exchangeRate}
-                        removing={removingKey === `${stock.market}-${stock.symbol}`}
+                        removing={
+                          removingKey === `${stock.market}-${stock.symbol}`
+                        }
                         onRemove={() => removeFavorite(stock)}
                       />
                     ))}
@@ -368,7 +383,7 @@ function WatchlistSection({
               <DragOverlay
                 dropAnimation={{
                   duration: 220,
-                  easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
+                  easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
                 }}
               >
                 {activeStock ? (
@@ -398,7 +413,11 @@ function WatchlistSection({
         )
       ) : (
         <div className="mt-4 rounded-md border border-dashed border-border bg-surface-muted px-4 py-12 text-center">
-          <Star size={28} className="mx-auto text-[#f4b400]" fill="currentColor" />
+          <Star
+            size={28}
+            className="mx-auto text-[#f4b400]"
+            fill="currentColor"
+          />
           <p className="mt-3 text-base font-semibold text-foreground">
             아직 관심종목이 없습니다.
           </p>
@@ -411,7 +430,8 @@ function WatchlistSection({
   );
 }
 
-function PortfolioSection({  accessToken,
+function PortfolioSection({
+  accessToken,
   language,
   exchangeRate,
   usSymbols,
@@ -419,38 +439,52 @@ function PortfolioSection({  accessToken,
   livePrices,
 }: {
   accessToken: string | null;
-  language: "en" | "ko";
+  language: 'en' | 'ko';
   exchangeRate: number | null;
   usSymbols: StockSymbol[];
   krSymbols: StockSymbol[];
-  livePrices: Record<string, { price: number; change?: number; percentChange?: number }>;
+  livePrices: Record<
+    string,
+    { price: number; change?: number; percentChange?: number }
+  >;
 }) {
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [editingPortfolioId, setEditingPortfolioId] = useState<string | null>(null);
+  const [editingPortfolioId, setEditingPortfolioId] = useState<string | null>(
+    null,
+  );
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [portfolioName, setPortfolioName] = useState("");
+  const [portfolioName, setPortfolioName] = useState('');
   const [drafts, setDrafts] = useState<PositionDraft[]>([makeDraft()]);
-  const [displayCurrency, setDisplayCurrency] = useState<"USD" | "KRW">("KRW");
-  const [portfolioSort, setPortfolioSort] = useState<PortfolioSort>("weight");
+  const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'KRW'>('KRW');
+  const [portfolioSort, setPortfolioSort] = useState<PortfolioSort>('weight');
   const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
 
-  const stockSymbols = useMemo(() => [...krSymbols, ...usSymbols], [krSymbols, usSymbols]);
+  const stockSymbols = useMemo(
+    () => [...krSymbols, ...usSymbols],
+    [krSymbols, usSymbols],
+  );
   const selectedPortfolios = useMemo(
     () => portfolios.filter((portfolio) => selectedIds.includes(portfolio.id)),
     [portfolios, selectedIds],
   );
   const rows = useMemo(
-    () => buildPortfolioRows(selectedPortfolios, displayCurrency, exchangeRate, livePrices),
+    () =>
+      buildPortfolioRows(
+        selectedPortfolios,
+        displayCurrency,
+        exchangeRate,
+        livePrices,
+      ),
     [selectedPortfolios, displayCurrency, exchangeRate, livePrices],
   );
   const sortedRows = useMemo(() => {
     const nextRows = [...rows];
-    if (portfolioSort === "profit") {
+    if (portfolioSort === 'profit') {
       return nextRows.sort((a, b) => {
         const profitA = a.profitRate ?? Number.NEGATIVE_INFINITY;
         const profitB = b.profitRate ?? Number.NEGATIVE_INFINITY;
@@ -465,7 +499,8 @@ function PortfolioSection({  accessToken,
   const totalValue = rows.reduce((sum, row) => sum + row.displayValue, 0);
   const totalCost = rows.reduce((sum, row) => sum + row.displayCost, 0);
   const totalProfitAmount = totalValue - totalCost;
-  const totalProfitRate = totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : null;
+  const totalProfitRate =
+    totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : null;
 
   useEffect(() => {
     if (!accessToken) {
@@ -476,10 +511,12 @@ function PortfolioSection({  accessToken,
   }, [accessToken]);
 
   useEffect(() => {
-    const symbols = rows.filter((row) => row.market === "US").map((row) => row.symbol);
+    const symbols = rows
+      .filter((row) => row.market === 'US')
+      .map((row) => row.symbol);
     if (symbols.length > 0) {
       window.dispatchEvent(
-        new CustomEvent("market:subscribe", { detail: [...new Set(symbols)] }),
+        new CustomEvent('market:subscribe', { detail: [...new Set(symbols)] }),
       );
     }
   }, [rows]);
@@ -490,21 +527,25 @@ function PortfolioSection({  accessToken,
     }
     setLoading(true);
     try {
-      const items = await apiRequest<Portfolio[]>("/markets/portfolios", "GET", {
-        accessToken,
-      });
+      const items = await apiRequest<Portfolio[]>(
+        '/markets/portfolios',
+        'GET',
+        {
+          accessToken,
+        },
+      );
       setPortfolios(items);
       setSelectedIds((prev) => {
         const liveIds = new Set(items.map((item) => item.id));
         const next = prev.filter((id) => liveIds.has(id));
         return next.length ? next : items.map((item) => item.id);
       });
-      setError("");
+      setError('');
     } catch (loadError) {
       setError(
         loadError instanceof Error
           ? loadError.message
-          : "포트폴리오를 불러오지 못했습니다.",
+          : '포트폴리오를 불러오지 못했습니다.',
       );
     } finally {
       setLoading(false);
@@ -512,18 +553,18 @@ function PortfolioSection({  accessToken,
   }
 
   function resetPortfolioForm() {
-    setPortfolioName("");
+    setPortfolioName('');
     setDrafts([makeDraft()]);
     setEditingPortfolioId(null);
     setShowForm(false);
   }
 
   function startCreatePortfolio() {
-    setPortfolioName("");
+    setPortfolioName('');
     setDrafts([makeDraft()]);
     setEditingPortfolioId(null);
     setConfirmDeleteId(null);
-    setError("");
+    setError('');
     setShowForm(true);
   }
 
@@ -533,18 +574,19 @@ function PortfolioSection({  accessToken,
       portfolio.positions.length
         ? portfolio.positions.map((position) => ({
             key: crypto.randomUUID(),
-            query: `${position.symbol} ${position.name ?? ""}`.trim(),
+            query: `${position.symbol} ${position.name ?? ''}`.trim(),
             symbol: position.symbol,
             market: position.market,
             name: position.name ?? position.symbol,
-            quantity: String(position.quantity || ""),
-            averagePrice: position.averagePrice > 0 ? String(position.averagePrice) : "",
+            quantity: String(position.quantity || ''),
+            averagePrice:
+              position.averagePrice > 0 ? String(position.averagePrice) : '',
           }))
         : [makeDraft()],
     );
     setEditingPortfolioId(portfolio.id);
     setConfirmDeleteId(null);
-    setError("");
+    setError('');
     setShowForm(true);
   }
 
@@ -553,7 +595,7 @@ function PortfolioSection({  accessToken,
       return;
     }
     if (!portfolioName.trim()) {
-      setError("포트폴리오 이름은 필수입니다.");
+      setError('포트폴리오 이름은 필수입니다.');
       return;
     }
 
@@ -569,12 +611,13 @@ function PortfolioSection({  accessToken,
         market: draft.market,
         name: draft.name || symbol,
         quantity,
-        averagePrice: Number.isFinite(averagePrice) && averagePrice > 0 ? averagePrice : 0,
+        averagePrice:
+          Number.isFinite(averagePrice) && averagePrice > 0 ? averagePrice : 0,
       };
     });
 
     if (positions.length === 0) {
-      setError("종목과 수량을 입력해 주세요.");
+      setError('종목과 수량을 입력해 주세요.');
       return;
     }
 
@@ -583,7 +626,7 @@ function PortfolioSection({  accessToken,
       if (editingPortfolioId) {
         const updated = await apiRequest<Portfolio>(
           `/markets/portfolios/${editingPortfolioId}`,
-          "PATCH",
+          'PATCH',
           {
             accessToken,
             body: { name: portfolioName.trim(), positions },
@@ -593,20 +636,24 @@ function PortfolioSection({  accessToken,
           items.map((item) => (item.id === updated.id ? updated : item)),
         );
       } else {
-        const created = await apiRequest<Portfolio>("/markets/portfolios", "POST", {
-          accessToken,
-          body: { name: portfolioName.trim(), positions },
-        });
+        const created = await apiRequest<Portfolio>(
+          '/markets/portfolios',
+          'POST',
+          {
+            accessToken,
+            body: { name: portfolioName.trim(), positions },
+          },
+        );
         setPortfolios((items) => [created, ...items]);
         setSelectedIds((ids) => [...new Set([created.id, ...ids])]);
       }
       resetPortfolioForm();
-      setError("");
+      setError('');
     } catch (saveError) {
       setError(
         saveError instanceof Error
           ? saveError.message
-          : "포트폴리오를 저장하지 못했습니다.",
+          : '포트폴리오를 저장하지 못했습니다.',
       );
     } finally {
       setSaving(false);
@@ -617,7 +664,7 @@ function PortfolioSection({  accessToken,
     if (!accessToken) {
       return;
     }
-    await apiRequest<{ ok: true }>(`/markets/portfolios/${id}`, "DELETE", {
+    await apiRequest<{ ok: true }>(`/markets/portfolios/${id}`, 'DELETE', {
       accessToken,
     });
     setPortfolios((items) => items.filter((item) => item.id !== id));
@@ -635,7 +682,7 @@ function PortfolioSection({  accessToken,
   }
 
   function selectSymbol(key: string, symbol: StockSymbol) {
-    const market = symbol.currency === "KRW" ? "KR" : "US";
+    const market = symbol.currency === 'KRW' ? 'KR' : 'US';
     updateDraft(key, {
       query: `${symbol.symbol} ${symbol.description}`,
       symbol: symbol.symbol,
@@ -645,7 +692,7 @@ function PortfolioSection({  accessToken,
   }
 
   function openStock(row: PortfolioRow) {
-    const currency = row.market === "KR" ? "KRW" : "USD";
+    const currency = row.market === 'KR' ? 'KRW' : 'USD';
     window.location.assign(
       `/?symbol=${encodeURIComponent(row.symbol)}&market=${row.market}&currency=${currency}`,
     );
@@ -658,7 +705,7 @@ function PortfolioSection({  accessToken,
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <SectionHeader
           eyebrow="Portfolio"
-          title={language === "ko" ? "포트폴리오" : "Portfolio"}
+          title={language === 'ko' ? '포트폴리오' : 'Portfolio'}
         />
         <div className="flex flex-wrap gap-2">
           <Button
@@ -685,7 +732,7 @@ function PortfolioSection({  accessToken,
         <div className="mt-4 rounded-lg border border-border bg-surface-muted p-4">
           <div className="flex items-center justify-between gap-3">
             <p className="text-base font-semibold text-foreground">
-              {editingPortfolioId ? "포트폴리오 수정" : "새 포트폴리오"}
+              {editingPortfolioId ? '포트폴리오 수정' : '새 포트폴리오'}
             </p>
             <button
               type="button"
@@ -712,7 +759,9 @@ function PortfolioSection({  accessToken,
                 onChange={(patch) => updateDraft(draft.key, patch)}
                 onSelect={(symbol) => selectSymbol(draft.key, symbol)}
                 onRemove={() =>
-                  setDrafts((items) => items.filter((item) => item.key !== draft.key))
+                  setDrafts((items) =>
+                    items.filter((item) => item.key !== draft.key),
+                  )
                 }
                 canRemove={drafts.length > 1}
               />
@@ -727,11 +776,20 @@ function PortfolioSection({  accessToken,
               종목 추가
             </Button>
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" size="sm" onClick={resetPortfolioForm}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={resetPortfolioForm}
+              >
                 취소
               </Button>
-              <Button variant="primary" size="sm" onClick={savePortfolio} loading={saving}>
-                {editingPortfolioId ? "수정 저장" : "저장"}
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={savePortfolio}
+                loading={saving}
+              >
+                {editingPortfolioId ? '수정 저장' : '저장'}
               </Button>
             </div>
           </div>
@@ -760,14 +818,16 @@ function PortfolioSection({  accessToken,
                     )
                   }
                   className={cn(
-                    "flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-semibold transition-colors",
+                    'flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-semibold transition-colors',
                     selected
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border bg-surface-muted text-muted hover:border-primary/40 hover:text-primary",
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border bg-surface-muted text-muted hover:border-primary/40 hover:text-primary',
                   )}
                 >
                   {portfolio.name}
-                  <span className="text-xs opacity-70">{portfolio.positions.length}</span>
+                  <span className="text-xs opacity-70">
+                    {portfolio.positions.length}
+                  </span>
                 </button>
               );
             })}
@@ -781,35 +841,43 @@ function PortfolioSection({  accessToken,
                     Total value
                   </p>
                   <p className="mt-1 text-2xl font-bold text-foreground">
-                    {formatMoney(totalValue, displayCurrency, displayCurrency, exchangeRate)}
+                    {formatMoney(
+                      totalValue,
+                      displayCurrency,
+                      displayCurrency,
+                      exchangeRate,
+                    )}
                     {totalProfitRate !== null ? (
                       <span
                         className={cn(
-                          "ml-2 align-middle text-base font-bold",
-                          totalProfitRate >= 0 ? "text-positive" : "text-negative",
+                          'ml-2 align-middle text-base font-bold',
+                          totalProfitRate >= 0
+                            ? 'text-positive'
+                            : 'text-negative',
                         )}
                       >
-                        {totalProfitRate >= 0 ? "+" : ""}
+                        {totalProfitRate >= 0 ? '+' : ''}
                         {formatNumber(totalProfitRate)}% (
-                        {formatProfitAmount(totalProfitAmount, displayCurrency)})
+                        {formatProfitAmount(totalProfitAmount, displayCurrency)}
+                        )
                       </span>
                     ) : null}
                   </p>
                 </div>
                 <div className="grid grid-cols-2 rounded-md border border-border bg-surface p-1">
-                  {(["KRW", "USD"] as const).map((currency) => (
+                  {(['KRW', 'USD'] as const).map((currency) => (
                     <button
                       key={currency}
                       type="button"
                       onClick={() => setDisplayCurrency(currency)}
                       className={cn(
-                        "h-8 cursor-pointer rounded-md px-3 text-xs font-bold",
+                        'h-8 cursor-pointer rounded-md px-3 text-xs font-bold',
                         displayCurrency === currency
-                          ? "bg-primary text-white"
-                          : "text-muted hover:text-primary",
+                          ? 'bg-primary text-white'
+                          : 'text-muted hover:text-primary',
                       )}
                     >
-                      {currency === "KRW" ? "원" : "$"}
+                      {currency === 'KRW' ? '원' : '$'}
                     </button>
                   ))}
                 </div>
@@ -827,21 +895,23 @@ function PortfolioSection({  accessToken,
                 <div className="flex items-center gap-2">
                   <PieChart size={17} className="text-primary" />
                   <p className="text-sm font-semibold text-foreground">
-                    {language === "ko" ? "구성비중" : "Allocation"}
+                    {language === 'ko' ? '구성비중' : 'Allocation'}
                   </p>
                 </div>
                 <SegmentedControl<PortfolioSort>
                   className="w-full sm:w-auto"
                   buttonClassName="px-3 py-1.5 text-xs"
-                  aria-label={language === "ko" ? "포트폴리오 정렬" : "Portfolio sort"}
+                  aria-label={
+                    language === 'ko' ? '포트폴리오 정렬' : 'Portfolio sort'
+                  }
                   options={[
                     {
-                      value: "weight",
-                      label: language === "ko" ? "보유비중순" : "Weight",
+                      value: 'weight',
+                      label: language === 'ko' ? '보유비중순' : 'Weight',
                     },
                     {
-                      value: "profit",
-                      label: language === "ko" ? "평가수익률순" : "Return",
+                      value: 'profit',
+                      label: language === 'ko' ? '평가수익률순' : 'Return',
                     },
                   ]}
                   value={portfolioSort}
@@ -865,18 +935,27 @@ function PortfolioSection({  accessToken,
                       />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-foreground">
-                          {row.market === "KR" ? row.name || row.symbol : row.symbol}
+                          {row.market === 'KR'
+                            ? row.name || row.symbol
+                            : row.symbol}
                         </p>
                         <p className="text-xs text-muted">
-                          {row.market} ·{" "}
-                          {row.market === "KR" ? row.symbol : row.name || row.symbol} ·{" "}
-                          {formatNumber(row.quantity)}주
+                          {row.market} ·{' '}
+                          {row.market === 'KR'
+                            ? row.symbol
+                            : row.name || row.symbol}{' '}
+                          · {formatNumber(row.quantity)}주
                         </p>
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="text-sm font-bold text-foreground">
-                        {formatMoney(row.displayValue, displayCurrency, displayCurrency, exchangeRate)}
+                        {formatMoney(
+                          row.displayValue,
+                          displayCurrency,
+                          displayCurrency,
+                          exchangeRate,
+                        )}
                       </p>
                       <p className="text-xs font-semibold text-muted">
                         {formatNumber(row.percent)}%
@@ -884,13 +963,19 @@ function PortfolioSection({  accessToken,
                       {row.profitRate !== null ? (
                         <p
                           className={cn(
-                            "text-xs font-bold",
-                            row.profitAmount >= 0 ? "text-positive" : "text-negative",
+                            'text-xs font-bold',
+                            row.profitAmount >= 0
+                              ? 'text-positive'
+                              : 'text-negative',
                           )}
                         >
-                          {row.profitRate >= 0 ? "+" : ""}
+                          {row.profitRate >= 0 ? '+' : ''}
                           {formatNumber(row.profitRate)}% (
-                          {formatProfitAmount(row.profitAmount, displayCurrency)})
+                          {formatProfitAmount(
+                            row.profitAmount,
+                            displayCurrency,
+                          )}
+                          )
                         </p>
                       ) : null}
                     </div>
@@ -910,7 +995,9 @@ function PortfolioSection({  accessToken,
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-base font-bold text-foreground">{portfolio.name}</p>
+                      <p className="text-base font-bold text-foreground">
+                        {portfolio.name}
+                      </p>
                       <p className="text-xs text-muted">
                         {portfolio.positions.length}개 종목
                       </p>
@@ -1015,8 +1102,8 @@ function PositionDraftRow({
             onChange={(event) =>
               onChange({
                 query: event.target.value,
-                symbol: "",
-                name: "",
+                symbol: '',
+                name: '',
               })
             }
             placeholder={`종목 검색 ${index + 1}`}
@@ -1025,9 +1112,11 @@ function PositionDraftRow({
           {suggestions.length ? (
             <div className="absolute left-0 right-0 top-11 z-20 overflow-hidden rounded-md border border-border bg-surface shadow-lg">
               {suggestions.map((symbol) => {
-                const market = symbol.currency === "KRW" ? "KR" : "US";
-                const primary = market === "KR" ? symbol.description : symbol.symbol;
-                const secondary = market === "KR" ? symbol.symbol : symbol.description;
+                const market = symbol.currency === 'KRW' ? 'KR' : 'US';
+                const primary =
+                  market === 'KR' ? symbol.description : symbol.symbol;
+                const secondary =
+                  market === 'KR' ? symbol.symbol : symbol.description;
                 return (
                   <button
                     key={`${symbol.currency}-${symbol.symbol}`}
@@ -1035,7 +1124,9 @@ function PositionDraftRow({
                     onClick={() => onSelect(symbol)}
                     className="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-surface-muted"
                   >
-                    <span className="font-semibold text-foreground">{primary}</span>
+                    <span className="font-semibold text-foreground">
+                      {primary}
+                    </span>
                     <span className="min-w-0 truncate text-xs text-muted">
                       {secondary}
                     </span>
@@ -1046,7 +1137,7 @@ function PositionDraftRow({
           ) : null}
         </div>
         <div className="flex h-10 items-center justify-center rounded-md border border-border bg-surface-muted px-3 text-xs font-bold text-muted">
-          {draft.symbol ? (draft.market === "KR" ? "한국" : "미국") : "자동"}
+          {draft.symbol ? (draft.market === 'KR' ? '한국' : '미국') : '자동'}
         </div>
         <input
           value={draft.quantity}
@@ -1058,7 +1149,7 @@ function PositionDraftRow({
         <input
           value={draft.averagePrice}
           onChange={(event) => onChange({ averagePrice: event.target.value })}
-          placeholder={draft.market === "KR" ? "1주평균(원)" : "1주평균($)"}
+          placeholder={draft.market === 'KR' ? '1주평균(원)' : '1주평균($)'}
           inputMode="decimal"
           className="h-10 rounded-md border border-border bg-surface-muted px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
         />
@@ -1079,14 +1170,14 @@ function PositionDraftRow({
 type PortfolioRow = {
   key: string;
   symbol: string;
-  market: "US" | "KR";
+  market: 'US' | 'KR';
   name?: string;
   quantity: number;
   averagePrice: number;
   current: number;
   change: number;
   percentChange: number;
-  sourceCurrency: "USD" | "KRW";
+  sourceCurrency: 'USD' | 'KRW';
   displayValue: number;
   displayCost: number;
   profitAmount: number;
@@ -1097,9 +1188,12 @@ type PortfolioRow = {
 
 function buildPortfolioRows(
   portfolios: Portfolio[],
-  displayCurrency: "USD" | "KRW",
+  displayCurrency: 'USD' | 'KRW',
   exchangeRate: number | null,
-  livePrices: Record<string, { price: number; change?: number; percentChange?: number }>,
+  livePrices: Record<
+    string,
+    { price: number; change?: number; percentChange?: number }
+  >,
 ): PortfolioRow[] {
   const byStock = new Map<
     string,
@@ -1122,14 +1216,24 @@ function buildPortfolioRows(
 
   const rows = [...byStock.values()].map((position, index) => {
     const live = livePrices[position.symbol];
-    const sourceCurrency = (position.currency ?? (position.market === "KR" ? "KRW" : "USD")) as
-      | "USD"
-      | "KRW";
-    const current = live?.price && live.price > 0 ? live.price : position.current;
+    const sourceCurrency = (position.currency ??
+      (position.market === 'KR' ? 'KRW' : 'USD')) as 'USD' | 'KRW';
+    const current =
+      live?.price && live.price > 0 ? live.price : position.current;
     const displayValue =
-      convertMoneyValue(current * position.quantity, displayCurrency, sourceCurrency, exchangeRate) || 0;
+      convertMoneyValue(
+        current * position.quantity,
+        displayCurrency,
+        sourceCurrency,
+        exchangeRate,
+      ) || 0;
     const displayCost =
-      convertMoneyValue(position.cost, displayCurrency, sourceCurrency, exchangeRate) || 0;
+      convertMoneyValue(
+        position.cost,
+        displayCurrency,
+        sourceCurrency,
+        exchangeRate,
+      ) || 0;
     const safeDisplayValue = Number.isFinite(displayValue) ? displayValue : 0;
     const safeDisplayCost = Number.isFinite(displayCost) ? displayCost : 0;
     const profitAmount = safeDisplayValue - safeDisplayCost;
@@ -1147,7 +1251,8 @@ function buildPortfolioRows(
       displayValue: safeDisplayValue,
       displayCost: safeDisplayCost,
       profitAmount,
-      profitRate: safeDisplayCost > 0 ? (profitAmount / safeDisplayCost) * 100 : null,
+      profitRate:
+        safeDisplayCost > 0 ? (profitAmount / safeDisplayCost) * 100 : null,
       percent: 0,
       color: PIE_COLORS[index % PIE_COLORS.length],
     };
@@ -1183,7 +1288,8 @@ function PortfolioPieChart({
 
   let startAngle = -90;
   const active = rows.find((row) => row.key === hoveredSlice) ?? rows[0];
-  const activeLabel = active.market === "KR" ? active.name || active.symbol : active.symbol;
+  const activeLabel =
+    active.market === 'KR' ? active.name || active.symbol : active.symbol;
 
   return (
     <div className="mt-6 flex flex-col items-center">
@@ -1206,7 +1312,13 @@ function PortfolioPieChart({
             );
           }
           const endAngle = startAngle + (row.percent / 100) * 360;
-          const d = describeArc(120, 120, hoveredSlice === row.key ? 98 : 94, startAngle, endAngle);
+          const d = describeArc(
+            120,
+            120,
+            hoveredSlice === row.key ? 98 : 94,
+            startAngle,
+            endAngle,
+          );
           startAngle = endAngle;
           return (
             <path
@@ -1224,10 +1336,20 @@ function PortfolioPieChart({
           );
         })}
         <circle cx="120" cy="120" r="62" className="fill-surface" />
-        <text x="120" y="112" textAnchor="middle" className="fill-muted text-[12px] font-semibold">
+        <text
+          x="120"
+          y="112"
+          textAnchor="middle"
+          className="fill-muted text-[12px] font-semibold"
+        >
           {activeLabel}
         </text>
-        <text x="120" y="135" textAnchor="middle" className="fill-foreground text-[20px] font-bold">
+        <text
+          x="120"
+          y="135"
+          textAnchor="middle"
+          className="fill-foreground text-[20px] font-bold"
+        >
           {formatNumber(active.percent)}%
         </text>
       </svg>
@@ -1244,13 +1366,13 @@ function describeArc(
 ) {
   const start = polarToCartesian(cx, cy, radius, endAngle);
   const end = polarToCartesian(cx, cy, radius, startAngle);
-  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+  const largeArcFlag = endAngle - startAngle <= 180 ? '0' : '1';
 
   return [
-    "M",
+    'M',
     start.x,
     start.y,
-    "A",
+    'A',
     radius,
     radius,
     0,
@@ -1258,10 +1380,15 @@ function describeArc(
     0,
     end.x,
     end.y,
-  ].join(" ");
+  ].join(' ');
 }
 
-function polarToCartesian(cx: number, cy: number, radius: number, angle: number) {
+function polarToCartesian(
+  cx: number,
+  cy: number,
+  radius: number,
+  angle: number,
+) {
   const angleInRadians = ((angle - 90) * Math.PI) / 180;
   return {
     x: cx + radius * Math.cos(angleInRadians),
@@ -1272,12 +1399,12 @@ function polarToCartesian(cx: number, cy: number, radius: number, angle: number)
 function makeDraft(): PositionDraft {
   return {
     key: crypto.randomUUID(),
-    query: "",
-    symbol: "",
-    market: "US",
-    name: "",
-    quantity: "",
-    averagePrice: "",
+    query: '',
+    symbol: '',
+    market: 'US',
+    name: '',
+    quantity: '',
+    averagePrice: '',
   };
 }
 
@@ -1286,37 +1413,50 @@ function portfolioSearchScore(item: StockSymbol, rawQuery: string): number {
   if (!query) {
     return 0;
   }
-  const symbol = (item.symbol ?? "").toLowerCase();
-  const displaySymbol = (item.displaySymbol ?? item.symbol ?? "").toLowerCase();
-  const name = (item.description ?? "").toLowerCase();
-  const compactQuery = query.replace(/[^a-z0-9가-힣]/g, "");
-  const compactSymbol = symbol.replace(/[^a-z0-9]/g, "");
-  const compactDisplaySymbol = displaySymbol.replace(/[^a-z0-9]/g, "");
+  const symbol = (item.symbol ?? '').toLowerCase();
+  const displaySymbol = (item.displaySymbol ?? item.symbol ?? '').toLowerCase();
+  const name = (item.description ?? '').toLowerCase();
+  const compactQuery = query.replace(/[^a-z0-9가-힣]/g, '');
+  const compactSymbol = symbol.replace(/[^a-z0-9]/g, '');
+  const compactDisplaySymbol = displaySymbol.replace(/[^a-z0-9]/g, '');
   const normalizedQuery = normalizePortfolioSearchText(query);
   const normalizedName = normalizePortfolioSearchText(name);
-  const compactName = name.replace(/[^a-z0-9가-힣]/g, "");
+  const compactName = name.replace(/[^a-z0-9가-힣]/g, '');
 
   if (
     compactSymbol === normalizedQuery ||
     compactDisplaySymbol === normalizedQuery ||
     normalizedName === normalizedQuery
-  ) return 150;
-  if (compactSymbol.startsWith(normalizedQuery) || compactDisplaySymbol.startsWith(normalizedQuery)) return 130;
+  )
+    return 150;
+  if (
+    compactSymbol.startsWith(normalizedQuery) ||
+    compactDisplaySymbol.startsWith(normalizedQuery)
+  )
+    return 130;
   if (normalizedName.startsWith(normalizedQuery)) return 125;
-  if (compactSymbol.includes(normalizedQuery) || compactDisplaySymbol.includes(normalizedQuery)) return 110;
+  if (
+    compactSymbol.includes(normalizedQuery) ||
+    compactDisplaySymbol.includes(normalizedQuery)
+  )
+    return 110;
   if (normalizedName.includes(normalizedQuery)) return 100;
 
   const baseScore = stockSearchScore(item, rawQuery);
   const symbolDistance = editDistance(compactSymbol, normalizedQuery);
   const transposed =
     compactSymbol.length === normalizedQuery.length &&
-    [...compactSymbol].sort().join("") === [...normalizedQuery].sort().join("");
-  const fuzzyScore = transposed ? 95 : symbolDistance <= 2 ? 90 - symbolDistance * 10 : 0;
+    [...compactSymbol].sort().join('') === [...normalizedQuery].sort().join('');
+  const fuzzyScore = transposed
+    ? 95
+    : symbolDistance <= 2
+      ? 90 - symbolDistance * 10
+      : 0;
   return Math.max(baseScore, fuzzyScore);
 }
 
 function normalizePortfolioSearchText(value: string): string {
-  return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 }
 
 function editDistance(a: string, b: string): number {
@@ -1337,11 +1477,11 @@ function editDistance(a: string, b: string): number {
   return row[b.length];
 }
 
-function formatProfitAmount(value: number, currency: "USD" | "KRW"): string {
-  const sign = value >= 0 ? "+" : "-";
+function formatProfitAmount(value: number, currency: 'USD' | 'KRW'): string {
+  const sign = value >= 0 ? '+' : '-';
   const absolute = Math.abs(value);
 
-  if (currency === "KRW") {
+  if (currency === 'KRW') {
     if (absolute >= 1_0000_0000_0000) {
       return `${sign}${formatCompactAmount(absolute / 1_0000_0000_0000)}조`;
     }
@@ -1351,14 +1491,14 @@ function formatProfitAmount(value: number, currency: "USD" | "KRW"): string {
     if (absolute >= 10_000) {
       return `${sign}${formatCompactAmount(absolute / 10_000)}만원`;
     }
-    return `${sign}${Math.round(absolute).toLocaleString("ko-KR")}원`;
+    return `${sign}${Math.round(absolute).toLocaleString('ko-KR')}원`;
   }
 
   return `${sign}${formatCompactAmount(absolute)}$`;
 }
 
 function formatCompactAmount(value: number): string {
-  return new Intl.NumberFormat("ko-KR", {
+  return new Intl.NumberFormat('ko-KR', {
     maximumFractionDigits: value >= 100 ? 0 : 2,
     minimumFractionDigits: 0,
   }).format(value);
@@ -1370,47 +1510,68 @@ function FavoriteCardContent({
   exchangeRate,
 }: {
   stock: FavoriteStock;
-  language: "en" | "ko";
+  language: 'en' | 'ko';
   exchangeRate: number | null;
 }) {
-  const sourceCurrency = stock.currency ?? (stock.market === "KR" ? "KRW" : "USD");
-  const displayCurrency = stock.market === "KR" ? "KRW" : "USD";
+  const sourceCurrency =
+    stock.currency ?? (stock.market === 'KR' ? 'KRW' : 'USD');
+  const displayCurrency = stock.market === 'KR' ? 'KRW' : 'USD';
   const positive = stock.change >= 0;
-  const primary = stock.market === "KR" ? stock.name || stock.symbol : stock.symbol;
-  const secondary = stock.market === "KR" ? stock.symbol : stock.name || stock.symbol;
+  const primary =
+    stock.market === 'KR' ? stock.name || stock.symbol : stock.symbol;
+  const secondary =
+    stock.market === 'KR' ? stock.symbol : stock.name || stock.symbol;
 
   return (
     <>
       <div className="flex items-center gap-2">
-        <Star size={17} className="shrink-0 text-[#f4b400]" fill="currentColor" />
-        <p className="truncate text-base font-semibold text-foreground">{primary}</p>
+        <Star
+          size={17}
+          className="shrink-0 text-[#f4b400]"
+          fill="currentColor"
+        />
+        <p className="truncate text-base font-semibold text-foreground">
+          {primary}
+        </p>
       </div>
       <p className="mt-1 truncate text-xs font-medium uppercase tracking-wide text-muted">
         {stock.market} · {secondary}
       </p>
       <p className="mt-4 text-xs font-medium text-muted">
-        {language === "ko" ? "현재가" : "Last"}
+        {language === 'ko' ? '현재가' : 'Last'}
       </p>
       <p className="mt-0.5 text-2xl font-bold tracking-tight text-foreground">
-        {formatMoney(stock.current, displayCurrency, sourceCurrency, exchangeRate)}
+        {formatMoney(
+          stock.current,
+          displayCurrency,
+          sourceCurrency,
+          exchangeRate,
+        )}
       </p>
       <p className="mt-3 text-xs font-medium text-muted">
-        {language === "ko" ? "전일대비" : "Change"}
+        {language === 'ko' ? '전일대비' : 'Change'}
       </p>
       <div className="mt-0.5 flex flex-wrap items-center gap-2">
-        <span className={`text-sm font-semibold ${positive ? "text-positive" : "text-negative"}`}>
-          {positive ? "+" : ""}
-          {formatMoney(stock.change, displayCurrency, sourceCurrency, exchangeRate)}
+        <span
+          className={`text-sm font-semibold ${positive ? 'text-positive' : 'text-negative'}`}
+        >
+          {positive ? '+' : ''}
+          {formatMoney(
+            stock.change,
+            displayCurrency,
+            sourceCurrency,
+            exchangeRate,
+          )}
         </span>
         <span
           className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${
             positive
-              ? "bg-positive-surface text-positive"
-              : "bg-negative-surface text-negative"
+              ? 'bg-positive-surface text-positive'
+              : 'bg-negative-surface text-negative'
           }`}
         >
           {positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-          {positive ? "+" : ""}
+          {positive ? '+' : ''}
           {formatNumber(stock.percentChange)}%
         </span>
       </div>
@@ -1425,7 +1586,7 @@ function FavoriteStockCard({
   onOpen,
 }: {
   stock: FavoriteStock;
-  language: "en" | "ko";
+  language: 'en' | 'ko';
   exchangeRate: number | null;
   onOpen: () => void;
 }) {
@@ -1435,10 +1596,14 @@ function FavoriteStockCard({
       onClick={onOpen}
       className="group relative block w-full cursor-pointer overflow-hidden rounded-xl border border-border bg-surface-muted p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
     >
-      <FavoriteCardContent stock={stock} language={language} exchangeRate={exchangeRate} />
+      <FavoriteCardContent
+        stock={stock}
+        language={language}
+        exchangeRate={exchangeRate}
+      />
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-surface/50 opacity-0 backdrop-blur-[1px] transition-opacity duration-200 group-hover:opacity-100">
         <span className="text-sm font-semibold text-foreground">
-          {language === "ko" ? "상세 보기" : "Show detail"}
+          {language === 'ko' ? '상세 보기' : 'Show detail'}
         </span>
       </div>
     </button>
@@ -1453,34 +1618,45 @@ function SortableFavoriteCard({
   onRemove,
 }: {
   stock: FavoriteStock;
-  language: "en" | "ko";
+  language: 'en' | 'ko';
   exchangeRate: number | null;
   removing: boolean;
   onRemove: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: stock.favoriteId });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: stock.favoriteId });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
-  const stopDrag = (event: { stopPropagation: () => void }) => event.stopPropagation();
+  const stopDrag = (event: { stopPropagation: () => void }) =>
+    event.stopPropagation();
 
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={cn(
-        "group relative cursor-grab rounded-xl border p-4 transition-colors active:cursor-grabbing",
+        'group relative cursor-grab rounded-xl border p-4 transition-colors active:cursor-grabbing',
         isDragging
-          ? "border-2 border-dashed border-primary/50 bg-primary/5"
-          : "border-border bg-surface-muted hover:border-primary/50",
+          ? 'border-2 border-dashed border-primary/50 bg-primary/5'
+          : 'border-border bg-surface-muted hover:border-primary/50',
       )}
       {...attributes}
       {...listeners}
     >
-      <div className={cn(isDragging && "invisible")}>
-        <FavoriteCardContent stock={stock} language={language} exchangeRate={exchangeRate} />
+      <div className={cn(isDragging && 'invisible')}>
+        <FavoriteCardContent
+          stock={stock}
+          language={language}
+          exchangeRate={exchangeRate}
+        />
       </div>
       <Button
         variant="secondary"
@@ -1492,9 +1668,12 @@ function SortableFavoriteCard({
           event.stopPropagation();
           onRemove();
         }}
-        title={language === "ko" ? "관심종목 제거" : "Remove favorite"}
-        aria-label={language === "ko" ? "관심종목 제거" : "Remove favorite"}
-        className={cn("absolute right-2 top-2 text-muted", isDragging && "invisible")}
+        title={language === 'ko' ? '관심종목 제거' : 'Remove favorite'}
+        aria-label={language === 'ko' ? '관심종목 제거' : 'Remove favorite'}
+        className={cn(
+          'absolute right-2 top-2 text-muted',
+          isDragging && 'invisible',
+        )}
       >
         <Trash2 size={16} />
       </Button>

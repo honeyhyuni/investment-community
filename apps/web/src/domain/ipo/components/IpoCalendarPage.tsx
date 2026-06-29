@@ -1,32 +1,31 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
   Search,
-} from "lucide-react";
-import { apiRequest } from "@/common/lib/api";
-import { Notice } from "@/common/components/Notice";
-import { SectionHeader } from "@/common/components/SectionHeader";
-import { SegmentedControl } from "@/common/components/SegmentedControl";
-import { Skeleton } from "@/common/components/Skeleton";
-import { useMarketDataStore } from "@/common/stores/market-data";
-import { usePreferencesStore } from "@/common/stores/preferences";
-import { useSessionStore } from "@/common/stores/session";
-import { StockSymbol } from "@/common/types";
-import { stockSearchScore } from "@/common/utils/stock-search";
+} from 'lucide-react';
+import { apiRequest } from '@/common/lib/api';
+import { Notice } from '@/common/components/Notice';
+import { SegmentedControl } from '@/common/components/SegmentedControl';
+import { Skeleton } from '@/common/components/Skeleton';
+import { useMarketDataStore } from '@/common/stores/market-data';
+import { usePreferencesStore } from '@/common/stores/preferences';
+import { useSessionStore } from '@/common/stores/session';
+import { StockSymbol } from '@/common/types';
+import { stockSearchScore } from '@/common/utils/stock-search';
 import {
   IpoCalendarItem,
   UsEarningsCalendarBounds,
   UsEarningsCalendarItem,
-} from "@/domain/ipo/types";
+} from '@/domain/ipo/types';
 
-type CalendarTab = "ipo" | "earnings";
-type EarningsView = "daily" | "weekly" | "monthly";
+type CalendarTab = 'ipo' | 'earnings';
+type EarningsView = 'daily' | 'weekly' | 'monthly';
 
 type CalendarDay = {
   date: string;
@@ -37,7 +36,7 @@ type CalendarDay = {
 
 type IpoCalendarEvent = {
   item: IpoCalendarItem;
-  type: "subscription" | "listing";
+  type: 'subscription' | 'listing';
 };
 
 type EarningsCalendarDay = {
@@ -49,7 +48,7 @@ type EarningsCalendarDay = {
 };
 
 export function IpoCalendarPage({
-  initialTab = "ipo",
+  initialTab = 'ipo',
 }: {
   initialTab?: CalendarTab;
 }) {
@@ -64,39 +63,37 @@ export function IpoCalendarPage({
 
   function switchTab(tab: CalendarTab) {
     setActiveTab(tab);
-    router.push(tab === "earnings" ? "/calendar/earnings" : "/calendar/ipo");
+    router.push(tab === 'earnings' ? '/calendar/earnings' : '/calendar/ipo');
   }
 
   return (
     <div className="grid min-w-0 flex-1 gap-4 py-4 sm:gap-6 sm:py-6">
-      <section className="-mx-4 min-w-0 border-y border-border bg-surface p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
-        <div className="flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <SectionHeader
-            eyebrow={language === "ko" ? "Investment Calendar" : "Investment Calendar"}
-            title={language === "ko" ? "캘린더" : "Calendar"}
-          />
+      <section className="min-w-0">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <SegmentedControl<CalendarTab>
             className="w-full sm:inline-flex sm:w-auto"
-            aria-label={language === "ko" ? "캘린더 선택" : "Calendar view"}
+            aria-label={language === 'ko' ? '캘린더 선택' : 'Calendar view'}
             options={[
               {
-                value: "ipo",
+                value: 'ipo',
                 label: (
                   <span className="flex flex-col items-center leading-tight">
-                    <span>{language === "ko" ? "공모주" : "IPO"}</span>
+                    <span>{language === 'ko' ? '공모주' : 'IPO'}</span>
                     <span className="text-[11px] font-medium opacity-80">
-                      {language === "ko" ? "청약/상장" : "Subscription"}
+                      {language === 'ko' ? '청약/상장' : 'Subscription'}
                     </span>
                   </span>
                 ),
               },
               {
-                value: "earnings",
+                value: 'earnings',
                 label: (
                   <span className="flex flex-col items-center leading-tight">
-                    <span>{language === "ko" ? "미국실적" : "US Earnings"}</span>
+                    <span>
+                      {language === 'ko' ? '미국실적' : 'US Earnings'}
+                    </span>
                     <span className="text-[11px] font-medium opacity-80">
-                      {language === "ko" ? "발표 일정" : "Calendar"}
+                      {language === 'ko' ? '발표 일정' : 'Calendar'}
                     </span>
                   </span>
                 ),
@@ -107,7 +104,7 @@ export function IpoCalendarPage({
           />
         </div>
 
-        {activeTab === "ipo" ? (
+        {activeTab === 'ipo' ? (
           <IpoCalendarSection accessToken={accessToken} language={language} />
         ) : (
           <UsEarningsSection accessToken={accessToken} language={language} />
@@ -122,11 +119,11 @@ function IpoCalendarSection({
   language,
 }: {
   accessToken: string | null;
-  language: "en" | "ko";
+  language: 'en' | 'ko';
 }) {
   const [items, setItems] = useState<IpoCalendarItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!accessToken) {
@@ -135,8 +132,8 @@ function IpoCalendarSection({
 
     let active = true;
     setLoading(true);
-    setError("");
-    apiRequest<IpoCalendarItem[]>("/markets/ipos", "GET", { accessToken })
+    setError('');
+    apiRequest<IpoCalendarItem[]>('/markets/ipos', 'GET', { accessToken })
       .then((nextItems) => {
         if (active) {
           setItems(nextItems);
@@ -147,9 +144,9 @@ function IpoCalendarSection({
           setError(
             loadError instanceof Error
               ? loadError.message
-              : language === "ko"
-                ? "공모주 일정을 불러오지 못했습니다."
-                : "Could not load IPO calendar.",
+              : language === 'ko'
+                ? '공모주 일정을 불러오지 못했습니다.'
+                : 'Could not load IPO calendar.',
           );
         }
       })
@@ -164,10 +161,10 @@ function IpoCalendarSection({
     };
   }, [accessToken, language]);
 
-  const calendarDays = useMemo(() => buildRollingCalendar(items, language), [
-    items,
-    language,
-  ]);
+  const calendarDays = useMemo(
+    () => buildRollingCalendar(items, language),
+    [items, language],
+  );
 
   return (
     <div className="pt-4">
@@ -175,9 +172,9 @@ function IpoCalendarSection({
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="hidden">
-          {language === "ko"
-            ? "DART 공시와 상장 일정 데이터를 매일 새벽 3시에 갱신합니다."
-            : "Updated daily at 3 AM from DART disclosures and listing schedules."}
+          {language === 'ko'
+            ? 'DART 공시와 상장 일정 데이터를 매일 새벽 3시에 갱신합니다.'
+            : 'Updated daily at 3 AM from DART disclosures and listing schedules.'}
         </p>
         <span className="inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
           <CalendarDays size={14} />
@@ -198,9 +195,11 @@ function IpoCalendarSection({
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-foreground">
-                      {day.label}
+                      {day.label}{' '}
+                      <span className="text-xs font-medium text-muted">
+                        ({day.weekday})
+                      </span>
                     </p>
-                    <p className="text-xs font-medium text-muted">{day.weekday}</p>
                   </div>
                   {day.events.length ? (
                     <span className="rounded-full bg-positive/10 px-2 py-0.5 text-xs font-semibold text-positive">
@@ -220,7 +219,7 @@ function IpoCalendarSection({
                     ))
                   ) : (
                     <p className="rounded-md border border-dashed border-border px-2 py-4 text-center text-xs text-muted">
-                      {language === "ko" ? "일정 없음" : "No IPOs"}
+                      {language === 'ko' ? '일정 없음' : 'No IPOs'}
                     </p>
                   )}
                 </div>
@@ -230,7 +229,7 @@ function IpoCalendarSection({
 
           <div className="mt-6 border-t border-border pt-4">
             <h2 className="text-base font-semibold text-foreground">
-              {language === "ko" ? "공모주 목록" : "IPO list"}
+              {language === 'ko' ? '공모주 목록' : 'IPO list'}
             </h2>
             <div className="mt-3 grid gap-3">
               {items.length ? (
@@ -239,9 +238,9 @@ function IpoCalendarSection({
                 ))
               ) : (
                 <p className="rounded-md border border-dashed border-border bg-surface-muted px-4 py-10 text-center text-sm text-muted">
-                  {language === "ko"
-                    ? "오늘 기준 한 달 이내로 파싱된 공모주 일정이 없습니다."
-                    : "No parsed IPO schedules for the next month."}
+                  {language === 'ko'
+                    ? '오늘 기준 한 달 이내로 파싱된 공모주 일정이 없습니다.'
+                    : 'No parsed IPO schedules for the next month.'}
                 </p>
               )}
             </div>
@@ -257,26 +256,28 @@ function UsEarningsSection({
   language,
 }: {
   accessToken: string | null;
-  language: "en" | "ko";
+  language: 'en' | 'ko';
 }) {
   const usSymbols = useMarketDataStore((state) => state.usSymbols);
-  const loadStockSymbols = useMarketDataStore((state) => state.loadStockSymbols);
-  const [view, setView] = useState<EarningsView>("daily");
+  const loadStockSymbols = useMarketDataStore(
+    (state) => state.loadStockSymbols,
+  );
+  const [view, setView] = useState<EarningsView>('daily');
   const [anchorDate, setAnchorDate] = useState(() => startOfDay(new Date()));
-  const [query, setQuery] = useState("");
-  const [selectedEarningsSymbol, setSelectedEarningsSymbol] = useState("");
+  const [query, setQuery] = useState('');
+  const [selectedEarningsSymbol, setSelectedEarningsSymbol] = useState('');
   const [items, setItems] = useState<UsEarningsCalendarItem[]>([]);
   const [bounds, setBounds] = useState<UsEarningsCalendarBounds>({
     minDate: null,
     maxDate: null,
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
-  const range = useMemo(() => getEarningsRange(view, anchorDate), [
-    view,
-    anchorDate,
-  ]);
+  const range = useMemo(
+    () => getEarningsRange(view, anchorDate),
+    [view, anchorDate],
+  );
   const effectiveQuery = query.trim();
   const highlightedSymbol = selectedEarningsSymbol.toUpperCase();
   const symbolSuggestions = useMemo(() => {
@@ -309,8 +310,8 @@ function UsEarningsSection({
     }
     let active = true;
     apiRequest<UsEarningsCalendarBounds>(
-      "/markets/calendar/earnings/us/bounds",
-      "GET",
+      '/markets/calendar/earnings/us/bounds',
+      'GET',
       { accessToken },
     )
       .then((nextBounds) => {
@@ -331,18 +332,18 @@ function UsEarningsSection({
 
     let active = true;
     setLoading(true);
-    setError("");
+    setError('');
     const params = new URLSearchParams({
       from: toDateKey(range.from),
       to: toDateKey(range.to),
     });
     if (effectiveQuery) {
-      params.set("query", effectiveQuery);
+      params.set('query', effectiveQuery);
     }
 
     apiRequest<UsEarningsCalendarItem[]>(
       `/markets/calendar/earnings/us?${params.toString()}`,
-      "GET",
+      'GET',
       { accessToken },
     )
       .then((nextItems) => {
@@ -355,9 +356,9 @@ function UsEarningsSection({
           setError(
             loadError instanceof Error
               ? loadError.message
-              : language === "ko"
-                ? "미국 실적 일정을 불러오지 못했습니다."
-                : "Could not load US earnings calendar.",
+              : language === 'ko'
+                ? '미국 실적 일정을 불러오지 못했습니다.'
+                : 'Could not load US earnings calendar.',
           );
         }
       })
@@ -374,20 +375,36 @@ function UsEarningsSection({
 
   const searchLimited = !!effectiveQuery && items.length > 30;
   const visibleItems = searchLimited ? [] : items;
-  const groupedItems = useMemo(() => groupEarningsByDate(visibleItems), [
-    visibleItems,
-  ]);
+  const groupedItems = useMemo(
+    () => groupEarningsByDate(visibleItems),
+    [visibleItems],
+  );
   const minDate = useMemo(() => {
     const retentionFloor = getPreviousMonthStart(new Date());
-    const dataFloor = bounds.minDate ? parseDateKey(bounds.minDate) : startOfDay(new Date());
+    const dataFloor = bounds.minDate
+      ? parseDateKey(bounds.minDate)
+      : startOfDay(new Date());
     return dataFloor > retentionFloor ? dataFloor : retentionFloor;
   }, [bounds.minDate]);
   const maxDate = useMemo(
-    () => (bounds.maxDate ? parseDateKey(bounds.maxDate) : startOfDay(new Date())),
+    () =>
+      bounds.maxDate ? parseDateKey(bounds.maxDate) : startOfDay(new Date()),
     [bounds.maxDate],
   );
-  const canMovePrevious = canMoveEarningsRange(view, anchorDate, -1, minDate, maxDate);
-  const canMoveNext = canMoveEarningsRange(view, anchorDate, 1, minDate, maxDate);
+  const canMovePrevious = canMoveEarningsRange(
+    view,
+    anchorDate,
+    -1,
+    minDate,
+    maxDate,
+  );
+  const canMoveNext = canMoveEarningsRange(
+    view,
+    anchorDate,
+    1,
+    minDate,
+    maxDate,
+  );
 
   function moveRange(direction: -1 | 1) {
     if (direction < 0 && !canMovePrevious) {
@@ -414,11 +431,9 @@ function UsEarningsSection({
       query: ticker,
     });
     const path = '/markets/calendar/earnings/us?' + params.toString();
-    const results = await apiRequest<UsEarningsCalendarItem[]>(
-      path,
-      "GET",
-      { accessToken },
-    ).catch(() => []);
+    const results = await apiRequest<UsEarningsCalendarItem[]>(path, 'GET', {
+      accessToken,
+    }).catch(() => []);
     const today = startOfDay(new Date());
     const target =
       results.find(
@@ -440,9 +455,9 @@ function UsEarningsSection({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="hidden">
-            {language === "ko"
-              ? "Alpha Vantage 실적 캘린더를 batch로 저장해 DB 기준으로 조회합니다."
-              : "Stored from Alpha Vantage earnings calendar batches and served from the database."}
+            {language === 'ko'
+              ? 'Alpha Vantage 실적 캘린더를 batch로 저장해 DB 기준으로 조회합니다.'
+              : 'Stored from Alpha Vantage earnings calendar batches and served from the database.'}
           </p>
           <p className="text-xs font-semibold text-muted">
             {formatRangeLabel(range.from, range.to, language)}
@@ -450,11 +465,14 @@ function UsEarningsSection({
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <SegmentedControl<EarningsView>
-            aria-label={language === "ko" ? "실적 기간" : "Earnings range"}
+            aria-label={language === 'ko' ? '실적 기간' : 'Earnings range'}
             options={[
-              { value: "daily", label: language === "ko" ? "데일리" : "Daily" },
-              { value: "weekly", label: language === "ko" ? "주간" : "Weekly" },
-              { value: "monthly", label: language === "ko" ? "월간" : "Monthly" },
+              { value: 'daily', label: language === 'ko' ? '데일리' : 'Daily' },
+              { value: 'weekly', label: language === 'ko' ? '주간' : 'Weekly' },
+              {
+                value: 'monthly',
+                label: language === 'ko' ? '월간' : 'Monthly',
+              },
             ]}
             value={view}
             onChange={(nextView) => {
@@ -468,7 +486,7 @@ function UsEarningsSection({
               onClick={() => moveRange(-1)}
               disabled={!canMovePrevious}
               className="grid size-10 cursor-pointer place-items-center rounded-md border border-border bg-surface text-foreground transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-foreground"
-              aria-label={language === "ko" ? "이전 기간" : "Previous period"}
+              aria-label={language === 'ko' ? '이전 기간' : 'Previous period'}
             >
               <ChevronLeft size={18} />
             </button>
@@ -477,7 +495,7 @@ function UsEarningsSection({
               onClick={() => moveRange(1)}
               disabled={!canMoveNext}
               className="grid size-10 cursor-pointer place-items-center rounded-md border border-border bg-surface text-foreground transition-colors hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-border disabled:hover:text-foreground"
-              aria-label={language === "ko" ? "다음 기간" : "Next period"}
+              aria-label={language === 'ko' ? '다음 기간' : 'Next period'}
             >
               <ChevronRight size={18} />
             </button>
@@ -485,10 +503,15 @@ function UsEarningsSection({
         </div>
       </div>
 
-      {(
+      {
         <div className="mt-4 flex flex-col gap-2 sm:max-w-md">
-          <label className="text-xs font-semibold text-muted" htmlFor="earnings-search">
-            {language === "ko" ? "티커 또는 회사명 검색" : "Search ticker or company"}
+          <label
+            className="text-xs font-semibold text-muted"
+            htmlFor="earnings-search"
+          >
+            {language === 'ko'
+              ? '티커 또는 회사명 검색'
+              : 'Search ticker or company'}
           </label>
           <div className="flex h-11 items-center gap-2 rounded-md border border-border bg-surface px-3 focus-within:border-primary">
             <Search size={17} className="text-muted" />
@@ -497,9 +520,11 @@ function UsEarningsSection({
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value);
-                setSelectedEarningsSymbol("");
+                setSelectedEarningsSymbol('');
               }}
-              placeholder={language === "ko" ? "예: TSLA, Tesla" : "e.g. TSLA, Tesla"}
+              placeholder={
+                language === 'ko' ? '예: TSLA, Tesla' : 'e.g. TSLA, Tesla'
+              }
               className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted"
             />
           </div>
@@ -524,25 +549,25 @@ function UsEarningsSection({
           ) : null}
           {effectiveQuery ? (
             <p className="text-xs font-semibold text-muted">
-              {language === "ko"
+              {language === 'ko'
                 ? `검색 결과 ${items.length}건`
-                : `${items.length} result${items.length === 1 ? "" : "s"}`}
+                : `${items.length} result${items.length === 1 ? '' : 's'}`}
             </p>
           ) : null}
         </div>
-      )}
+      }
 
       {searchLimited ? (
         <p className="mt-4 rounded-md border border-border bg-surface-muted px-4 py-3 text-sm font-semibold text-muted">
-          {language === "ko"
-            ? "검색 결과가 너무 많습니다. 티커나 회사명을 더 입력해 주세요."
-            : "Too many results. Type more of the ticker or company name."}
+          {language === 'ko'
+            ? '검색 결과가 너무 많습니다. 티커나 회사명을 더 입력해 주세요.'
+            : 'Too many results. Type more of the ticker or company name.'}
         </p>
       ) : null}
 
       {loading ? (
         <IpoCalendarSkeleton />
-      ) : view === "monthly" ? (
+      ) : view === 'monthly' ? (
         <MonthlyEarningsCalendar
           anchorDate={anchorDate}
           groupedItems={groupedItems}
@@ -570,7 +595,7 @@ function EarningsList({
 }: {
   dates: string[];
   groupedItems: Map<string, UsEarningsCalendarItem[]>;
-  language: "en" | "ko";
+  language: 'en' | 'ko';
   highlightedSymbol: string;
 }) {
   return (
@@ -596,12 +621,14 @@ function EarningsList({
                   <EarningsCard
                     key={item.id}
                     item={item}
-                    highlighted={item.symbol.toUpperCase() === highlightedSymbol}
+                    highlighted={
+                      item.symbol.toUpperCase() === highlightedSymbol
+                    }
                   />
                 ))
               ) : (
                 <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted">
-                  {language === "ko" ? "실적 발표 일정 없음" : "No earnings"}
+                  {language === 'ko' ? '실적 발표 일정 없음' : 'No earnings'}
                 </p>
               )}
             </div>
@@ -621,7 +648,7 @@ function MonthlyEarningsCalendar({
 }: {
   anchorDate: Date;
   groupedItems: Map<string, UsEarningsCalendarItem[]>;
-  language: "en" | "ko";
+  language: 'en' | 'ko';
   searching: boolean;
   highlightedSymbol: string;
 }) {
@@ -635,14 +662,16 @@ function MonthlyEarningsCalendar({
             key={day.date}
             className={`min-h-32 rounded-md border p-3 ${
               day.inMonth
-                ? "border-border bg-surface-muted"
-                : "border-border/60 bg-surface text-muted"
-            } ${hidden ? "opacity-35" : ""}`}
+                ? 'border-border bg-surface-muted'
+                : 'border-border/60 bg-surface text-muted'
+            } ${hidden ? 'opacity-35' : ''}`}
           >
             <div className="flex items-center justify-between gap-2">
               <div>
                 <p className="text-sm font-bold text-foreground">{day.day}</p>
-                <p className="text-xs font-semibold text-muted">{day.weekday}</p>
+                <p className="text-xs font-semibold text-muted">
+                  {day.weekday}
+                </p>
               </div>
               {day.events.length ? (
                 <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
@@ -667,7 +696,7 @@ function MonthlyEarningsCalendar({
               ) : null}
               {searching && day.inMonth && !day.events.length ? (
                 <p className="rounded-md border border-dashed border-border px-2 py-4 text-center text-xs text-muted">
-                  {language === "ko" ? "검색 결과 없음" : "No result"}
+                  {language === 'ko' ? '검색 결과 없음' : 'No result'}
                 </p>
               ) : null}
             </div>
@@ -689,11 +718,13 @@ function EarningsCard({
   return (
     <button
       type="button"
-      onClick={() => router.push(`/?symbol=${encodeURIComponent(item.symbol)}&market=US`)}
+      onClick={() =>
+        router.push(`/?symbol=${encodeURIComponent(item.symbol)}&market=US`)
+      }
       className={`min-w-0 cursor-pointer rounded-md border p-3 text-left transition-colors hover:border-primary hover:text-primary ${
         highlighted
-          ? "border-primary bg-primary/10"
-          : "border-border bg-surface"
+          ? 'border-primary bg-primary/10'
+          : 'border-border bg-surface'
       }`}
     >
       <p className="text-base font-bold text-foreground">{item.symbol}</p>
@@ -718,14 +749,18 @@ function EarningsCompactCard({
   return (
     <button
       type="button"
-      onClick={() => router.push(`/?symbol=${encodeURIComponent(item.symbol)}&market=US`)}
+      onClick={() =>
+        router.push(`/?symbol=${encodeURIComponent(item.symbol)}&market=US`)
+      }
       className={`min-w-0 cursor-pointer rounded-md border px-2 py-2 text-left transition-colors hover:border-primary hover:text-primary ${
         highlighted
-          ? "border-primary bg-primary/10"
-          : "border-border bg-surface"
+          ? 'border-primary bg-primary/10'
+          : 'border-border bg-surface'
       }`}
     >
-      <p className="truncate text-sm font-bold text-foreground">{item.symbol}</p>
+      <p className="truncate text-sm font-bold text-foreground">
+        {item.symbol}
+      </p>
       <p className="truncate text-[11px] font-semibold text-muted">
         {item.companyName}
       </p>
@@ -741,35 +776,36 @@ function IpoCompactCard({
   language,
 }: {
   event: IpoCalendarEvent;
-  language: "en" | "ko";
+  language: 'en' | 'ko';
 }) {
   const item = event.item;
   const eventLabel =
-    event.type === "listing"
-      ? language === "ko"
-        ? "상장"
-        : "Listing"
-      : language === "ko"
-        ? "공모"
-        : "Subscription";
+    event.type === 'listing'
+      ? language === 'ko'
+        ? '상장'
+        : 'Listing'
+      : language === 'ko'
+        ? '공모'
+        : 'Subscription';
   const eventLabelClass =
-    event.type === "listing"
-      ? "text-primary"
-      : "text-pink-400 dark:text-pink-300";
+    event.type === 'listing'
+      ? 'text-primary'
+      : 'text-pink-400 dark:text-pink-300';
   return (
     <div className="min-w-0 rounded-md border border-border bg-surface px-2 py-2">
       <p className="break-all text-sm font-semibold leading-5 text-foreground [overflow-wrap:anywhere]">
-        {item.corpName}{" "}
+        {item.corpName}{' '}
         <span className={`text-xs font-semibold ${eventLabelClass}`}>
           ({eventLabel})
         </span>
       </p>
       <p className="mt-1 break-words text-[11px] font-medium leading-4 text-muted">
-        {item.underwriter ?? (language === "ko" ? "주관사 미확정" : "Underwriter TBD")}
+        {item.underwriter ??
+          (language === 'ko' ? '주관사 미확정' : 'Underwriter TBD')}
       </p>
       <p className="mt-1 break-words text-[11px] font-semibold leading-4 text-primary">
         {getOfferPriceValue(item) ??
-          (language === "ko" ? "공모가 미확정" : "Price TBD")}
+          (language === 'ko' ? '공모가 미확정' : 'Price TBD')}
       </p>
     </div>
   );
@@ -780,15 +816,17 @@ function IpoListCard({
   language,
 }: {
   item: IpoCalendarItem;
-  language: "en" | "ko";
+  language: 'en' | 'ko';
 }) {
   return (
     <article className="rounded-md border border-border bg-surface-muted p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-lg font-semibold text-foreground">{item.corpName}</p>
+          <p className="text-lg font-semibold text-foreground">
+            {item.corpName}
+          </p>
           <p className="mt-1 text-xs font-semibold text-muted">
-            {item.stockCode ? `${item.stockCode} · ` : ""}
+            {item.stockCode ? `${item.stockCode} · ` : ''}
             {item.reportName}
           </p>
         </div>
@@ -805,23 +843,23 @@ function IpoListCard({
 
       <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <InfoCell
-          label={language === "ko" ? "청약일" : "Subscription"}
+          label={language === 'ko' ? '청약일' : 'Subscription'}
           value={formatSubscription(item, language)}
         />
         <InfoCell
-          label={language === "ko" ? "상장일" : "Listing date"}
+          label={language === 'ko' ? '상장일' : 'Listing date'}
           value={formatListingDate(item, language)}
         />
         <InfoCell
           label={getOfferPriceLabel(item, language)}
-          value={getOfferPriceValue(item) ?? "-"}
+          value={getOfferPriceValue(item) ?? '-'}
         />
         <InfoCell
-          label={language === "ko" ? "주관사" : "Underwriter"}
-          value={item.underwriter ?? "-"}
+          label={language === 'ko' ? '주관사' : 'Underwriter'}
+          value={item.underwriter ?? '-'}
         />
         <InfoCell
-          label={language === "ko" ? "공시 접수일" : "Filed"}
+          label={language === 'ko' ? '공시 접수일' : 'Filed'}
           value={item.receiptDate}
         />
       </dl>
@@ -852,16 +890,19 @@ function IpoCalendarSkeleton() {
 
 function buildRollingCalendar(
   items: IpoCalendarItem[],
-  language: "en" | "ko",
+  language: 'en' | 'ko',
 ): CalendarDay[] {
   const now = new Date();
-  const formatter = new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
-    month: "short",
-    day: "numeric",
-  });
+  const formatter = new Intl.DateTimeFormat(
+    language === 'ko' ? 'ko-KR' : 'en-US',
+    {
+      month: 'short',
+      day: 'numeric',
+    },
+  );
   const weekdayFormatter = new Intl.DateTimeFormat(
-    language === "ko" ? "ko-KR" : "en-US",
-    { weekday: "short" },
+    language === 'ko' ? 'ko-KR' : 'en-US',
+    { weekday: 'short' },
   );
 
   return Array.from({ length: 32 }).reduce<CalendarDay[]>((days, _, index) => {
@@ -884,14 +925,14 @@ function buildRollingCalendar(
 function buildMonthDays(
   anchorDate: Date,
   groupedItems: Map<string, UsEarningsCalendarItem[]>,
-  language: "en" | "ko",
+  language: 'en' | 'ko',
 ): EarningsCalendarDay[] {
   const first = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
   const start = new Date(first);
   start.setDate(first.getDate() - first.getDay());
   const weekdayFormatter = new Intl.DateTimeFormat(
-    language === "ko" ? "ko-KR" : "en-US",
-    { weekday: "short" },
+    language === 'ko' ? 'ko-KR' : 'en-US',
+    { weekday: 'short' },
   );
 
   return Array.from({ length: 42 }, (_, index) => {
@@ -909,10 +950,10 @@ function buildMonthDays(
 }
 
 function getEarningsRange(view: EarningsView, anchorDate: Date) {
-  if (view === "daily") {
+  if (view === 'daily') {
     return { from: anchorDate, to: anchorDate };
   }
-  if (view === "weekly") {
+  if (view === 'weekly') {
     const from = new Date(anchorDate);
     from.setDate(anchorDate.getDate() - anchorDate.getDay());
     const to = new Date(from);
@@ -924,11 +965,15 @@ function getEarningsRange(view: EarningsView, anchorDate: Date) {
   return { from, to };
 }
 
-function shiftEarningsAnchor(view: EarningsView, current: Date, direction: -1 | 1): Date {
+function shiftEarningsAnchor(
+  view: EarningsView,
+  current: Date,
+  direction: -1 | 1,
+): Date {
   const next = new Date(current);
-  if (view === "daily") {
+  if (view === 'daily') {
     next.setDate(current.getDate() + direction);
-  } else if (view === "weekly") {
+  } else if (view === 'weekly') {
     next.setDate(current.getDate() + direction * 7);
   } else {
     next.setMonth(current.getMonth() + direction);
@@ -945,7 +990,10 @@ function canMoveEarningsRange(
 ): boolean {
   const nextAnchor = shiftEarningsAnchor(view, anchorDate, direction);
   const nextRange = getEarningsRange(view, nextAnchor);
-  return startOfDay(nextRange.to) >= startOfDay(minDate) && startOfDay(nextRange.from) <= startOfDay(maxDate);
+  return (
+    startOfDay(nextRange.to) >= startOfDay(minDate) &&
+    startOfDay(nextRange.from) <= startOfDay(maxDate)
+  );
 }
 
 function groupEarningsByDate(items: UsEarningsCalendarItem[]) {
@@ -974,10 +1022,6 @@ function parseDateKey(dateKey: string): Date {
   return new Date(`${dateKey.slice(0, 10)}T00:00:00`);
 }
 
-function startOfMonth(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
 function getPreviousMonthStart(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth() - 1, 1);
 }
@@ -991,7 +1035,10 @@ function isWeekend(date: Date): boolean {
   return day === 0 || day === 6;
 }
 
-function isDateInSubscriptionRange(item: IpoCalendarItem, date: string): boolean {
+function isDateInSubscriptionRange(
+  item: IpoCalendarItem,
+  date: string,
+): boolean {
   if (!item.subscriptionStartDate) {
     return false;
   }
@@ -1006,35 +1053,38 @@ function buildCalendarEvents(
   return items.flatMap((item) => {
     const events: IpoCalendarEvent[] = [];
     if (isDateInSubscriptionRange(item, date)) {
-      events.push({ item, type: "subscription" });
+      events.push({ item, type: 'subscription' });
     }
     if (item.listingDate === date) {
-      events.push({ item, type: "listing" });
+      events.push({ item, type: 'listing' });
     }
     return events;
   });
 }
 
 function toDateKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
     date.getDate(),
-  ).padStart(2, "0")}`;
+  ).padStart(2, '0')}`;
 }
 
-function formatDate(date: string, language: "en" | "ko"): string {
-  return new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
-    month: "short",
-    day: "numeric",
-    weekday: "short",
+function formatDate(date: string, language: 'en' | 'ko'): string {
+  return new Intl.DateTimeFormat(language === 'ko' ? 'ko-KR' : 'en-US', {
+    month: 'short',
+    day: 'numeric',
+    weekday: 'short',
   }).format(new Date(`${date}T00:00:00`));
 }
 
-function formatRangeLabel(from: Date, to: Date, language: "en" | "ko"): string {
-  const formatter = new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+function formatRangeLabel(from: Date, to: Date, language: 'en' | 'ko'): string {
+  const formatter = new Intl.DateTimeFormat(
+    language === 'ko' ? 'ko-KR' : 'en-US',
+    {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    },
+  );
   if (toDateKey(from) === toDateKey(to)) {
     return formatter.format(from);
   }
@@ -1045,29 +1095,35 @@ function formatEarningsMeta(item: UsEarningsCalendarItem): string {
   const estimate =
     item.estimate !== null && item.currency
       ? `EPS ${item.estimate.toFixed(2)} ${item.currency}`
-      : "EPS -";
-  const time = item.timeOfTheDay || "Time TBD";
+      : 'EPS -';
+  const time = item.timeOfTheDay || 'Time TBD';
   return `${estimate} · ${time}`;
 }
 
-function formatSubscription(item: IpoCalendarItem, language: "en" | "ko"): string {
+function formatSubscription(
+  item: IpoCalendarItem,
+  language: 'en' | 'ko',
+): string {
   if (item.subscriptionDateText) {
     return item.subscriptionDateText;
   }
   if (item.subscriptionStartDate) {
     return item.subscriptionStartDate;
   }
-  return language === "ko" ? "문서 확인 필요" : "Check DART filing";
+  return language === 'ko' ? '문서 확인 필요' : 'Check DART filing';
 }
 
-function formatListingDate(item: IpoCalendarItem, language: "en" | "ko"): string {
+function formatListingDate(
+  item: IpoCalendarItem,
+  language: 'en' | 'ko',
+): string {
   if (item.listingDateText) {
     return item.listingDateText;
   }
   if (item.listingDate) {
     return item.listingDate;
   }
-  return language === "ko" ? "상장일 미정" : "Listing date TBD";
+  return language === 'ko' ? '상장일 미정' : 'Listing date TBD';
 }
 
 function getOfferPriceValue(item: IpoCalendarItem): string | null {
@@ -1076,10 +1132,10 @@ function getOfferPriceValue(item: IpoCalendarItem): string | null {
 
 function getOfferPriceLabel(
   item: IpoCalendarItem,
-  language: "en" | "ko",
+  language: 'en' | 'ko',
 ): string {
   if (item.confirmedOfferPrice) {
-    return language === "ko" ? "확정공모가" : "Confirmed price";
+    return language === 'ko' ? '확정공모가' : 'Confirmed price';
   }
-  return language === "ko" ? "희망공모가" : "Expected price";
+  return language === 'ko' ? '희망공모가' : 'Expected price';
 }
