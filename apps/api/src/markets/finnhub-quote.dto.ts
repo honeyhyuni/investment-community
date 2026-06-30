@@ -209,7 +209,15 @@ export type UsEarningsCalendarItem = {
   updatedAt: Date;
 };
 
-export type ChartPeriod = '1D' | '1M' | '1Y' | '3Y' | '5Y' | 'ALL';
+export type ChartPeriod =
+  | '1D'
+  | '1M'
+  | '3M'
+  | '6M'
+  | '1Y'
+  | '3Y'
+  | '5Y'
+  | 'ALL';
 
 export type CandlePoint = {
   time: number;

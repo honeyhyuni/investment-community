@@ -61,7 +61,16 @@ import {
   StockTab,
 } from "@/domain/markets/types";
 
-const chartPeriods: ChartPeriod[] = ["1D", "1M", "1Y", "3Y", "5Y", "ALL"];
+const chartPeriods: ChartPeriod[] = [
+  "1D",
+  "1M",
+  "3M",
+  "6M",
+  "1Y",
+  "3Y",
+  "5Y",
+  "ALL",
+];
 
 const copy = {
   en: {
@@ -150,6 +159,7 @@ export function StocksPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [error, setError] = useState("");
   const detailRequestIdRef = useRef(0);
+  const candleRequestIdRef = useRef(0);
   const debouncedSearch = useDebouncedValue(search, 180);
   const selectedFavorite = useMemo(
     () =>
@@ -368,6 +378,8 @@ export function StocksPage() {
       return;
     }
 
+    const requestId = ++candleRequestIdRef.current;
+    setCandles([]);
     setChartLoading(true);
     try {
       const nextCandles = await apiRequest<CandlePoint[]>(
@@ -375,15 +387,21 @@ export function StocksPage() {
         "GET",
         { accessToken: token },
       );
-      setCandles(nextCandles);
+      if (requestId === candleRequestIdRef.current) {
+        setCandles(nextCandles);
+      }
     } catch (candleError) {
-      setError(
-        candleError instanceof Error
-          ? candleError.message
-          : "Could not load chart candles.",
-      );
+      if (requestId === candleRequestIdRef.current) {
+        setError(
+          candleError instanceof Error
+            ? candleError.message
+            : "Could not load chart candles.",
+        );
+      }
     } finally {
-      setChartLoading(false);
+      if (requestId === candleRequestIdRef.current) {
+        setChartLoading(false);
+      }
     }
   }
 
@@ -750,6 +768,12 @@ function StockDetailPanel({
   }
 
   const quote = applyLiveTrade(detail.quote, live);
+  const chartReturn = calculateChartPeriodReturn(
+    chartPeriod,
+    candles,
+    quote,
+    chartLoading,
+  );
   const detailSourceCurrency =
     detail.profile.currency === "KRW"
       ? "KRW"
@@ -881,11 +905,30 @@ function StockDetailPanel({
       </div>
       <div className="mt-5 rounded-md border border-border bg-surface-muted p-3 sm:p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm font-semibold text-foreground">
-            {translateDetailLabel(language, "realtimeChart")}
-          </p>
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              {translateDetailLabel(language, "realtimeChart")}
+            </p>
+            <p
+              className={`mt-1 text-sm font-semibold ${
+                chartReturn === null || chartReturn === 0
+                  ? "text-muted"
+                  : chartReturn > 0
+                    ? "text-positive"
+                    : "text-negative"
+              }`}
+            >
+              {language === "ko"
+                ? `${chartPeriod} 수익률`
+                : `${chartPeriod} return`}{" "}
+              {chartReturn === null
+                ? "-"
+                : `${chartReturn > 0 ? "+" : ""}${formatNumber(chartReturn)}%`}
+            </p>
+          </div>
           <SegmentedControl
-            className="w-full sm:w-auto"
+            className="grid w-full grid-cols-4 sm:inline-flex sm:w-auto"
+            buttonClassName="min-w-0 px-2 text-xs sm:px-4 sm:text-sm"
             aria-label={translateDetailLabel(language, "realtimeChart")}
             options={chartPeriods.map((period) => ({
               value: period,
@@ -1281,6 +1324,28 @@ function FavoriteStockList({
       </div>
     </div>
   );
+}
+
+function calculateChartPeriodReturn(
+  period: ChartPeriod,
+  candles: CandlePoint[],
+  quote: MarketQuote,
+  loading: boolean,
+): number | null {
+  if (loading) {
+    return null;
+  }
+  if (period === "1D") {
+    return Number.isFinite(quote.percentChange) ? quote.percentChange : null;
+  }
+  const firstClose = candles[0]?.close;
+  const latestPrice =
+    quote.current > 0 ? quote.current : candles[candles.length - 1]?.close;
+  if (!firstClose || !latestPrice) {
+    return null;
+  }
+  const result = ((latestPrice - firstClose) / firstClose) * 100;
+  return Number.isFinite(result) ? result : null;
 }
 
 function RealtimeChart({

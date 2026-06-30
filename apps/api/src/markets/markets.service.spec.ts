@@ -12,6 +12,10 @@ type TestMarketsService = {
     symbol: string,
     period: ChartPeriod,
   ) => Promise<Array<{ time: number }>>;
+  toYahooRange: (period: ChartPeriod) => {
+    range: string;
+    interval: string;
+  };
   kisGet: jest.MockedFunction<KisGet>;
 };
 
@@ -81,6 +85,8 @@ describe('MarketsService Korean candles', () => {
   });
 
   it.each([
+    ['3M', 'D'],
+    ['6M', 'D'],
     ['3Y', 'W'],
     ['5Y', 'W'],
     ['ALL', 'M'],
@@ -105,4 +111,35 @@ describe('MarketsService Korean candles', () => {
       }
     },
   );
+
+  it('paginates six months of KIS daily candles', async () => {
+    const service = makeService();
+    const latest = new Date('2026-06-30T00:00:00Z');
+    const firstPage = Array.from({ length: 100 }, (_, index) =>
+      candleRow(toKisDate(addDays(latest, -index))),
+    );
+    service.kisGet
+      .mockResolvedValueOnce({ rt_cd: '0', output2: firstPage })
+      .mockResolvedValueOnce({
+        rt_cd: '0',
+        output2: [candleRow(toKisDate(addDays(latest, -100)))],
+      });
+
+    const result = await service.getKoreanCandles('005930', '6M');
+
+    expect(service.kisGet).toHaveBeenCalledTimes(2);
+    expect(result).toHaveLength(101);
+  });
+
+  it.each([
+    ['3M', '3mo'],
+    ['6M', '6mo'],
+  ] as const)('maps %s to Yahoo range %s', (period, range) => {
+    const service = makeService();
+
+    expect(service.toYahooRange(period)).toEqual({
+      range,
+      interval: '1d',
+    });
+  });
 });

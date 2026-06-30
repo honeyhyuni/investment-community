@@ -2311,6 +2311,13 @@ export class MarketsService {
       case '1M':
         start.setMonth(start.getMonth() - 2);
         break;
+      case '3M':
+        start.setMonth(start.getMonth() - 3);
+        break;
+      case '6M':
+        start.setMonth(start.getMonth() - 6);
+        maxPages = 3;
+        break;
       case '1Y':
         start.setFullYear(start.getFullYear() - 1);
         maxPages = 4;
@@ -4962,6 +4969,10 @@ export class MarketsService {
         return { range: '1d', interval: '5m' };
       case '1M':
         return { range: '1mo', interval: '1d' };
+      case '3M':
+        return { range: '3mo', interval: '1d' };
+      case '6M':
+        return { range: '6mo', interval: '1d' };
       case '1Y':
         return { range: '1y', interval: '1d' };
       case '3Y':
