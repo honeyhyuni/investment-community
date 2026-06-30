@@ -2209,7 +2209,7 @@ export class MarketsService {
     period: ChartPeriod,
   ): Promise<CandlePoint[]> {
     const normalizedSymbol = symbol.toUpperCase().trim();
-    const cacheKey = `market:candles:v1:${normalizedSymbol}:${period}`;
+    const cacheKey = `market:candles:v2:${normalizedSymbol}:${period}`;
     const cached = await this.redis
       .get(cacheKey)
       .then((value) => (value ? (JSON.parse(value) as CandlePoint[]) : null))
@@ -2301,6 +2301,8 @@ export class MarketsService {
     };
     const end = new Date();
     const start = new Date(end);
+    let periodDivCode: 'D' | 'W' | 'M' = 'D';
+    let maxPages = 1;
 
     switch (period) {
       case '1D':
@@ -2311,50 +2313,98 @@ export class MarketsService {
         break;
       case '1Y':
         start.setFullYear(start.getFullYear() - 1);
+        maxPages = 4;
         break;
       case '3Y':
         start.setFullYear(start.getFullYear() - 3);
+        periodDivCode = 'W';
+        maxPages = 3;
         break;
       case '5Y':
-      case 'ALL':
         start.setFullYear(start.getFullYear() - 5);
+        periodDivCode = 'W';
+        maxPages = 4;
+        break;
+      case 'ALL':
+        start.setFullYear(1970, 0, 1);
+        periodDivCode = 'M';
+        maxPages = 8;
         break;
       default:
         start.setMonth(start.getMonth() - 2);
         break;
     }
 
-    const response = await this.kisGet<KisDailyCandleResponse>(
-      '/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice',
-      {
-        FID_COND_MRKT_DIV_CODE: stock.marketDiv,
-        FID_INPUT_ISCD: stock.symbol,
-        FID_INPUT_DATE_1: this.formatKisDate(start),
-        FID_INPUT_DATE_2: this.formatKisDate(end),
-        FID_PERIOD_DIV_CODE: 'D',
-        FID_ORG_ADJ_PRC: '1',
-      },
-      'FHKST03010100',
-    );
+    const startDate = this.formatKisDate(start);
+    let cursorEnd = new Date(end);
+    const candlesByTime = new Map<number, CandlePoint>();
 
-    const rows = response.output2 ?? [];
-    return rows
-      .map((row) => ({
-        time: this.kisDateToUnix(row.stck_bsop_date),
-        open: this.toNumber(row.stck_oprc),
-        high: this.toNumber(row.stck_hgpr),
-        low: this.toNumber(row.stck_lwpr),
-        close: this.toNumber(row.stck_clpr),
-        volume: this.toNumber(row.acml_vol),
-      }))
-      .filter(
-        (point) =>
+    for (let page = 0; page < maxPages; page += 1) {
+      const response = await this.kisGet<KisDailyCandleResponse>(
+        '/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice',
+        {
+          FID_COND_MRKT_DIV_CODE: stock.marketDiv,
+          FID_INPUT_ISCD: stock.symbol,
+          FID_INPUT_DATE_1: startDate,
+          FID_INPUT_DATE_2: this.formatKisDate(cursorEnd),
+          FID_PERIOD_DIV_CODE: periodDivCode,
+          FID_ORG_ADJ_PRC: '1',
+        },
+        'FHKST03010100',
+      );
+
+      if (response.rt_cd && response.rt_cd !== '0') {
+        throw new ServiceUnavailableException(
+          `KIS chart request failed: ${response.msg1 ?? response.msg_cd ?? response.rt_cd}`,
+        );
+      }
+
+      const rows = response.output2 ?? [];
+      let oldestDate = '';
+      rows.forEach((row) => {
+        const rowDate = row.stck_bsop_date ?? '';
+        if (/^\d{8}$/.test(rowDate) && (!oldestDate || rowDate < oldestDate)) {
+          oldestDate = rowDate;
+        }
+        const point = {
+          time: this.kisDateToUnix(rowDate),
+          open: this.toNumber(row.stck_oprc),
+          high: this.toNumber(row.stck_hgpr),
+          low: this.toNumber(row.stck_lwpr),
+          close: this.toNumber(row.stck_clpr),
+          volume: this.toNumber(row.acml_vol),
+        };
+        if (
           point.time > 0 &&
           point.open > 0 &&
           point.high > 0 &&
           point.low > 0 &&
-          point.close > 0,
-      )
+          point.close > 0
+        ) {
+          candlesByTime.set(point.time, point);
+        }
+      });
+
+      if (!oldestDate || oldestDate <= startDate || rows.length < 100) {
+        break;
+      }
+
+      const nextEnd = new Date(
+        Date.UTC(
+          Number(oldestDate.slice(0, 4)),
+          Number(oldestDate.slice(4, 6)) - 1,
+          Number(oldestDate.slice(6, 8)) - 1,
+        ),
+      );
+      if (nextEnd >= cursorEnd) {
+        break;
+      }
+      cursorEnd = nextEnd;
+    }
+
+    const startTime = this.kisDateToUnix(startDate);
+    return [...candlesByTime.values()]
+      .filter((point) => point.time >= startTime)
       .sort((a, b) => a.time - b.time);
   }
 
