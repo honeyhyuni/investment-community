@@ -1,8 +1,8 @@
 "use client";
 
 import { Dispatch, SetStateAction, useEffect, useMemo, useRef } from "react";
-import { Image as ImageIcon, X } from "lucide-react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { Image as ImageIcon, Save, X } from "lucide-react";
+import { useEditor, EditorContent, useEditorState } from "@tiptap/react";
 import { Mark, mergeAttributes } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
@@ -61,6 +61,10 @@ export function PostEditor({
   exchangeRate,
   editingPostId,
   loading,
+  draftSavedAt,
+  draftRestored,
+  draftError,
+  onSaveDraft,
   onSubmit,
   onCancel,
 }: {
@@ -80,6 +84,10 @@ export function PostEditor({
   exchangeRate: number | null;
   editingPostId: string | null;
   loading: boolean;
+  draftSavedAt: string | null;
+  draftRestored: boolean;
+  draftError: string;
+  onSaveDraft: () => void;
   onSubmit: () => Promise<void>;
   onCancel: () => void;
 }) {
@@ -108,6 +116,11 @@ export function PostEditor({
       const html = editor.isEmpty ? "" : editor.getHTML();
       setBlocks([{ id: blockIdRef.current, type: "text", text: html }]);
     },
+  });
+  const currentFontSize = useEditorState({
+    editor,
+    selector: ({ editor: currentEditor }) =>
+      (currentEditor?.getAttributes("styledText").fontSize as string | undefined) ?? "",
   });
 
   useEffect(() => {
@@ -194,8 +207,8 @@ export function PostEditor({
           editingPostId ? "" : "mt-4",
         )}
       />
-      <div className="mt-4 overflow-hidden rounded-md border border-[#d9dee8] bg-white">
-        <div className="flex items-center gap-1 overflow-x-auto border-b border-[#d9dee8] bg-[#f9fafc] p-2">
+      <div className="mt-4 rounded-md border border-[#d9dee8] bg-white">
+        <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-30 flex items-center gap-1 overflow-x-auto rounded-t-md border-b border-[#d9dee8] bg-[#f9fafc]/95 p-2 shadow-sm backdrop-blur sm:top-[4.5rem]">
           {editor ? (
             <>
               <ToolbarButton
@@ -262,7 +275,7 @@ export function PostEditor({
               />
               <select
                 title={ko ? "글자 크기" : "Font size"}
-                defaultValue=""
+                value={currentFontSize ?? ""}
                 onChange={(event) => {
                   const fontSize = event.target.value;
                   if (fontSize) {
@@ -379,13 +392,33 @@ export function PostEditor({
           </div>
         ) : null}
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
-        <Button variant="secondary" onClick={onCancel}>
-          {ko ? "취소" : "Cancel"}
-        </Button>
-        <Button variant="primary" loading={loading} onClick={onSubmit}>
-          {editingPostId ? (ko ? "수정" : "Save") : (ko ? "게시" : "Post")}
-        </Button>
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-h-5 text-xs text-muted" aria-live="polite">
+          {draftError ? (
+            <span className="text-negative">{draftError}</span>
+          ) : draftSavedAt ? (
+            <span>
+              {draftRestored
+                ? ko
+                  ? "저장된 임시글을 복원했습니다."
+                  : "Saved draft restored."
+                : ko
+                  ? `임시저장 ${new Date(draftSavedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`
+                  : `Draft saved ${new Date(draftSavedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`}
+            </span>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:justify-end">
+          <Button variant="outline" size="sm" leftIcon={<Save />} onClick={onSaveDraft}>
+            {ko ? "임시저장" : "Save draft"}
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onCancel}>
+            {ko ? "취소" : "Cancel"}
+          </Button>
+          <Button variant="primary" size="sm" loading={loading} onClick={onSubmit}>
+            {editingPostId ? (ko ? "수정" : "Save") : (ko ? "게시" : "Post")}
+          </Button>
+        </div>
       </div>
     </div>
   );
