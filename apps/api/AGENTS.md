@@ -107,8 +107,8 @@ Scheduled market-briefing cron jobs must not run in local/dev containers. `ENABL
 
 - Daily `01:00`: refresh Korean/US stock master and DART profile mapping.
 - Daily `02:00`: refresh default stock profiles.
-- Tue-Sat `08:25`: previous US-session market briefing.
-- Mon-Fri `15:55`: current Korean-session market briefing.
+- Tue-Sat `08:25`: previous US-session market briefing; retry at `08:40`, `09:00`, and `09:30` only while no US briefing exists for the current KST date.
+- Mon-Fri `15:55`: current Korean-session market briefing; retry at `16:10`, `16:30`, and `17:00` only while no KR briefing exists for the current KST date.
 - KOSPI 200 five-year financial refresh is currently manual through the admin endpoint; `StockFinancialBatchService` has no cron decorator.
 - Daily `03:00`: IPO calendar refresh through DART/KIND, with a limited 38 Communications fallback.
 - Daily `03:20`: US earnings calendar refresh through Alpha Vantage.
@@ -123,6 +123,7 @@ Manual admin endpoints:
 - `POST /api/markets/calendar/earnings/us/batch`
 
 Market briefing OpenAI calls use `OPENAI_MODEL` and `service_tier: "flex"`. The text request retries once for timeout/429/resource-unavailable. A failed scheduled generation must skip publishing instead of creating partial data.
+Every scheduled attempt checks PostgreSQL before collecting news or calling OpenAI. Once that market has a briefing for the current KST date, later retry cron executions return immediately and must not incur another OpenAI call or send another notification.
 
 ## IPO Calendar Batch
 
@@ -170,11 +171,16 @@ The Guru/13F feature lives in `src/markets/guru-portfolios.service.ts` and expos
 - `GET /api/markets/gurus/:slug`
 - Admin manual batch: `POST /api/markets/gurus/batch`
 
+Guru summaries expose `lastCollectedAt`. Detail responses keep active positions in `holdings` for current-portfolio calculations and expose `activityHoldings` for the holdings table; `activityHoldings` includes prior positions whose current weight is zero so full exits remain searchable. The collection timestamp comes from the matching applied EDGAR filing, falling back to the manager update timestamp.
+
 Operational schedule uses `Asia/Seoul` and respects `ENABLE_SCHEDULED_JOBS` like other market jobs.
 
-- Quarterly 13F refresh: `06:10` every day only during February, May, August, and November. The current implementation syncs the checked-in SEC seed into PostgreSQL.
+- Fast EDGAR 13F refresh: February/May/August/November 10-25 at `07:00`, `13:00`, and `21:00`. It queries each tracked manager's latest filing and downloads/parses the filing information table directly; the slower SEC quarterly ZIP is not used by this cron.
+- Weekly fallback: Sunday `06:10` runs the fast EDGAR collector first and uses the SEC quarterly dataset only when EDGAR produced no holdings. An already-applied SEC dataset file is reused unless a force run is requested.
 - Nasdaq price/industry refresh: weekly Sunday `04:30`. It updates `guru_security_master.current_price`, `price_updated_at`, sector, industry, and name from the Nasdaq screener payload.
-- The manual admin endpoint runs both steps once: seed sync plus Nasdaq classification/price refresh.
+- The manual admin endpoint runs the EDGAR collector, conditional SEC-dataset fallback, and Nasdaq classification/price refresh. `force=true` bypasses accession/applied-file skips for an intentional full reload.
+
+For normal EDGAR and seed application, an unchanged manager accession skips manager holding deletion/insertion. A changed accession replaces only that manager's holdings. Nasdaq enrichment remains independent and continues on scheduled/manual batches.
 
 Production has `synchronize: false`. Before deploying the price-aware guru batch, apply `sql/20260625_guru_security_master_prices.sql`.
 
@@ -226,7 +232,7 @@ Local dev uses `docker-compose.yml`. The current operating VM deploy directory a
 
 ## Deployment
 
-- Working branch for requested changes: `LSH6` unless the user explicitly creates a newer branch.
+- Working branch for requested changes: `LSH7` unless the user explicitly creates a newer branch.
 - Docker Hub images:
   - `honeyhyuni12/investment-community-api:latest`
   - `honeyhyuni12/investment-community-web:latest`

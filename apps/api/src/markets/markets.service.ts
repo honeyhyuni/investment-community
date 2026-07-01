@@ -1707,11 +1707,43 @@ export class MarketsService {
     await this.runScheduledMarketBriefing('US');
   }
 
+  @Cron('0 40 8 * * 2-6', { timeZone: 'Asia/Seoul' })
+  async retryScheduledUsMarketBriefingEarly(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) {
+      return;
+    }
+    await this.runScheduledMarketBriefing('US');
+  }
+
+  @Cron('0 0,30 9 * * 2-6', { timeZone: 'Asia/Seoul' })
+  async retryScheduledUsMarketBriefingLate(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) {
+      return;
+    }
+    await this.runScheduledMarketBriefing('US');
+  }
+
   // 한국장 마켓브리핑 cron. 운영환경에서 장 마감 후 오늘장 요약을 생성한다.
   @Cron('0 55 15 * * 1-5', { timeZone: 'Asia/Seoul' })
   async runScheduledKrMarketBriefing(): Promise<void> {
     if (!this.isScheduledJobsEnabled()) {
       this.logger.log('Scheduled KR market briefing disabled.');
+      return;
+    }
+    await this.runScheduledMarketBriefing('KR');
+  }
+
+  @Cron('0 10,30 16 * * 1-5', { timeZone: 'Asia/Seoul' })
+  async retryScheduledKrMarketBriefingEarly(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) {
+      return;
+    }
+    await this.runScheduledMarketBriefing('KR');
+  }
+
+  @Cron('0 0 17 * * 1-5', { timeZone: 'Asia/Seoul' })
+  async retryScheduledKrMarketBriefingLate(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) {
       return;
     }
     await this.runScheduledMarketBriefing('KR');
