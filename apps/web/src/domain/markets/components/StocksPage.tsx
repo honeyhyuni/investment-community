@@ -17,6 +17,8 @@ import {
   createChart,
   IChartApi,
   ISeriesApi,
+  LineData,
+  LineSeries,
   Time,
 } from "lightweight-charts";
 import Link from "next/link";
@@ -71,6 +73,17 @@ const chartPeriods: ChartPeriod[] = [
   "5Y",
   "ALL",
 ];
+
+type RecentStock = {
+  symbol: string;
+  description: string;
+};
+
+const movingAverages = [
+  { period: 20, color: "#2563eb" },
+  { period: 60, color: "#d97706" },
+  { period: 120, color: "#7c3aed" },
+] as const;
 
 const copy = {
   en: {
@@ -903,6 +916,15 @@ function StockDetailPanel({
           language={language}
         />
       </div>
+      <PriceRange52Week
+        current={quote.current}
+        low={numericMetric(detail.metrics, "52WeekLow")}
+        high={numericMetric(detail.metrics, "52WeekHigh")}
+        displayCurrency={priceCurrency}
+        sourceCurrency={detailSourceCurrency}
+        exchangeRate={exchangeRate}
+        language={language}
+      />
       <div className="mt-5 rounded-md border border-border bg-surface-muted p-3 sm:p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -1041,6 +1063,87 @@ function StockDetailPanel({
   );
 }
 
+function numericMetric(
+  metrics: StockDetail["metrics"],
+  key: string,
+): number | null {
+  const value = Number(metrics?.[key]);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function PriceRange52Week({
+  current,
+  low,
+  high,
+  displayCurrency,
+  sourceCurrency,
+  exchangeRate,
+  language,
+}: {
+  current: number;
+  low: number | null;
+  high: number | null;
+  displayCurrency: DisplayCurrency;
+  sourceCurrency: string;
+  exchangeRate: number | null;
+  language: Language;
+}) {
+  if (low === null || high === null || high <= low) return null;
+  const position = Math.min(
+    100,
+    Math.max(0, ((current - low) / (high - low)) * 100),
+  );
+
+  return (
+    <div className="mt-5 rounded-md border border-border p-3 sm:p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-foreground">
+          {language === "ko" ? "52주 가격 범위" : "52-week price range"}
+        </p>
+        <p className="text-xs font-semibold text-muted">
+          {language === "ko" ? "현재 위치" : "Current position"}{" "}
+          {formatNumber(position)}%
+        </p>
+      </div>
+      <div className="relative mt-5 h-2 rounded-full bg-surface-muted">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-primary"
+          style={{ width: `${position}%` }}
+        />
+        <span
+          className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-primary shadow"
+          style={{ left: `${position}%` }}
+        />
+      </div>
+      <div className="mt-3 flex items-start justify-between gap-3 text-xs">
+        <div>
+          <p className="text-muted">{language === "ko" ? "최저" : "Low"}</p>
+          <p className="mt-0.5 font-semibold text-foreground">
+            {formatMoney(low, displayCurrency, sourceCurrency, exchangeRate)}
+          </p>
+        </div>
+        <div className="text-center">
+          <p className="text-muted">{language === "ko" ? "현재" : "Current"}</p>
+          <p className="mt-0.5 font-semibold text-primary">
+            {formatMoney(
+              current,
+              displayCurrency,
+              sourceCurrency,
+              exchangeRate,
+            )}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-muted">{language === "ko" ? "최고" : "High"}</p>
+          <p className="mt-0.5 font-semibold text-foreground">
+            {formatMoney(high, displayCurrency, sourceCurrency, exchangeRate)}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function earningsPeriodLabel(item: NonNullable<StockDetail["nextEarnings"]>) {
   const baseDate = item.fiscalDateEnding || item.reportDate;
   const date = new Date(baseDate.slice(0, 10) + "T00:00:00Z");
@@ -1084,13 +1187,21 @@ function StockSearchPopover({
   exchangeRate: number | null;
   onSelect: (symbol: string) => void;
 }) {
+  const [recentStocks, setRecentStocks] = useState<RecentStock[]>([]);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const storagePrefix = `15f:stocks:${market.toLowerCase()}`;
   const quoteBySymbol = useMemo(
     () => new Map(quotes.map((quote) => [quote.symbol, quote])),
     [quotes],
   );
   const query = debouncedSearch.trim();
   const isDebouncing = search.trim() !== query;
-  const showPopover = open && (search.trim().length > 0 || symbols.length > 0);
+  const showPopover =
+    open &&
+    (search.trim().length > 0 ||
+      symbols.length > 0 ||
+      recentStocks.length > 0 ||
+      recentSearches.length > 0);
   const resultLabel =
     language === "ko"
       ? query
@@ -1100,7 +1211,74 @@ function StockSearchPopover({
         ? "Search results"
         : "Suggested";
 
+  useEffect(() => {
+    try {
+      setRecentStocks(
+        JSON.parse(
+          window.localStorage.getItem(`${storagePrefix}:viewed`) ?? "[]",
+        ) as RecentStock[],
+      );
+      setRecentSearches(
+        JSON.parse(
+          window.localStorage.getItem(`${storagePrefix}:searches`) ?? "[]",
+        ) as string[],
+      );
+    } catch {
+      setRecentStocks([]);
+      setRecentSearches([]);
+    }
+  }, [storagePrefix]);
+
+  useEffect(() => {
+    if (!selectedSymbol) return;
+    const item = symbols.find(
+      (candidate) => candidate.symbol === selectedSymbol,
+    );
+    const previous = recentStocks.find(
+      (candidate) => candidate.symbol === selectedSymbol,
+    );
+    const next = [
+      {
+        symbol: selectedSymbol,
+        description:
+          item?.description ?? previous?.description ?? selectedSymbol,
+      },
+      ...recentStocks.filter(
+        (candidate) => candidate.symbol !== selectedSymbol,
+      ),
+    ].slice(0, 8);
+    if (
+      next.length === recentStocks.length &&
+      next.every(
+        (candidate, index) =>
+          candidate.symbol === recentStocks[index]?.symbol &&
+          candidate.description === recentStocks[index]?.description,
+      )
+    ) {
+      return;
+    }
+    setRecentStocks(next);
+    window.localStorage.setItem(
+      `${storagePrefix}:viewed`,
+      JSON.stringify(next),
+    );
+  }, [recentStocks, selectedSymbol, storagePrefix, symbols]);
+
   function selectSymbol(symbol: string) {
+    const term = search.trim();
+    if (term) {
+      const nextSearches = [
+        term,
+        ...recentSearches.filter(
+          (candidate) => candidate.toLowerCase() !== term.toLowerCase(),
+        ),
+      ].slice(0, 8);
+      setRecentSearches(nextSearches);
+      window.localStorage.setItem(
+        `${storagePrefix}:searches`,
+        JSON.stringify(nextSearches),
+      );
+    }
     onSelect(symbol);
     setSearch("");
     setOpen(false);
@@ -1158,6 +1336,54 @@ function StockSearchPopover({
 
       {showPopover ? (
         <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-30 overflow-hidden rounded-md border border-border bg-surface shadow-xl shadow-[#152033]/10">
+          {!query && (recentStocks.length || recentSearches.length) ? (
+            <div className="border-b border-border p-3">
+              {recentStocks.length ? (
+                <>
+                  <p className="text-xs font-semibold text-muted">
+                    {language === "ko" ? "최근 본 종목" : "Recently viewed"}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {recentStocks.map((item) => (
+                      <button
+                        key={item.symbol}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => selectSymbol(item.symbol)}
+                        title={item.description}
+                        className="cursor-pointer rounded-md border border-border bg-surface-muted px-2.5 py-1.5 text-xs font-semibold text-foreground hover:border-primary hover:text-primary"
+                      >
+                        {item.symbol}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+              {recentSearches.length ? (
+                <div className={recentStocks.length ? "mt-3" : ""}>
+                  <p className="text-xs font-semibold text-muted">
+                    {language === "ko" ? "최근 검색어" : "Recent searches"}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {recentSearches.map((term) => (
+                      <button
+                        key={term}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          setSearch(term);
+                          setOpen(true);
+                        }}
+                        className="cursor-pointer rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary"
+                      >
+                        {term}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
             <p className="text-xs font-semibold text-muted">{resultLabel}</p>
             <p className="text-xs font-semibold text-muted">{symbols.length}</p>
@@ -1364,6 +1590,7 @@ function RealtimeChart({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const movingAverageRefs = useRef(new Map<number, ISeriesApi<"Line">>());
 
   useEffect(() => {
     if (!containerRef.current || chartRef.current) {
@@ -1397,6 +1624,18 @@ function RealtimeChart({
       wickUpColor: "#2e7d4f",
       wickDownColor: "#b64242",
     });
+    movingAverages.forEach((average) => {
+      movingAverageRefs.current.set(
+        average.period,
+        chart.addSeries(LineSeries, {
+          color: average.color,
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        }),
+      );
+    });
 
     chartRef.current = chart;
     seriesRef.current = series;
@@ -1415,6 +1654,7 @@ function RealtimeChart({
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      movingAverageRefs.current.clear();
     };
   }, []);
 
@@ -1433,6 +1673,11 @@ function RealtimeChart({
         close: candle.close,
       }));
     seriesRef.current.setData(data);
+    movingAverages.forEach((average) => {
+      movingAverageRefs.current
+        .get(average.period)
+        ?.setData(calculateMovingAverage(data, average.period));
+    });
     chartRef.current?.timeScale().fitContent();
     chartRef.current?.applyOptions({
       timeScale: {
@@ -1460,6 +1705,20 @@ function RealtimeChart({
 
   return (
     <div className="relative mt-3">
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+        {movingAverages.map((average) => (
+          <span
+            key={average.period}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted"
+          >
+            <span
+              className="h-0.5 w-4"
+              style={{ backgroundColor: average.color }}
+            />
+            MA{average.period}
+          </span>
+        ))}
+      </div>
       {loading ? (
         <div className="absolute right-3 top-3 z-10 rounded-md bg-surface/90 px-2 py-1 text-xs font-semibold text-muted">
           {language === "ko" ? "불러오는 중" : "Loading"}
@@ -1468,6 +1727,23 @@ function RealtimeChart({
       <div ref={containerRef} className="h-[220px] w-full sm:h-[260px]" />
     </div>
   );
+}
+
+function calculateMovingAverage(
+  candles: CandlestickData<Time>[],
+  period: number,
+): LineData<Time>[] {
+  if (candles.length < period) return [];
+  let total = 0;
+  const result: LineData<Time>[] = [];
+  candles.forEach((candle, index) => {
+    total += candle.close;
+    if (index >= period) total -= candles[index - period].close;
+    if (index >= period - 1) {
+      result.push({ time: candle.time, value: total / period });
+    }
+  });
+  return result;
 }
 
 function toChartTime(timestamp: number, period: ChartPeriod): Time {

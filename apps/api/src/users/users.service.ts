@@ -1,12 +1,14 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
+import { NotificationsService } from '../notifications/notifications.service';
 import { User } from './user.entity';
 import { UserRole } from './user-role.enum';
 import { UserStatus } from './user-status.enum';
@@ -19,9 +21,12 @@ type CreateUserInput = {
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(input: CreateUserInput): Promise<User> {
@@ -44,7 +49,33 @@ export class UsersService {
       approvedAt: isFirstUser ? new Date() : null,
     });
 
-    return this.usersRepository.save(user);
+    const savedUser = await this.usersRepository.save(user);
+    if (!isFirstUser) {
+      const admins = await this.usersRepository.find({
+        where: { role: UserRole.Admin, status: UserStatus.Approved },
+      });
+      await this.notificationsService
+        .sendSystemToUsers(
+          admins.map((admin) => admin.id),
+          {
+            type: 'ACCOUNT',
+            title: '\uAC00\uC785 \uC2B9\uC778 \uC694\uCCAD',
+            body: `${savedUser.nickname} (${savedUser.email})\uB2D8\uC774 \uAC00\uC785\uC744 \uC694\uCCAD\uD588\uC2B5\uB2C8\uB2E4.`,
+            url: '/admin',
+            data: { userId: savedUser.id },
+            tag: `signup-request-${savedUser.id}`,
+          },
+          (adminId) => `signup-request:${savedUser.id}:${adminId}`,
+        )
+        .catch((error: unknown) => {
+          this.logger.warn(
+            `Could not send signup request notification: ${
+              error instanceof Error ? error.message : 'unknown error'
+            }`,
+          );
+        });
+    }
+    return savedUser;
   }
 
   findByEmail(email: string): Promise<User | null> {
@@ -74,7 +105,28 @@ export class UsersService {
     const user = await this.findById(id);
     user.status = UserStatus.Approved;
     user.approvedAt = new Date();
-    return this.usersRepository.save(user);
+    const savedUser = await this.usersRepository.save(user);
+    await this.notificationsService
+      .sendSystemToUser(
+        savedUser.id,
+        {
+          type: 'ACCOUNT',
+          title: '\uAC00\uC785 \uC2B9\uC778 \uC644\uB8CC',
+          body: '\uAC00\uC785 \uC2B9\uC778\uC774 \uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4. \uC774\uC81C 15F\uC5D0 \uB85C\uADF8\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.',
+          url: '/',
+          data: { userId: savedUser.id },
+          tag: `signup-approved-${savedUser.id}`,
+        },
+        `signup-approved:${savedUser.id}`,
+      )
+      .catch((error: unknown) => {
+        this.logger.warn(
+          `Could not send approval notification: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+      });
+    return savedUser;
   }
 
   async reject(id: string): Promise<User> {

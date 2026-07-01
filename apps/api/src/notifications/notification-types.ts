@@ -6,6 +6,7 @@ export const NOTIFICATION_TYPES = [
   'LIKE',
   'NEW_POST',
   'MARKET_BRIEFING',
+  'ACCOUNT',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -45,5 +46,7 @@ export function preferenceKeyForType(
       return 'newPostEnabled';
     case 'MARKET_BRIEFING':
       return 'marketBriefingEnabled';
+    case 'ACCOUNT':
+      return 'communityEnabled';
   }
 }
