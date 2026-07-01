@@ -123,6 +123,7 @@ export type GuruSummaryResponse = {
   firmName: string;
   reportDate: string | null;
   filingDate: string | null;
+  lastCollectedAt: string | null;
   totalValue: number;
   positionCount: number;
   topHolding: GuruHoldingResponse | null;
@@ -249,9 +250,16 @@ export class GuruPortfoliosService implements OnModuleInit {
         firstByManager.set(holding.managerId, holding);
       }
     }
+    const collectedAtByAccession = await this.buildCollectedAtByAccession(
+      managers.map((manager) => manager.accessionNumber),
+    );
 
     return managers.map((manager) =>
-      this.toSummary(manager, firstByManager.get(manager.id) ?? null),
+      this.toSummary(
+        manager,
+        firstByManager.get(manager.id) ?? null,
+        this.resolveManagerCollectedAt(manager, collectedAtByAccession),
+      ),
     );
   }
 
@@ -272,8 +280,15 @@ export class GuruPortfoliosService implements OnModuleInit {
     const mapped = holdings.map((holding) =>
       this.toHolding(holding, sectorData.map.get(holding.ticker ?? '') ?? null),
     );
+    const collectedAtByAccession = await this.buildCollectedAtByAccession([
+      manager.accessionNumber,
+    ]);
     return {
-      ...this.toSummary(manager, holdings[0] ?? null),
+      ...this.toSummary(
+        manager,
+        holdings[0] ?? null,
+        this.resolveManagerCollectedAt(manager, collectedAtByAccession),
+      ),
       topBuys: [...mapped]
         .filter((holding) => holding.shareChange > 0)
         .sort((a, b) => b.weightChange - a.weightChange)
@@ -1450,6 +1465,7 @@ export class GuruPortfoliosService implements OnModuleInit {
   private toSummary(
     manager: GuruManagerEntity,
     topHolding: GuruHoldingEntity | null,
+    lastCollectedAt: string | null = null,
   ): GuruSummaryResponse {
     return {
       slug: manager.slug,
@@ -1457,10 +1473,39 @@ export class GuruPortfoliosService implements OnModuleInit {
       firmName: manager.firmName,
       reportDate: manager.reportDate,
       filingDate: manager.filingDate,
+      lastCollectedAt,
       totalValue: manager.totalValue,
       positionCount: manager.positionCount,
       topHolding: topHolding ? this.toHolding(topHolding) : null,
     };
+  }
+
+  private async buildCollectedAtByAccession(
+    accessions: Array<string | null | undefined>,
+  ): Promise<Map<string, string>> {
+    const uniqueAccessions = [...new Set(accessions.filter((value): value is string => Boolean(value)))];
+    if (!uniqueAccessions.length) {
+      return new Map();
+    }
+    const filings = await this.edgarFilingRepository.find({
+      where: { accessionNumber: In(uniqueAccessions) },
+    });
+    return new Map(
+      filings.map((filing) => [
+        filing.accessionNumber,
+        (filing.appliedAt ?? filing.updatedAt)?.toISOString() ?? null,
+      ]).filter((entry): entry is [string, string] => Boolean(entry[1])),
+    );
+  }
+
+  private resolveManagerCollectedAt(
+    manager: GuruManagerEntity,
+    collectedAtByAccession: Map<string, string>,
+  ): string | null {
+    const fromFiling = manager.accessionNumber
+      ? collectedAtByAccession.get(manager.accessionNumber)
+      : null;
+    return fromFiling ?? manager.updatedAt?.toISOString() ?? null;
   }
 
   private toHolding(

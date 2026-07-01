@@ -172,6 +172,54 @@ function quarterLabel(reportDate: string | null): string {
   return `${date.getUTCFullYear()} Q${quarter}`;
 }
 
+function formatKstDateTime(value: string | null): string {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
+function freshnessBadge(value: string | null, ko: boolean): { label: string; className: string } {
+  if (!value) {
+    return {
+      label: ko ? "\uC218\uC9D1\uC774\uB825\uC5C6\uC74C" : "No collection log",
+      className: "bg-slate-100 text-slate-600",
+    };
+  }
+  const ageDays = (Date.now() - new Date(value).getTime()) / 86400000;
+  if (ageDays <= 3) {
+    return {
+      label: ko ? "\uCD5C\uC2E0" : "Fresh",
+      className: "bg-green-100 text-green-700",
+    };
+  }
+  if (ageDays <= 14) {
+    return {
+      label: ko ? "\uC815\uC0C1" : "Current",
+      className: "bg-blue-100 text-blue-700",
+    };
+  }
+  return {
+    label: ko ? "\uD655\uC778\uD544\uC694" : "Check needed",
+    className: "bg-amber-100 text-amber-700",
+  };
+}
+
+function FreshnessBadge({ value, ko }: { value: string | null; ko: boolean }) {
+  const badge = freshnessBadge(value, ko);
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${badge.className}`}>
+      {badge.label}
+    </span>
+  );
+}
+
 function HoldingRows({
   title,
   items,
@@ -404,6 +452,12 @@ export function GuruPortfoliosPage({
                 <p className="mt-2 text-xs font-semibold text-primary">
                   {manager.reportDate ? `${quarterLabel(manager.reportDate)} ${ko ? "기준" : "as of"}` : ko ? "최근 자료 없음" : "No recent filing"}
                 </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <FreshnessBadge value={manager.lastCollectedAt} ko={ko} />
+                  <span className="text-xs font-semibold text-muted">
+                    {ko ? "\uB9C8\uC9C0\uB9C9 \uC218\uC9D1" : "Last collected"} {formatKstDateTime(manager.lastCollectedAt)} KST
+                  </span>
+                </div>
                 <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
                   <div><p className="text-xs text-muted">{ko ? "13F 규모" : "13F value"}</p><p className="mt-1 font-semibold">{formatMoney(manager.totalValue)}</p></div>
                   <div><p className="text-xs text-muted">{ko ? "보유 종목" : "Positions"}</p><p className="mt-1 font-semibold">{manager.positionCount}</p></div>
@@ -433,13 +487,19 @@ export function GuruPortfoliosPage({
         <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">13F Portfolio</p>
-            <h2 className="mt-1 text-2xl font-bold">{detail.personName}</h2>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h2 className="text-2xl font-bold">{detail.personName}</h2>
+              <FreshnessBadge value={detail.lastCollectedAt} ko={ko} />
+            </div>
             <p className="mt-1 text-sm text-muted">{detail.firmName}</p>
           </div>
           <div className="text-right text-sm">
             <p className="font-semibold">{formatMoney(detail.totalValue)} · {detail.positionCount} {ko ? "종목" : "positions"}</p>
             <p className="mt-1 text-xs text-muted">
               {detail.reportDate ? `${quarterLabel(detail.reportDate)} ${ko ? "기준" : "as of"}` : ko ? "최근 자료 없음" : "No recent filing"}
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              {ko ? "\uB9C8\uC9C0\uB9C9 \uC218\uC9D1" : "Last collected"} {formatKstDateTime(detail.lastCollectedAt)} KST
             </p>
           </div>
         </div>
@@ -641,6 +701,9 @@ export function GuruPortfoliosPage({
             <h3 className="text-lg font-semibold">{ko ? "포트폴리오 맵" : "Portfolio map"}</h3>
             <p className="mt-1 text-xs text-muted">
               {ko ? `${quarterLabel(detail.reportDate)} \uAE30\uC900 \uBD84\uAE30\uB9D0\uBD80\uD130 \uD604\uC7AC\uAE4C\uC9C0 \uC218\uC775\uB960` : `Return from ${quarterLabel(detail.reportDate)} quarter-end to current`}
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              {ko ? "\uB9C8\uC9C0\uB9C9 \uC218\uC9D1" : "Last collected"} {formatKstDateTime(detail.lastCollectedAt)} KST
             </p>
           </div>
           <SegmentedControl
