@@ -11,8 +11,12 @@ type TestMarketsService = {
   getKoreanCandles: (
     symbol: string,
     period: ChartPeriod,
+    warmup?: boolean,
   ) => Promise<Array<{ time: number }>>;
-  toYahooRange: (period: ChartPeriod) => {
+  toYahooRange: (
+    period: ChartPeriod,
+    warmup?: boolean,
+  ) => {
     range: string;
     interval: string;
   };
@@ -142,4 +146,18 @@ describe('MarketsService Korean candles', () => {
       interval: '1d',
     });
   });
+
+  it.each([
+    ['1M', '1y', '1d'],
+    ['1Y', '2y', '1d'],
+    ['3Y', '5y', '1wk'],
+    ['5Y', '10y', '1wk'],
+  ] as const)(
+    'adds enough %s history to warm up moving averages',
+    (period, range, interval) => {
+      const service = makeService();
+
+      expect(service.toYahooRange(period, true)).toEqual({ range, interval });
+    },
+  );
 });

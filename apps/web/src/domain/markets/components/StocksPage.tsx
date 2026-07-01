@@ -81,7 +81,7 @@ type RecentStock = {
 
 const movingAverages = [
   { period: 20, color: "#2563eb" },
-  { period: 60, color: "#d97706" },
+  { period: 50, color: "#d97706" },
   { period: 120, color: "#7c3aed" },
 ] as const;
 
@@ -167,6 +167,9 @@ export function StocksPage() {
   const [priceCurrency, setPriceCurrency] =
     useState<DisplayCurrency>(initialCurrency);
   const [candles, setCandles] = useState<CandlePoint[]>([]);
+  const [movingAverageCandles, setMovingAverageCandles] = useState<
+    CandlePoint[]
+  >([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -393,15 +396,23 @@ export function StocksPage() {
 
     const requestId = ++candleRequestIdRef.current;
     setCandles([]);
+    setMovingAverageCandles([]);
     setChartLoading(true);
     try {
-      const nextCandles = await apiRequest<CandlePoint[]>(
-        `/markets/candles?symbol=${encodeURIComponent(symbol)}&period=${period}&market=${stockTab === "KR" ? "KR" : "US"}`,
-        "GET",
-        { accessToken: token },
-      );
+      const baseUrl = `/markets/candles?symbol=${encodeURIComponent(symbol)}&period=${period}&market=${stockTab === "KR" ? "KR" : "US"}`;
+      const [nextCandles, nextMovingAverageCandles] = await Promise.all([
+        apiRequest<CandlePoint[]>(baseUrl, "GET", { accessToken: token }),
+        apiRequest<CandlePoint[]>(`${baseUrl}&warmup=true`, "GET", {
+          accessToken: token,
+        }).catch(() => []),
+      ]);
       if (requestId === candleRequestIdRef.current) {
         setCandles(nextCandles);
+        setMovingAverageCandles(
+          nextMovingAverageCandles.length
+            ? nextMovingAverageCandles
+            : nextCandles,
+        );
       }
     } catch (candleError) {
       if (requestId === candleRequestIdRef.current) {
@@ -509,6 +520,7 @@ export function StocksPage() {
           livePrices={livePrices}
           liveSeries={liveSeries}
           candles={candles}
+          movingAverageCandles={movingAverageCandles}
           chartPeriod={chartPeriod}
           setChartPeriod={setChartPeriod}
           chartLoading={chartLoading}
@@ -547,6 +559,7 @@ function StocksView({
   livePrices,
   liveSeries,
   candles,
+  movingAverageCandles,
   chartPeriod,
   setChartPeriod,
   chartLoading,
@@ -579,6 +592,7 @@ function StocksView({
   livePrices: Record<string, TradeTick>;
   liveSeries: Record<string, TradeTick[]>;
   candles: CandlePoint[];
+  movingAverageCandles: CandlePoint[];
   chartPeriod: ChartPeriod;
   setChartPeriod: (period: ChartPeriod) => void;
   chartLoading: boolean;
@@ -667,6 +681,7 @@ function StocksView({
             live={livePrices[selectedSymbol]}
             series={liveSeries[selectedSymbol] ?? []}
             candles={candles}
+            movingAverageCandles={movingAverageCandles}
             chartPeriod={chartPeriod}
             setChartPeriod={setChartPeriod}
             chartLoading={chartLoading}
@@ -720,6 +735,7 @@ function StocksView({
             live={livePrices[selectedSymbol]}
             series={liveSeries[selectedSymbol] ?? []}
             candles={candles}
+            movingAverageCandles={movingAverageCandles}
             chartPeriod={chartPeriod}
             setChartPeriod={setChartPeriod}
             chartLoading={chartLoading}
@@ -750,6 +766,7 @@ function StockDetailPanel({
   live,
   series,
   candles,
+  movingAverageCandles,
   chartPeriod,
   setChartPeriod,
   chartLoading,
@@ -765,6 +782,7 @@ function StockDetailPanel({
   live?: TradeTick;
   series: TradeTick[];
   candles: CandlePoint[];
+  movingAverageCandles: CandlePoint[];
   chartPeriod: ChartPeriod;
   setChartPeriod: (period: ChartPeriod) => void;
   chartLoading: boolean;
@@ -963,6 +981,7 @@ function StockDetailPanel({
         <>
           <RealtimeChart
             candles={candles}
+            movingAverageCandles={movingAverageCandles}
             live={live}
             loading={chartLoading}
             period={chartPeriod}
@@ -1189,7 +1208,7 @@ function StockSearchPopover({
 }) {
   const [recentStocks, setRecentStocks] = useState<RecentStock[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
-  const storagePrefix = `15f:stocks:${market.toLowerCase()}`;
+  const storagePrefix = `15f:stocks:v2:${market.toLowerCase()}`;
   const quoteBySymbol = useMemo(
     () => new Map(quotes.map((quote) => [quote.symbol, quote])),
     [quotes],
@@ -1229,42 +1248,20 @@ function StockSearchPopover({
     }
   }, [storagePrefix]);
 
-  useEffect(() => {
-    if (!selectedSymbol) return;
-    const item = symbols.find(
-      (candidate) => candidate.symbol === selectedSymbol,
-    );
-    const previous = recentStocks.find(
-      (candidate) => candidate.symbol === selectedSymbol,
-    );
-    const next = [
+  function selectSymbol(symbol: string) {
+    const selected = symbols.find((candidate) => candidate.symbol === symbol);
+    const nextStocks = [
       {
-        symbol: selectedSymbol,
-        description:
-          item?.description ?? previous?.description ?? selectedSymbol,
+        symbol,
+        description: selected?.description ?? symbol,
       },
-      ...recentStocks.filter(
-        (candidate) => candidate.symbol !== selectedSymbol,
-      ),
+      ...recentStocks.filter((candidate) => candidate.symbol !== symbol),
     ].slice(0, 8);
-    if (
-      next.length === recentStocks.length &&
-      next.every(
-        (candidate, index) =>
-          candidate.symbol === recentStocks[index]?.symbol &&
-          candidate.description === recentStocks[index]?.description,
-      )
-    ) {
-      return;
-    }
-    setRecentStocks(next);
+    setRecentStocks(nextStocks);
     window.localStorage.setItem(
       `${storagePrefix}:viewed`,
-      JSON.stringify(next),
+      JSON.stringify(nextStocks),
     );
-  }, [recentStocks, selectedSymbol, storagePrefix, symbols]);
-
-  function selectSymbol(symbol: string) {
     const term = search.trim();
     if (term) {
       const nextSearches = [
@@ -1353,7 +1350,7 @@ function StockSearchPopover({
                         title={item.description}
                         className="cursor-pointer rounded-md border border-border bg-surface-muted px-2.5 py-1.5 text-xs font-semibold text-foreground hover:border-primary hover:text-primary"
                       >
-                        {item.symbol}
+                        {market === "KR" ? item.description : item.symbol}
                       </button>
                     ))}
                   </div>
@@ -1576,12 +1573,14 @@ function calculateChartPeriodReturn(
 
 function RealtimeChart({
   candles,
+  movingAverageCandles,
   live,
   loading,
   period,
   language,
 }: {
   candles: CandlePoint[];
+  movingAverageCandles: CandlePoint[];
   live?: TradeTick;
   loading: boolean;
   period: ChartPeriod;
@@ -1673,10 +1672,21 @@ function RealtimeChart({
         close: candle.close,
       }));
     seriesRef.current.setData(data);
+    const visibleFrom = candles.reduce(
+      (earliest, candle) => Math.min(earliest, candle.time),
+      Number.POSITIVE_INFINITY,
+    );
     movingAverages.forEach((average) => {
       movingAverageRefs.current
         .get(average.period)
-        ?.setData(calculateMovingAverage(data, average.period));
+        ?.setData(
+          calculateMovingAverage(
+            movingAverageCandles,
+            average.period,
+            period,
+            visibleFrom,
+          ),
+        );
     });
     chartRef.current?.timeScale().fitContent();
     chartRef.current?.applyOptions({
@@ -1685,7 +1695,7 @@ function RealtimeChart({
         secondsVisible: false,
       },
     });
-  }, [candles, period]);
+  }, [candles, movingAverageCandles, period]);
 
   useEffect(() => {
     if (!seriesRef.current || !live || candles.length === 0) {
@@ -1730,17 +1740,25 @@ function RealtimeChart({
 }
 
 function calculateMovingAverage(
-  candles: CandlestickData<Time>[],
-  period: number,
+  source: CandlePoint[],
+  averagePeriod: number,
+  chartPeriod: ChartPeriod,
+  visibleFrom: number,
 ): LineData<Time>[] {
-  if (candles.length < period) return [];
+  const candles = [...source].sort((a, b) => a.time - b.time);
+  if (candles.length < averagePeriod) return [];
   let total = 0;
   const result: LineData<Time>[] = [];
   candles.forEach((candle, index) => {
     total += candle.close;
-    if (index >= period) total -= candles[index - period].close;
-    if (index >= period - 1) {
-      result.push({ time: candle.time, value: total / period });
+    if (index >= averagePeriod) {
+      total -= candles[index - averagePeriod].close;
+    }
+    if (index >= averagePeriod - 1 && candle.time >= visibleFrom) {
+      result.push({
+        time: toChartTime(candle.time, chartPeriod),
+        value: total / averagePeriod,
+      });
     }
   });
   return result;

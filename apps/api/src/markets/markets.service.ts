@@ -2207,9 +2207,10 @@ export class MarketsService {
   async getCandles(
     symbol: string,
     period: ChartPeriod,
+    warmup = false,
   ): Promise<CandlePoint[]> {
     const normalizedSymbol = symbol.toUpperCase().trim();
-    const cacheKey = `market:candles:v2:${normalizedSymbol}:${period}`;
+    const cacheKey = `market:candles:v3:${normalizedSymbol}:${period}:${warmup ? 'warmup' : 'display'}`;
     const cached = await this.redis
       .get(cacheKey)
       .then((value) => (value ? (JSON.parse(value) as CandlePoint[]) : null))
@@ -2219,7 +2220,7 @@ export class MarketsService {
       return cached;
     }
 
-    const candles = await this.loadCandles(normalizedSymbol, period);
+    const candles = await this.loadCandles(normalizedSymbol, period, warmup);
     const ttl = period === '1D' ? 60 : 6 * 60 * 60;
     await this.redis
       .set(cacheKey, JSON.stringify(candles), 'EX', ttl)
@@ -2230,13 +2231,14 @@ export class MarketsService {
   private async loadCandles(
     symbol: string,
     period: ChartPeriod,
+    warmup = false,
   ): Promise<CandlePoint[]> {
     if (/^\d{6}$/.test(symbol)) {
-      return this.getKoreanCandles(symbol, period);
+      return this.getKoreanCandles(symbol, period, warmup);
     }
 
     const yahooSymbol = this.toYahooSymbol(symbol);
-    const { range, interval } = this.toYahooRange(period);
+    const { range, interval } = this.toYahooRange(period, warmup);
     const url = new URL(
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
         yahooSymbol,
@@ -2291,6 +2293,7 @@ export class MarketsService {
   private async getKoreanCandles(
     symbol: string,
     period: ChartPeriod,
+    warmup = false,
   ): Promise<CandlePoint[]> {
     const stock = DEFAULT_KR_STOCKS_CLEAN.find(
       (item) => item.symbol === symbol,
@@ -2340,6 +2343,22 @@ export class MarketsService {
       default:
         start.setMonth(start.getMonth() - 2);
         break;
+    }
+
+    if (warmup) {
+      if (period === '1D') {
+        start.setDate(start.getDate() - 7);
+        maxPages = Math.max(maxPages, 2);
+      } else if (period === '1M' || period === '3M') {
+        start.setMonth(start.getMonth() - 8);
+        maxPages = Math.max(maxPages, 3);
+      } else if (period === '6M' || period === '1Y') {
+        start.setMonth(start.getMonth() - 8);
+        maxPages = Math.max(maxPages, 5);
+      } else if (period === '3Y' || period === '5Y') {
+        start.setFullYear(start.getFullYear() - 3);
+        maxPages = Math.max(maxPages, 7);
+      }
     }
 
     const startDate = this.formatKisDate(start);
@@ -4960,10 +4979,31 @@ export class MarketsService {
     return ['QQQ', 'SPY', 'DIA', 'GLD', 'USO'].includes(symbol);
   }
 
-  private toYahooRange(period: ChartPeriod): {
+  private toYahooRange(
+    period: ChartPeriod,
+    warmup = false,
+  ): {
     range: string;
     interval: string;
   } {
+    if (warmup) {
+      switch (period) {
+        case '1D':
+          return { range: '5d', interval: '5m' };
+        case '1M':
+        case '3M':
+          return { range: '1y', interval: '1d' };
+        case '6M':
+        case '1Y':
+          return { range: '2y', interval: '1d' };
+        case '3Y':
+          return { range: '5y', interval: '1wk' };
+        case '5Y':
+          return { range: '10y', interval: '1wk' };
+        case 'ALL':
+          return { range: 'max', interval: '1mo' };
+      }
+    }
     switch (period) {
       case '1D':
         return { range: '1d', interval: '5m' };
