@@ -19,8 +19,10 @@ import type {
 
 type Metric = "weight" | "return";
 type DetailTab = "summary" | "holdings";
-type HoldingSort = "weight" | "activity";
+type HoldingSort = "weight" | "activity" | "value" | "return" | "name";
 type SortDirection = "desc" | "asc";
+type HoldingActivityFilter = "all" | "new" | "increased" | "reduced";
+type HoldingReturnFilter = "all" | "positive" | "negative" | "none";
 type ManagerSort = "value" | "positions";
 type LayoutHolding = GuruHolding & { layoutValue?: number };
 type Rect = { item: LayoutHolding; x: number; y: number; width: number; height: number };
@@ -234,6 +236,10 @@ export function GuruPortfoliosPage({
   const [detailTab, setDetailTab] = useState<DetailTab>(initialTab);
   const [holdingSort, setHoldingSort] = useState<HoldingSort>("weight");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [holdingSearch, setHoldingSearch] = useState("");
+  const [holdingSector, setHoldingSector] = useState("all");
+  const [holdingActivity, setHoldingActivity] = useState<HoldingActivityFilter>("all");
+  const [holdingReturn, setHoldingReturn] = useState<HoldingReturnFilter>("all");
   const [holdingPage, setHoldingPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -280,17 +286,50 @@ export function GuruPortfoliosPage({
     [detail, metric],
   );
 
+  const holdingSectorOptions = useMemo(() => {
+    const sectors = [...new Set((detail?.holdings ?? []).map((holding) => holding.sector).filter(Boolean))].sort();
+    return ["all", ...sectors];
+  }, [detail]);
+
   const sortedHoldings = useMemo(() => {
-    const rows = [...(detail?.holdings ?? [])];
+    const query = holdingSearch.trim().toLowerCase();
+    const rows = [...(detail?.holdings ?? [])].filter((holding) => {
+      if (query) {
+        const haystack = [
+          holding.ticker,
+          holding.issuerName,
+          holding.cusip,
+          holding.sector,
+          holding.industry,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      if (holdingSector !== "all" && holding.sector !== holdingSector) return false;
+      if (holdingActivity === "new" && !(holding.previousWeight <= 0 && holding.weight > 0)) return false;
+      if (holdingActivity === "increased" && !(holding.previousWeight > 0 && holding.weight > 0 && holding.shareChange > 0)) return false;
+      if (holdingActivity === "reduced" && !(holding.previousWeight > 0 && holding.weight > 0 && holding.shareChange < 0)) return false;
+      if (holdingReturn === "positive" && !(holding.returnPercent !== null && holding.returnPercent >= 0)) return false;
+      if (holdingReturn === "negative" && !(holding.returnPercent !== null && holding.returnPercent < 0)) return false;
+      if (holdingReturn === "none" && holding.returnPercent !== null) return false;
+      return true;
+    });
     const direction = sortDirection === "desc" ? -1 : 1;
     return rows.sort((a, b) => {
-      const aValue =
-        holdingSort === "weight" ? a.weight : Math.abs(a.weightChange);
-      const bValue =
-        holdingSort === "weight" ? b.weight : Math.abs(b.weightChange);
-      return (aValue - bValue) * direction;
+      if (holdingSort === "name") {
+        return a.issuerName.localeCompare(b.issuerName) * direction;
+      }
+      const valueOf = (item: GuruHolding) => {
+        if (holdingSort === "weight") return item.weight;
+        if (holdingSort === "activity") return Math.abs(item.weightChange);
+        if (holdingSort === "value") return item.value;
+        return item.returnPercent ?? Number.NEGATIVE_INFINITY;
+      };
+      return (valueOf(a) - valueOf(b)) * direction;
     });
-  }, [detail, holdingSort, sortDirection]);
+  }, [detail, holdingActivity, holdingReturn, holdingSearch, holdingSector, holdingSort, sortDirection]);
   const holdingPageSize = 10;
   const holdingTotalPages = Math.max(
     1,
@@ -481,6 +520,9 @@ export function GuruPortfoliosPage({
                   options={[
                     { value: "weight", label: ko ? "\uC885\uBAA9 \uBE44\uC911\uC21C" : "Weight" },
                     { value: "activity", label: ko ? "\uB9E4\uC218\uB9E4\uB3C4\uD070\uC21C" : "Activity" },
+                    { value: "value", label: ko ? "\uD3C9\uAC00\uC561" : "Value" },
+                    { value: "return", label: ko ? "\uC218\uC775\uB960" : "Return" },
+                    { value: "name", label: ko ? "\uC885\uBAA9\uBA85" : "Name" },
                   ]}
                 />
                 <button
@@ -497,21 +539,78 @@ export function GuruPortfoliosPage({
                 </button>
               </div>
             </div>
+            <div className="mt-4 grid gap-2 rounded-lg border border-border bg-surface-muted p-3 md:grid-cols-[minmax(180px,1fr)_repeat(3,minmax(130px,auto))]">
+              <input
+                value={holdingSearch}
+                onChange={(event) => {
+                  setHoldingSearch(event.target.value);
+                  setHoldingPage(1);
+                }}
+                placeholder={ko ? "티커·종목명·CUSIP 검색" : "Search ticker, issuer, CUSIP"}
+                className="h-10 min-w-0 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
+              />
+              <select
+                value={holdingSector}
+                onChange={(event) => {
+                  setHoldingSector(event.target.value);
+                  setHoldingPage(1);
+                }}
+                className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
+              >
+                {holdingSectorOptions.map((sector) => (
+                  <option key={sector} value={sector}>{sector === "all" ? (ko ? "전체 섹터" : "All sectors") : sectorLabel(sector, ko)}</option>
+                ))}
+              </select>
+              <select
+                value={holdingActivity}
+                onChange={(event) => {
+                  setHoldingActivity(event.target.value as HoldingActivityFilter);
+                  setHoldingPage(1);
+                }}
+                className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
+              >
+                <option value="all">{ko ? "전체 매매" : "All activity"}</option>
+                <option value="new">{ko ? "신규매수" : "New buys"}</option>
+                <option value="increased">{ko ? "비중확대" : "Increased"}</option>
+                <option value="reduced">{ko ? "비중축소" : "Reduced"}</option>
+              </select>
+              <select
+                value={holdingReturn}
+                onChange={(event) => {
+                  setHoldingReturn(event.target.value as HoldingReturnFilter);
+                  setHoldingPage(1);
+                }}
+                className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
+              >
+                <option value="all">{ko ? "전체 수익률" : "All returns"}</option>
+                <option value="positive">{ko ? "플러스" : "Positive"}</option>
+                <option value="negative">{ko ? "마이너스" : "Negative"}</option>
+                <option value="none">{ko ? "수익률 없음" : "No return"}</option>
+              </select>
+            </div>
+            <p className="mt-2 text-xs font-semibold text-muted">
+              {ko ? `${sortedHoldings.length}개 표시 / 전체 ${detail.holdings.length}개` : `${sortedHoldings.length} shown / ${detail.holdings.length} total`}
+            </p>
             <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full min-w-[880px] text-left text-sm">
                 <thead className="border-b border-border text-xs text-muted">
-                  <tr><th className="px-2 py-3">{ko ? "\uC885\uBAA9" : "Holding"}</th><th className="px-2 py-3 text-right">{ko ? "\uBCF4\uC720\uB7C9" : "Shares"}</th><th className="px-2 py-3 text-right">{ko ? "\uD3C9\uAC00\uC561" : "Value"}</th><th className="px-2 py-3 text-right">{ko ? "\uD604\uC7AC \uBE44\uC911" : "Weight"}</th><th className="px-2 py-3 text-right">{ko ? "\uBE44\uC911 \uBCC0\uD654" : "Change"}</th></tr>
+                  <tr><th className="px-2 py-3">{ko ? "\uC885\uBAA9" : "Holding"}</th><th className="px-2 py-3">{ko ? "\uC139\uD130" : "Sector"}</th><th className="px-2 py-3 text-right">{ko ? "\uBCF4\uC720\uB7C9" : "Shares"}</th><th className="px-2 py-3 text-right">{ko ? "\uD3C9\uAC00\uC561" : "Value"}</th><th className="px-2 py-3 text-right">{ko ? "\uD604\uC7AC \uBE44\uC911" : "Weight"}</th><th className="px-2 py-3 text-right">{ko ? "\uBE44\uC911 \uBCC0\uD654" : "Change"}</th><th className="px-2 py-3 text-right">{ko ? "\uC218\uC775\uB960" : "Return"}</th></tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {visibleHoldings.map((item) => (
                     <tr key={item.id} className="hover:bg-surface-muted">
                       <td className="px-2 py-3"><p className="font-semibold">{item.ticker ?? item.cusip}{item.putCall ? ` ${item.putCall.toUpperCase()}` : ""}</p><p className="max-w-72 truncate text-xs text-muted">{item.issuerName}</p></td>
+                      <td className="px-2 py-3"><p className="font-semibold">{sectorLabel(item.sector, ko)}</p><p className="max-w-48 truncate text-xs text-muted">{item.industry ?? "-"}</p></td>
                       <td className="px-2 py-3 text-right">{number.format(item.shares)}</td>
                       <td className="px-2 py-3 text-right">{formatMoney(item.value)}</td>
                       <td className="px-2 py-3 text-right font-semibold">{item.weight.toFixed(2)}%</td>
                       <td className={`px-2 py-3 text-right font-semibold ${item.weightChange >= 0 ? "text-green-600" : "text-red-600"}`}>{formatPercent(item.weightChange)}</td>
+                      <td className={`px-2 py-3 text-right font-semibold ${item.returnPercent === null ? "text-muted" : item.returnPercent >= 0 ? "text-green-600" : "text-red-600"}`}>{item.returnPercent === null ? "-" : formatPercent(item.returnPercent)}</td>
                     </tr>
                   ))}
+                  {!visibleHoldings.length ? (
+                    <tr><td colSpan={7} className="px-2 py-8 text-center text-sm font-semibold text-muted">{ko ? "조건에 맞는 보유종목이 없습니다." : "No holdings match the current filters."}</td></tr>
+                  ) : null}
                 </tbody>
               </table>
             </div>
