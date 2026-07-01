@@ -1427,18 +1427,25 @@ export class MarketsService {
         });
       }
     }
-    const financials = await this.getKoreanFinancials(normalizedSymbol);
     const fallbackStock: KisStock = {
       symbol: normalizedSymbol,
       name: masterStock?.name ?? normalizedSymbol,
       marketDiv: masterStock?.market === 'KR:KOSDAQ' ? 'Q' : 'J',
     };
     const selectedStock = stock ?? fallbackStock;
-    const output = await this.getKoreanPriceOutputCached(selectedStock);
+    const [financials, output, range52Week] = await Promise.all([
+      this.getKoreanFinancials(normalizedSymbol),
+      this.getKoreanPriceOutputCached(selectedStock),
+      this.getKorean52WeekRange(selectedStock).catch(() => null),
+    ]);
     const metrics = this.buildKoreanMetricsFromFinancials(
       financials[0] ?? null,
       output,
     );
+    if (metrics && range52Week) {
+      metrics['52WeekHigh'] ??= range52Week.high;
+      metrics['52WeekLow'] ??= range52Week.low;
+    }
     const stockName =
       masterStock?.name ?? cachedProfile?.name ?? selectedStock.name;
     const quote: MarketQuote = {
@@ -4594,6 +4601,85 @@ export class MarketsService {
       ),
       currentPrice: this.toOptionalNumber(output.stck_prpr),
     };
+  }
+
+  private async getKorean52WeekRange(
+    stock: KisStock,
+  ): Promise<{ high: number; low: number } | null> {
+    const key = `market:range52:kr:${stock.symbol}`;
+    const cached = await this.redis
+      .get(key)
+      .then((value) =>
+        value ? (JSON.parse(value) as { high: number; low: number }) : null,
+      )
+      .catch(() => null);
+    if (cached && cached.high > 0 && cached.low > 0) return cached;
+
+    const kisRange = await this.kisGet<KisPriceResponse>(
+      '/uapi/domestic-stock/v1/quotations/inquire-price',
+      {
+        FID_COND_MRKT_DIV_CODE: stock.marketDiv,
+        FID_INPUT_ISCD: stock.symbol,
+      },
+    )
+      .then((response) => {
+        const output = response.output ?? {};
+        return {
+          high: this.toOptionalNumber(output.w52_hgpr ?? output.stck_hgpr_52w),
+          low: this.toOptionalNumber(output.w52_lwpr ?? output.stck_lwpr_52w),
+        };
+      })
+      .catch(() => null);
+
+    let range =
+      kisRange?.high && kisRange.low
+        ? { high: kisRange.high, low: kisRange.low }
+        : null;
+    if (!range) {
+      range = await this.getNaverKorean52WeekRange(stock.symbol).catch(
+        () => null,
+      );
+    }
+    if (range) {
+      await this.redis
+        .set(key, JSON.stringify(range), 'EX', 12 * 60 * 60)
+        .catch(() => undefined);
+    }
+    return range;
+  }
+
+  private async getNaverKorean52WeekRange(
+    symbol: string,
+  ): Promise<{ high: number; low: number } | null> {
+    const pages = await Promise.all(
+      Array.from({ length: 13 }, (_, index) =>
+        fetch(
+          `https://m.stock.naver.com/api/stock/${encodeURIComponent(symbol)}/price?pageSize=20&page=${index + 1}`,
+          { headers: { 'user-agent': 'Mozilla/5.0' } },
+        ).then(async (response) => {
+          if (!response.ok) return [];
+          return (await response.json()) as Array<{
+            localTradedAt?: string;
+            highPrice?: string;
+            lowPrice?: string;
+          }>;
+        }),
+      ),
+    );
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - 1);
+    const cutoffText = cutoff.toISOString().slice(0, 10);
+    const rows = pages.flat().filter((row) => {
+      return !row.localTradedAt || row.localTradedAt >= cutoffText;
+    });
+    const highs = rows
+      .map((row) => this.toOptionalNumber(row.highPrice))
+      .filter((value): value is number => value !== null && value > 0);
+    const lows = rows
+      .map((row) => this.toOptionalNumber(row.lowPrice))
+      .filter((value): value is number => value !== null && value > 0);
+    if (!highs.length || !lows.length) return null;
+    return { high: Math.max(...highs), low: Math.min(...lows) };
   }
 
   private async getKoreanPriceOutputCached(
