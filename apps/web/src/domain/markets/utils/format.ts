@@ -156,24 +156,6 @@ export function buildMetricItems(
       ),
     },
     {
-      label: translateDetailLabel(language, "high52"),
-      value: formatMoneyValue(
-        pickMetric(metrics, ["52WeekHigh"]),
-        currency,
-        sourceCurrency,
-        exchangeRate,
-      ),
-    },
-    {
-      label: translateDetailLabel(language, "low52"),
-      value: formatMoneyValue(
-        pickMetric(metrics, ["52WeekLow"]),
-        currency,
-        sourceCurrency,
-        exchangeRate,
-      ),
-    },
-    {
       label: translateDetailLabel(language, "psr"),
       value: formatRatio(
         pickMetric(metrics, ["psTTM", "psAnnual", "psRatioTTM", "psRatio"]),

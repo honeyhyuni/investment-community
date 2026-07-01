@@ -1245,10 +1245,21 @@ function StockSearchPopover({
 
   function selectSymbol(symbol: string) {
     const selected = symbols.find((candidate) => candidate.symbol === symbol);
+    const previous = recentStocks.find((candidate) => candidate.symbol === symbol);
+    const selectedDescription = selected?.description?.trim();
+    const previousDescription = previous?.description?.trim();
+    const description =
+      market === "KR"
+        ? resolveKoreanRecentName(
+            symbol,
+            selectedDescription,
+            previousDescription,
+          )
+        : selectedDescription || previousDescription || symbol;
     const nextStocks = [
       {
         symbol,
-        description: selected?.description ?? symbol,
+        description,
       },
       ...recentStocks.filter((candidate) => candidate.symbol !== symbol),
     ].slice(0, 8);
@@ -1439,6 +1450,21 @@ function StockSearchPopover({
       ) : null}
     </div>
   );
+}
+
+function resolveKoreanRecentName(
+  symbol: string,
+  selectedDescription?: string,
+  previousDescription?: string,
+) {
+  const isCodeLike = (value?: string) => !!value && /^\d{5,6}$/.test(value);
+  if (selectedDescription && !isCodeLike(selectedDescription)) {
+    return selectedDescription;
+  }
+  if (previousDescription && !isCodeLike(previousDescription)) {
+    return previousDescription;
+  }
+  return selectedDescription || previousDescription || symbol;
 }
 
 function FavoriteStockList({
