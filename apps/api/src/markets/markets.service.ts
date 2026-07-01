@@ -2226,7 +2226,7 @@ export class MarketsService {
     warmup = false,
   ): Promise<CandlePoint[]> {
     const normalizedSymbol = symbol.toUpperCase().trim();
-    const cacheKey = `market:candles:v3:${normalizedSymbol}:${period}:${warmup ? 'warmup' : 'display'}`;
+    const cacheKey = `market:candles:v4:${normalizedSymbol}:${period}:${warmup ? 'warmup' : 'display'}`;
     const cached = await this.redis
       .get(cacheKey)
       .then((value) => (value ? (JSON.parse(value) as CandlePoint[]) : null))
@@ -2249,7 +2249,7 @@ export class MarketsService {
     period: ChartPeriod,
   ): Promise<CandleChart> {
     const normalizedSymbol = symbol.toUpperCase().trim();
-    const cacheKey = `market:candle-chart:v1:${normalizedSymbol}:${period}`;
+    const cacheKey = `market:candle-chart:v2:${normalizedSymbol}:${period}`;
     const cached = await this.redis
       .get(cacheKey)
       .then((value) => (value ? (JSON.parse(value) as CandleChart) : null))
@@ -2282,7 +2282,7 @@ export class MarketsService {
 
   private async getAllTimeHigh(symbol: string): Promise<number | null> {
     const normalizedSymbol = symbol.toUpperCase().trim();
-    const cacheKey = `market:all-time-high:v1:${normalizedSymbol}`;
+    const cacheKey = `market:all-time-high:v2:${normalizedSymbol}`;
     const cached = await this.redis
       .get(cacheKey)
       .then((value) => (value ? Number(value) : null))
@@ -2468,7 +2468,7 @@ export class MarketsService {
           FID_INPUT_DATE_1: startDate,
           FID_INPUT_DATE_2: this.formatKisDate(cursorEnd),
           FID_PERIOD_DIV_CODE: periodDivCode,
-          FID_ORG_ADJ_PRC: '1',
+          FID_ORG_ADJ_PRC: '0',
         },
         'FHKST03010100',
       );
