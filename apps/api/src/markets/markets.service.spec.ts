@@ -8,6 +8,11 @@ type KisGet = (
   trId: string,
 ) => Promise<unknown>;
 type TestMarketsService = {
+  calculateMovingAverage: (
+    source: Array<{ time: number; close: number }>,
+    period: number,
+    visibleFrom: number,
+  ) => Array<{ time: number; value: number }>;
   getKoreanCandles: (
     symbol: string,
     period: ChartPeriod,
@@ -160,4 +165,17 @@ describe('MarketsService Korean candles', () => {
       expect(service.toYahooRange(period, true)).toEqual({ range, interval });
     },
   );
+
+  it('calculates moving averages once and clips warmup points', () => {
+    const service = makeService();
+    const source = Array.from({ length: 6 }, (_, index) => ({
+      time: index + 1,
+      close: index + 1,
+    }));
+
+    expect(service.calculateMovingAverage(source, 3, 5)).toEqual([
+      { time: 5, value: 4 },
+      { time: 6, value: 5 },
+    ]);
+  });
 });

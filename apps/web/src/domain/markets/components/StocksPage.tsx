@@ -17,7 +17,6 @@ import {
   createChart,
   IChartApi,
   ISeriesApi,
-  LineData,
   LineSeries,
   Time,
 } from "lightweight-charts";
@@ -57,6 +56,7 @@ import {
 } from "@/domain/markets/utils/format";
 import {
   CandlePoint,
+  CandleChart,
   ChartPeriod,
   MarketNews,
   StockDetail,
@@ -167,9 +167,9 @@ export function StocksPage() {
   const [priceCurrency, setPriceCurrency] =
     useState<DisplayCurrency>(initialCurrency);
   const [candles, setCandles] = useState<CandlePoint[]>([]);
-  const [movingAverageCandles, setMovingAverageCandles] = useState<
-    CandlePoint[]
-  >([]);
+  const [movingAverageSeries, setMovingAverageSeries] = useState<
+    CandleChart["movingAverages"]
+  >({ "20": [], "50": [], "120": [] });
   const [chartLoading, setChartLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -396,23 +396,18 @@ export function StocksPage() {
 
     const requestId = ++candleRequestIdRef.current;
     setCandles([]);
-    setMovingAverageCandles([]);
+    setMovingAverageSeries({ "20": [], "50": [], "120": [] });
     setChartLoading(true);
     try {
       const baseUrl = `/markets/candles?symbol=${encodeURIComponent(symbol)}&period=${period}&market=${stockTab === "KR" ? "KR" : "US"}`;
-      const [nextCandles, nextMovingAverageCandles] = await Promise.all([
-        apiRequest<CandlePoint[]>(baseUrl, "GET", { accessToken: token }),
-        apiRequest<CandlePoint[]>(`${baseUrl}&warmup=true`, "GET", {
-          accessToken: token,
-        }).catch(() => []),
-      ]);
+      const chart = await apiRequest<CandleChart>(
+        `${baseUrl}&indicators=true`,
+        "GET",
+        { accessToken: token },
+      );
       if (requestId === candleRequestIdRef.current) {
-        setCandles(nextCandles);
-        setMovingAverageCandles(
-          nextMovingAverageCandles.length
-            ? nextMovingAverageCandles
-            : nextCandles,
-        );
+        setCandles(chart.candles);
+        setMovingAverageSeries(chart.movingAverages);
       }
     } catch (candleError) {
       if (requestId === candleRequestIdRef.current) {
@@ -520,7 +515,7 @@ export function StocksPage() {
           livePrices={livePrices}
           liveSeries={liveSeries}
           candles={candles}
-          movingAverageCandles={movingAverageCandles}
+          movingAverageSeries={movingAverageSeries}
           chartPeriod={chartPeriod}
           setChartPeriod={setChartPeriod}
           chartLoading={chartLoading}
@@ -559,7 +554,7 @@ function StocksView({
   livePrices,
   liveSeries,
   candles,
-  movingAverageCandles,
+  movingAverageSeries,
   chartPeriod,
   setChartPeriod,
   chartLoading,
@@ -592,7 +587,7 @@ function StocksView({
   livePrices: Record<string, TradeTick>;
   liveSeries: Record<string, TradeTick[]>;
   candles: CandlePoint[];
-  movingAverageCandles: CandlePoint[];
+  movingAverageSeries: CandleChart["movingAverages"];
   chartPeriod: ChartPeriod;
   setChartPeriod: (period: ChartPeriod) => void;
   chartLoading: boolean;
@@ -681,7 +676,7 @@ function StocksView({
             live={livePrices[selectedSymbol]}
             series={liveSeries[selectedSymbol] ?? []}
             candles={candles}
-            movingAverageCandles={movingAverageCandles}
+            movingAverageSeries={movingAverageSeries}
             chartPeriod={chartPeriod}
             setChartPeriod={setChartPeriod}
             chartLoading={chartLoading}
@@ -735,7 +730,7 @@ function StocksView({
             live={livePrices[selectedSymbol]}
             series={liveSeries[selectedSymbol] ?? []}
             candles={candles}
-            movingAverageCandles={movingAverageCandles}
+            movingAverageSeries={movingAverageSeries}
             chartPeriod={chartPeriod}
             setChartPeriod={setChartPeriod}
             chartLoading={chartLoading}
@@ -766,7 +761,7 @@ function StockDetailPanel({
   live,
   series,
   candles,
-  movingAverageCandles,
+  movingAverageSeries,
   chartPeriod,
   setChartPeriod,
   chartLoading,
@@ -782,7 +777,7 @@ function StockDetailPanel({
   live?: TradeTick;
   series: TradeTick[];
   candles: CandlePoint[];
-  movingAverageCandles: CandlePoint[];
+  movingAverageSeries: CandleChart["movingAverages"];
   chartPeriod: ChartPeriod;
   setChartPeriod: (period: ChartPeriod) => void;
   chartLoading: boolean;
@@ -981,7 +976,7 @@ function StockDetailPanel({
         <>
           <RealtimeChart
             candles={candles}
-            movingAverageCandles={movingAverageCandles}
+            movingAverageSeries={movingAverageSeries}
             live={live}
             loading={chartLoading}
             period={chartPeriod}
@@ -1573,14 +1568,14 @@ function calculateChartPeriodReturn(
 
 function RealtimeChart({
   candles,
-  movingAverageCandles,
+  movingAverageSeries,
   live,
   loading,
   period,
   language,
 }: {
   candles: CandlePoint[];
-  movingAverageCandles: CandlePoint[];
+  movingAverageSeries: CandleChart["movingAverages"];
   live?: TradeTick;
   loading: boolean;
   period: ChartPeriod;
@@ -1672,21 +1667,15 @@ function RealtimeChart({
         close: candle.close,
       }));
     seriesRef.current.setData(data);
-    const visibleFrom = candles.reduce(
-      (earliest, candle) => Math.min(earliest, candle.time),
-      Number.POSITIVE_INFINITY,
-    );
     movingAverages.forEach((average) => {
-      movingAverageRefs.current
-        .get(average.period)
-        ?.setData(
-          calculateMovingAverage(
-            movingAverageCandles,
-            average.period,
-            period,
-            visibleFrom,
-          ),
-        );
+      movingAverageRefs.current.get(average.period)?.setData(
+        movingAverageSeries[String(average.period) as "20" | "50" | "120"].map(
+          (point) => ({
+            time: toChartTime(point.time, period),
+            value: point.value,
+          }),
+        ),
+      );
     });
     chartRef.current?.timeScale().fitContent();
     chartRef.current?.applyOptions({
@@ -1695,7 +1684,7 @@ function RealtimeChart({
         secondsVisible: false,
       },
     });
-  }, [candles, movingAverageCandles, period]);
+  }, [candles, movingAverageSeries, period]);
 
   useEffect(() => {
     if (!seriesRef.current || !live || candles.length === 0) {
@@ -1737,31 +1726,6 @@ function RealtimeChart({
       <div ref={containerRef} className="h-[220px] w-full sm:h-[260px]" />
     </div>
   );
-}
-
-function calculateMovingAverage(
-  source: CandlePoint[],
-  averagePeriod: number,
-  chartPeriod: ChartPeriod,
-  visibleFrom: number,
-): LineData<Time>[] {
-  const candles = [...source].sort((a, b) => a.time - b.time);
-  if (candles.length < averagePeriod) return [];
-  let total = 0;
-  const result: LineData<Time>[] = [];
-  candles.forEach((candle, index) => {
-    total += candle.close;
-    if (index >= averagePeriod) {
-      total -= candles[index - averagePeriod].close;
-    }
-    if (index >= averagePeriod - 1 && candle.time >= visibleFrom) {
-      result.push({
-        time: toChartTime(candle.time, chartPeriod),
-        value: total / averagePeriod,
-      });
-    }
-  });
-  return result;
 }
 
 function toChartTime(timestamp: number, period: ChartPeriod): Time {

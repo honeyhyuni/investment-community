@@ -227,3 +227,13 @@ export type CandlePoint = {
   close: number;
   volume: number;
 };
+
+export type MovingAveragePoint = {
+  time: number;
+  value: number;
+};
+
+export type CandleChart = {
+  candles: CandlePoint[];
+  movingAverages: Record<'20' | '50' | '120', MovingAveragePoint[]>;
+};

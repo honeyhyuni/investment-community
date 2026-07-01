@@ -12,6 +12,7 @@ import Redis from 'ioredis';
 import {
   CandlePoint,
   ChartPeriod,
+  CandleChart,
   CompanyProfile,
   CompanyMetrics,
   FinnhubQuote,
@@ -2233,6 +2234,60 @@ export class MarketsService {
       .set(cacheKey, JSON.stringify(candles), 'EX', ttl)
       .catch(() => undefined);
     return candles;
+  }
+
+  async getCandleChart(
+    symbol: string,
+    period: ChartPeriod,
+  ): Promise<CandleChart> {
+    const normalizedSymbol = symbol.toUpperCase().trim();
+    const cacheKey = `market:candle-chart:v1:${normalizedSymbol}:${period}`;
+    const cached = await this.redis
+      .get(cacheKey)
+      .then((value) => (value ? (JSON.parse(value) as CandleChart) : null))
+      .catch(() => null);
+    if (cached) return cached;
+
+    const [candles, warmupCandles] = await Promise.all([
+      this.getCandles(normalizedSymbol, period),
+      this.getCandles(normalizedSymbol, period, true),
+    ]);
+    const source = warmupCandles.length ? warmupCandles : candles;
+    const visibleFrom = candles.reduce(
+      (earliest, candle) => Math.min(earliest, candle.time),
+      Number.POSITIVE_INFINITY,
+    );
+    const chart: CandleChart = {
+      candles,
+      movingAverages: {
+        '20': this.calculateMovingAverage(source, 20, visibleFrom),
+        '50': this.calculateMovingAverage(source, 50, visibleFrom),
+        '120': this.calculateMovingAverage(source, 120, visibleFrom),
+      },
+    };
+    const ttl = period === '1D' ? 60 : 6 * 60 * 60;
+    await this.redis
+      .set(cacheKey, JSON.stringify(chart), 'EX', ttl)
+      .catch(() => undefined);
+    return chart;
+  }
+
+  private calculateMovingAverage(
+    source: CandlePoint[],
+    period: number,
+    visibleFrom: number,
+  ): Array<{ time: number; value: number }> {
+    const candles = [...source].sort((a, b) => a.time - b.time);
+    let total = 0;
+    const result: Array<{ time: number; value: number }> = [];
+    candles.forEach((candle, index) => {
+      total += candle.close;
+      if (index >= period) total -= candles[index - period].close;
+      if (index >= period - 1 && candle.time >= visibleFrom) {
+        result.push({ time: candle.time, value: total / period });
+      }
+    });
+    return result;
   }
 
   private async loadCandles(

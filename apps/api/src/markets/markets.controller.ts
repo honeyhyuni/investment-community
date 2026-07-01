@@ -17,6 +17,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { UserRole } from '../users/user-role.enum';
 import {
   CandlePoint,
+  CandleChart,
   FavoriteStock,
   IpoCalendarItem,
   MarketNews,
@@ -310,7 +311,11 @@ export class MarketsController {
     @Query('period') period: ChartPeriod = '1M',
     @Query('market') market?: string,
     @Query('warmup') warmup?: string,
-  ): Promise<CandlePoint[]> {
+    @Query('indicators') indicators?: string,
+  ): Promise<CandlePoint[] | CandleChart> {
+    if (indicators === 'true') {
+      return this.marketsService.getCandleChart(symbol, period);
+    }
     return this.marketsService.getCandles(symbol, period, warmup === 'true');
   }
 
