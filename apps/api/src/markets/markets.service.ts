@@ -1136,7 +1136,7 @@ export class MarketsService {
       }
     }
 
-    const [metrics, nextEarnings, usFinancials] = await Promise.all([
+    const [metrics, nextEarnings, usFinancials, allTimeHigh] = await Promise.all([
       this.getMetrics(normalizedSymbol).catch(() => null),
       this.getNextUsEarnings(normalizedSymbol),
       this.usStockFinancials.getIfSp500(normalizedSymbol).catch((error) => {
@@ -1147,11 +1147,15 @@ export class MarketsService {
         );
         return null;
       }),
+      this.getAllTimeHigh(normalizedSymbol).catch(() => null),
     ]);
 
     const displayMetrics = usFinancials
       ? this.buildUsSp500Metrics(usFinancials, quote.current, profile, metrics)
       : metrics;
+    if (displayMetrics && allTimeHigh) {
+      displayMetrics['AllTimeHigh'] = allTimeHigh;
+    }
 
     return {
       symbol: normalizedSymbol,
@@ -1434,10 +1438,11 @@ export class MarketsService {
       marketDiv: masterStock?.market === 'KR:KOSDAQ' ? 'Q' : 'J',
     };
     const selectedStock = stock ?? fallbackStock;
-    const [financials, output, range52Week] = await Promise.all([
+    const [financials, output, range52Week, allTimeHigh] = await Promise.all([
       this.getKoreanFinancials(normalizedSymbol),
       this.getKoreanPriceOutputCached(selectedStock),
       this.getKorean52WeekRange(selectedStock).catch(() => null),
+      this.getAllTimeHigh(normalizedSymbol).catch(() => null),
     ]);
     const metrics = this.buildKoreanMetricsFromFinancials(
       financials[0] ?? null,
@@ -1446,6 +1451,9 @@ export class MarketsService {
     if (metrics && range52Week) {
       metrics['52WeekHigh'] ??= range52Week.high;
       metrics['52WeekLow'] ??= range52Week.low;
+    }
+    if (metrics && allTimeHigh) {
+      metrics['AllTimeHigh'] = allTimeHigh;
     }
     const stockName =
       masterStock?.name ?? cachedProfile?.name ?? selectedStock.name;
@@ -2270,6 +2278,30 @@ export class MarketsService {
       .set(cacheKey, JSON.stringify(chart), 'EX', ttl)
       .catch(() => undefined);
     return chart;
+  }
+
+  private async getAllTimeHigh(symbol: string): Promise<number | null> {
+    const normalizedSymbol = symbol.toUpperCase().trim();
+    const cacheKey = `market:all-time-high:v1:${normalizedSymbol}`;
+    const cached = await this.redis
+      .get(cacheKey)
+      .then((value) => (value ? Number(value) : null))
+      .catch(() => null);
+    if (cached && Number.isFinite(cached) && cached > 0) {
+      return cached;
+    }
+
+    const candles = await this.getCandles(normalizedSymbol, 'ALL');
+    const highs = candles
+      .map((candle) => candle.high)
+      .filter((value) => Number.isFinite(value) && value > 0);
+    if (!highs.length) return null;
+
+    const high = Math.max(...highs);
+    await this.redis
+      .set(cacheKey, String(high), 'EX', 24 * 60 * 60)
+      .catch(() => undefined);
+    return high;
   }
 
   private calculateMovingAverage(

@@ -933,6 +933,7 @@ function StockDetailPanel({
         current={quote.current}
         low={numericMetric(detail.metrics, "52WeekLow")}
         high={numericMetric(detail.metrics, "52WeekHigh")}
+        allTimeHigh={numericMetric(detail.metrics, "AllTimeHigh")}
         displayCurrency={priceCurrency}
         sourceCurrency={detailSourceCurrency}
         exchangeRate={exchangeRate}
@@ -1089,6 +1090,7 @@ function PriceRange52Week({
   current,
   low,
   high,
+  allTimeHigh,
   displayCurrency,
   sourceCurrency,
   exchangeRate,
@@ -1097,6 +1099,7 @@ function PriceRange52Week({
   current: number;
   low: number | null;
   high: number | null;
+  allTimeHigh: number | null;
   displayCurrency: DisplayCurrency;
   sourceCurrency: string;
   exchangeRate: number | null;
@@ -1107,6 +1110,11 @@ function PriceRange52Week({
     100,
     Math.max(0, ((current - low) / (high - low)) * 100),
   );
+  const drawdownFromHigh = ((current - high) / high) * 100;
+  const drawdownFromAllTimeHigh =
+    allTimeHigh && allTimeHigh > 0
+      ? ((current - allTimeHigh) / allTimeHigh) * 100
+      : null;
 
   return (
     <div className="mt-5 rounded-md border border-border p-3 sm:p-4">
@@ -1118,6 +1126,24 @@ function PriceRange52Week({
           {language === "ko" ? "현재 위치" : "Current position"}{" "}
           {formatNumber(position)}%
         </p>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+        <span className="rounded-md bg-surface-muted px-2 py-1 text-muted">
+          {language === "ko" ? "52주 고점 대비" : "From 52W high"}{" "}
+          <span className={drawdownFromHigh < 0 ? "text-negative" : "text-positive"}>
+            {drawdownFromHigh > 0 ? "+" : ""}
+            {formatNumber(drawdownFromHigh)}%
+          </span>
+        </span>
+        {drawdownFromAllTimeHigh !== null ? (
+          <span className="rounded-md bg-surface-muted px-2 py-1 text-muted">
+            {language === "ko" ? "전체 고점 대비" : "From all-time high"}{" "}
+            <span className={drawdownFromAllTimeHigh < 0 ? "text-negative" : "text-positive"}>
+              {drawdownFromAllTimeHigh > 0 ? "+" : ""}
+              {formatNumber(drawdownFromAllTimeHigh)}%
+            </span>
+          </span>
+        ) : null}
       </div>
       <div className="relative mt-5 h-2 rounded-full bg-surface-muted">
         <div
@@ -1203,7 +1229,7 @@ function StockSearchPopover({
 }) {
   const [recentStocks, setRecentStocks] = useState<RecentStock[]>([]);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
-  const storagePrefix = `15f:stocks:v2:${market.toLowerCase()}`;
+  const storagePrefix = `15f:stocks:v3:${market.toLowerCase()}`;
   const quoteBySymbol = useMemo(
     () => new Map(quotes.map((quote) => [quote.symbol, quote])),
     [quotes],
@@ -1287,6 +1313,16 @@ function StockSearchPopover({
     setOpen(false);
   }
 
+  function clearRecentStocks() {
+    setRecentStocks([]);
+    window.localStorage.removeItem(`${storagePrefix}:viewed`);
+  }
+
+  function clearRecentSearches() {
+    setRecentSearches([]);
+    window.localStorage.removeItem(`${storagePrefix}:searches`);
+  }
+
   return (
     <div
       className="relative"
@@ -1343,9 +1379,20 @@ function StockSearchPopover({
             <div className="border-b border-border p-3">
               {recentStocks.length ? (
                 <>
-                  <p className="text-xs font-semibold text-muted">
-                    {language === "ko" ? "최근 본 종목" : "Recently viewed"}
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-muted">
+                      {language === "ko" ? "최근 본 종목" : "Recently viewed"}
+                    </p>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={clearRecentStocks}
+                      className="grid size-6 shrink-0 place-items-center rounded-md text-muted hover:bg-surface-muted hover:text-foreground"
+                      aria-label={language === "ko" ? "최근 본 종목 지우기" : "Clear recently viewed"}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {recentStocks.map((item) => (
                       <button
@@ -1364,9 +1411,20 @@ function StockSearchPopover({
               ) : null}
               {recentSearches.length ? (
                 <div className={recentStocks.length ? "mt-3" : ""}>
-                  <p className="text-xs font-semibold text-muted">
-                    {language === "ko" ? "최근 검색어" : "Recent searches"}
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-muted">
+                      {language === "ko" ? "최근 검색어" : "Recent searches"}
+                    </p>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={clearRecentSearches}
+                      className="grid size-6 shrink-0 place-items-center rounded-md text-muted hover:bg-surface-muted hover:text-foreground"
+                      aria-label={language === "ko" ? "최근 검색어 지우기" : "Clear recent searches"}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {recentSearches.map((term) => (
                       <button
