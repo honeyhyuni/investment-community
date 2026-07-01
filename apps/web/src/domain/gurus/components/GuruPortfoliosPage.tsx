@@ -21,7 +21,7 @@ type Metric = "weight" | "return";
 type DetailTab = "summary" | "holdings";
 type HoldingSort = "weight" | "activity" | "value" | "return" | "name";
 type SortDirection = "desc" | "asc";
-type HoldingActivityFilter = "all" | "new" | "increased" | "reduced";
+type HoldingActivityFilter = "all" | "new" | "increased" | "reduced" | "soldOut";
 type HoldingReturnFilter = "all" | "positive" | "negative" | "none";
 type ManagerSort = "value" | "positions";
 type LayoutHolding = GuruHolding & { layoutValue?: number };
@@ -40,6 +40,10 @@ function formatMoney(value: number): string {
 
 function formatPercent(value: number): string {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
+function isSoldOut(holding: GuruHolding): boolean {
+  return holding.previousWeight > 0 && holding.weight <= 0;
 }
 
 function layoutTreemap(
@@ -287,13 +291,18 @@ export function GuruPortfoliosPage({
   );
 
   const holdingSectorOptions = useMemo(() => {
-    const sectors = [...new Set((detail?.holdings ?? []).map((holding) => holding.sector).filter(Boolean))].sort();
+    const sectors = [...new Set((detail?.activityHoldings ?? detail?.holdings ?? []).map((holding) => holding.sector).filter(Boolean))].sort();
     return ["all", ...sectors];
   }, [detail]);
 
+  const tableHoldings = useMemo(
+    () => detail?.activityHoldings ?? detail?.holdings ?? [],
+    [detail],
+  );
+
   const sortedHoldings = useMemo(() => {
     const query = holdingSearch.trim().toLowerCase();
-    const rows = [...(detail?.holdings ?? [])].filter((holding) => {
+    const rows = [...tableHoldings].filter((holding) => {
       if (query) {
         const haystack = [
           holding.ticker,
@@ -311,6 +320,7 @@ export function GuruPortfoliosPage({
       if (holdingActivity === "new" && !(holding.previousWeight <= 0 && holding.weight > 0)) return false;
       if (holdingActivity === "increased" && !(holding.previousWeight > 0 && holding.weight > 0 && holding.shareChange > 0)) return false;
       if (holdingActivity === "reduced" && !(holding.previousWeight > 0 && holding.weight > 0 && holding.shareChange < 0)) return false;
+      if (holdingActivity === "soldOut" && !isSoldOut(holding)) return false;
       if (holdingReturn === "positive" && !(holding.returnPercent !== null && holding.returnPercent >= 0)) return false;
       if (holdingReturn === "negative" && !(holding.returnPercent !== null && holding.returnPercent < 0)) return false;
       if (holdingReturn === "none" && holding.returnPercent !== null) return false;
@@ -329,7 +339,7 @@ export function GuruPortfoliosPage({
       };
       return (valueOf(a) - valueOf(b)) * direction;
     });
-  }, [detail, holdingActivity, holdingReturn, holdingSearch, holdingSector, holdingSort, sortDirection]);
+  }, [holdingActivity, holdingReturn, holdingSearch, holdingSector, holdingSort, sortDirection, tableHoldings]);
   const holdingPageSize = 10;
   const holdingTotalPages = Math.max(
     1,
@@ -573,6 +583,7 @@ export function GuruPortfoliosPage({
                 <option value="new">{ko ? "신규매수" : "New buys"}</option>
                 <option value="increased">{ko ? "비중확대" : "Increased"}</option>
                 <option value="reduced">{ko ? "비중축소" : "Reduced"}</option>
+                <option value="soldOut">{ko ? "\uC804\uB7C9\uB9E4\uB3C4" : "Sold out"}</option>
               </select>
               <select
                 value={holdingReturn}
@@ -589,7 +600,7 @@ export function GuruPortfoliosPage({
               </select>
             </div>
             <p className="mt-2 text-xs font-semibold text-muted">
-              {ko ? `${sortedHoldings.length}개 표시 / 전체 ${detail.holdings.length}개` : `${sortedHoldings.length} shown / ${detail.holdings.length} total`}
+              {ko ? `${sortedHoldings.length}개 표시 / 전체 ${tableHoldings.length}개` : `${sortedHoldings.length} shown / ${tableHoldings.length} total`}
             </p>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[880px] text-left text-sm">
@@ -599,7 +610,7 @@ export function GuruPortfoliosPage({
                 <tbody className="divide-y divide-border">
                   {visibleHoldings.map((item) => (
                     <tr key={item.id} className="hover:bg-surface-muted">
-                      <td className="px-2 py-3"><p className="font-semibold">{item.ticker ?? item.cusip}{item.putCall ? ` ${item.putCall.toUpperCase()}` : ""}</p><p className="max-w-72 truncate text-xs text-muted">{item.issuerName}</p></td>
+                      <td className="px-2 py-3"><p className="font-semibold">{item.ticker ?? item.cusip}{item.putCall ? ` ${item.putCall.toUpperCase()}` : ""}{isSoldOut(item) ? <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700">{ko ? "\uC804\uB7C9\uB9E4\uB3C4" : "Sold out"}</span> : null}</p><p className="max-w-72 truncate text-xs text-muted">{item.issuerName}</p></td>
                       <td className="px-2 py-3"><p className="font-semibold">{sectorLabel(item.sector, ko)}</p><p className="max-w-48 truncate text-xs text-muted">{item.industry ?? "-"}</p></td>
                       <td className="px-2 py-3 text-right">{number.format(item.shares)}</td>
                       <td className="px-2 py-3 text-right">{formatMoney(item.value)}</td>

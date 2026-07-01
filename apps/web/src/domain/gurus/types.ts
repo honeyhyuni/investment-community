@@ -30,6 +30,7 @@ export type GuruDetail = GuruSummary & {
   topBuys: GuruHolding[];
   topSells: GuruHolding[];
   holdings: GuruHolding[];
+  activityHoldings?: GuruHolding[];
   dataSource: string;
   returnAsOf: string | null;
   stats: {

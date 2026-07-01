@@ -132,6 +132,7 @@ export type GuruDetailResponse = GuruSummaryResponse & {
   topBuys: GuruHoldingResponse[];
   topSells: GuruHoldingResponse[];
   holdings: GuruHoldingResponse[];
+  activityHoldings: GuruHoldingResponse[];
   dataSource: string;
   returnAsOf: string | null;
   stats: {
@@ -282,6 +283,9 @@ export class GuruPortfoliosService implements OnModuleInit {
         .sort((a, b) => a.weightChange - b.weightChange)
         .slice(0, 5),
       holdings: mapped.filter((holding) => holding.weight > 0),
+      activityHoldings: mapped.filter(
+        (holding) => holding.weight > 0 || holding.previousWeight > 0,
+      ),
       dataSource: 'SEC Form 13F',
       returnAsOf: sectorData.generatedAt,
       stats: {
