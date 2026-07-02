@@ -1444,14 +1444,33 @@ export class MarketsService {
       this.getKorean52WeekRange(selectedStock).catch(() => null),
       this.getAllTimeHigh(normalizedSymbol).catch(() => null),
     ]);
-    const liveMarketCap =
+    const outputMarketCap =
       this.toNumber(output.hts_avls) > 0
         ? this.toNumber(output.hts_avls) * 100_000_000
-        : await this.getNaverKoreanMarketCap(normalizedSymbol).catch(() => null);
+        : null;
+    const outputPer = this.toOptionalNumber(output.per);
+    const outputPbr = this.toOptionalNumber(output.pbr);
+    const outputEps = this.toOptionalNumber(output.eps);
+    const outputBps = this.toOptionalNumber(output.bps);
+    const naverValuation =
+      outputMarketCap === null ||
+      outputPer === null ||
+      outputPbr === null ||
+      outputEps === null ||
+      outputBps === null
+        ? await this.getNaverKoreanValuation(normalizedSymbol).catch(() => null)
+        : null;
+    const liveMarketCap = outputMarketCap ?? naverValuation?.marketCap ?? null;
     const metrics = this.buildKoreanMetricsFromFinancials(
       financials[0] ?? null,
       output,
     );
+    if (metrics) {
+      metrics.peTTM = outputPer ?? naverValuation?.per ?? metrics.peTTM;
+      metrics.pbAnnual = outputPbr ?? naverValuation?.pbr ?? metrics.pbAnnual;
+      metrics.epsTTM = outputEps ?? naverValuation?.eps ?? metrics.epsTTM;
+      metrics.bpsAnnual = outputBps ?? naverValuation?.bps ?? metrics.bpsAnnual;
+    }
     if (metrics && range52Week) {
       metrics['52WeekHigh'] ??= range52Week.high;
       metrics['52WeekLow'] ??= range52Week.low;
@@ -4918,12 +4937,23 @@ export class MarketsService {
     };
   }
 
-  private async getNaverKoreanMarketCap(symbol: string): Promise<number | null> {
-    const key = `market:capitalization:kr:${symbol}`;
+  private async getNaverKoreanValuation(symbol: string): Promise<{
+    marketCap: number | null;
+    per: number | null;
+    pbr: number | null;
+    eps: number | null;
+    bps: number | null;
+  }> {
+    const key = `market:valuation:kr:v1:${symbol}`;
     const cached = await this.redis.get(key).catch(() => null);
     if (cached) {
-      const value = Number(cached);
-      return Number.isFinite(value) && value > 0 ? value : null;
+      return JSON.parse(cached) as {
+        marketCap: number | null;
+        per: number | null;
+        pbr: number | null;
+        eps: number | null;
+        bps: number | null;
+      };
     }
 
     const response = await fetch(
@@ -4943,18 +4973,32 @@ export class MarketsService {
     const body = (await response.json()) as {
       totalInfos?: Array<{ code?: string; value?: string }>;
     };
-    const text = body.totalInfos?.find(
-      (item) => item.code === 'marketValue',
-    )?.value;
-    if (!text) return null;
+    const values = new Map(
+      (body.totalInfos ?? []).map((item) => [item.code, item.value]),
+    );
+    const marketCapText = values.get('marketValue') ?? '';
+    const trillion = this.toNumber(marketCapText.match(/([\d,]+)조/)?.[1]);
+    const hundredMillion = this.toNumber(
+      marketCapText.match(/([\d,]+)억/)?.[1],
+    );
+    const parsedMarketCap =
+      trillion * 1_000_000_000_000 + hundredMillion * 100_000_000;
+    const parseMetric = (code: string): number | null => {
+      const text = values.get(code)?.replace(/[^\d.-]/g, '');
+      return this.toOptionalNumber(text);
+    };
+    const valuation = {
+      marketCap: parsedMarketCap > 0 ? parsedMarketCap : null,
+      per: parseMetric('per'),
+      pbr: parseMetric('pbr'),
+      eps: parseMetric('eps'),
+      bps: parseMetric('bps'),
+    };
 
-    const trillion = this.toNumber(text.match(/([\d,]+)조/)?.[1]);
-    const hundredMillion = this.toNumber(text.match(/([\d,]+)억/)?.[1]);
-    const value = trillion * 1_000_000_000_000 + hundredMillion * 100_000_000;
-    if (value <= 0) return null;
-
-    await this.redis.set(key, String(value), 'EX', 60).catch(() => undefined);
-    return value;
+    await this.redis
+      .set(key, JSON.stringify(valuation), 'EX', 60)
+      .catch(() => undefined);
+    return valuation;
   }
 
   private async getKoreanFinancialRatio(

@@ -854,15 +854,16 @@ function StockDetailPanel({
         exchangeRate,
       )
     : "-";
+  const isKoreanMarket =
+    detail.profile.currency === "KRW" && detail.profile.country === "대한민국";
   const metricItems = buildMetricItems(
     detail.metrics,
     language,
     priceCurrency,
     detailSourceCurrency,
     exchangeRate,
+    isKoreanMarket,
   );
-  const isKoreanMarket =
-    detail.profile.currency === "KRW" && detail.profile.country === "대한민국";
   const logoUrl =
     detail.profile.logo ||
     (isKoreanMarket
