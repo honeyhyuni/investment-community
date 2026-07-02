@@ -1090,26 +1090,6 @@ function StockDetailPanel({
             }
           />
         </div>
-        <div className="mt-3 grid gap-2 sm:gap-3 md:grid-cols-2">
-          <InfoBox
-            label={translateDetailLabel(language, "open")}
-            value={formatMoney(
-              quote.open,
-              priceCurrency,
-              quote.currency,
-              exchangeRate,
-            )}
-          />
-          <InfoBox
-            label={translateDetailLabel(language, "previousClose")}
-            value={formatMoney(
-              quote.previousClose,
-              priceCurrency,
-              quote.currency,
-              exchangeRate,
-            )}
-          />
-        </div>
       </div>
       <div className="mt-5 rounded-md border border-border p-3 sm:p-4">
         <p className="text-sm font-semibold text-foreground">

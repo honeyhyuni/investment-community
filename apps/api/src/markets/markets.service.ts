@@ -1444,6 +1444,10 @@ export class MarketsService {
       this.getKorean52WeekRange(selectedStock).catch(() => null),
       this.getAllTimeHigh(normalizedSymbol).catch(() => null),
     ]);
+    const liveMarketCap =
+      this.toNumber(output.hts_avls) > 0
+        ? this.toNumber(output.hts_avls) * 100_000_000
+        : await this.getNaverKoreanMarketCap(normalizedSymbol).catch(() => null);
     const metrics = this.buildKoreanMetricsFromFinancials(
       financials[0] ?? null,
       output,
@@ -1481,9 +1485,7 @@ export class MarketsService {
       country: '대한민국',
       finnhubIndustry: '국내주식',
       marketCapitalization:
-        this.toNumber(output.hts_avls) > 0
-          ? this.toNumber(output.hts_avls) * 100_000_000
-          : (financials[0]?.marketCap ?? undefined),
+        liveMarketCap ?? financials[0]?.marketCap ?? undefined,
     };
     if (cachedProfile) {
       profile.name = cachedProfile.name ?? profile.name;
@@ -4914,6 +4916,45 @@ export class MarketsService {
       market_status: body.marketStatus,
       quote_timestamp: body.localTradedAt,
     };
+  }
+
+  private async getNaverKoreanMarketCap(symbol: string): Promise<number | null> {
+    const key = `market:capitalization:kr:${symbol}`;
+    const cached = await this.redis.get(key).catch(() => null);
+    if (cached) {
+      const value = Number(cached);
+      return Number.isFinite(value) && value > 0 ? value : null;
+    }
+
+    const response = await fetch(
+      `https://m.stock.naver.com/api/stock/${encodeURIComponent(symbol)}/integration`,
+      {
+        headers: {
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      },
+    );
+    if (!response.ok) {
+      throw new ServiceUnavailableException(
+        'Naver stock market capitalization request failed.',
+      );
+    }
+    const body = (await response.json()) as {
+      totalInfos?: Array<{ code?: string; value?: string }>;
+    };
+    const text = body.totalInfos?.find(
+      (item) => item.code === 'marketValue',
+    )?.value;
+    if (!text) return null;
+
+    const trillion = this.toNumber(text.match(/([\d,]+)조/)?.[1]);
+    const hundredMillion = this.toNumber(text.match(/([\d,]+)억/)?.[1]);
+    const value = trillion * 1_000_000_000_000 + hundredMillion * 100_000_000;
+    if (value <= 0) return null;
+
+    await this.redis.set(key, String(value), 'EX', 60).catch(() => undefined);
+    return value;
   }
 
   private async getKoreanFinancialRatio(

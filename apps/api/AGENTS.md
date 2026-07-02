@@ -46,6 +46,7 @@ Production sets TypeORM `synchronize: false`. Entity changes require an explicit
 ## Korean Quote Contract
 
 - Korean current price/change/percent change come from Naver/KIS quote output.
+- Korean stock detail market capitalization prefers KIS `hts_avls`; when the faster Naver basic quote wins without that field, read and parse `totalInfos.marketValue` from Naver's integration endpoint. Cache this fallback for 60 seconds and keep it out of the 15-second quote polling path.
 - `/markets/stocks/quote?symbol=<code>&market=KR` is polled by the selected-stock screen.
 - Selected Korean stock polling currently runs every 15 seconds.
 - A selected quote waits for refresh when its Redis value is older than five seconds.

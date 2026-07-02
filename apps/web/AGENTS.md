@@ -187,6 +187,7 @@ Do not replace TipTap with ad hoc paragraph/image block controls.
 - Chart periods include `1D`, `1M`, `3M`, `6M`, `1Y`, `3Y`, `5Y`, and `ALL`, and each selected period displays its return.
 - The 20/50/120-day moving averages are calculated from daily history independently of the visible chart range. They are off by default; enabling them requests `indicators=true`, and server-side indicator results are cached.
 - Korean 52-week ranges use the quote/detail providers with the Naver fallback. The stock header shows drawdown from the 52-week high and split-adjusted all-time high; 52-week high/low are not duplicated in the valuation panel.
+- Stock detail company information intentionally omits open and previous-close boxes; those values remain part of quote calculations but are not displayed there.
 - Recent stocks store canonical symbols but display the Korean company name from stock master data. Country-tab defaults must not be added automatically. The whole list and each individual item can be removed; the former recent-search feature is intentionally absent.
 
 ## Guru Portfolio UI
