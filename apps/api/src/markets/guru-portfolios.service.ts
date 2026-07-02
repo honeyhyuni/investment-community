@@ -118,6 +118,22 @@ const KNOWN_CUSIP_TICKERS: Record<string, string> = {
   '023135106': 'AMZN',
   '22266T109': 'CPNG',
   '92206C870': 'VCIT',
+  'N07059210': 'ASML',
+  'G6683N103': 'NU',
+  'G1151C101': 'ACN',
+  'G3643J108': 'FLUT',
+  'N20944109': 'CNH',
+  'G51502105': 'JCI',
+  'G98239109': 'XP',
+  'D18190898': 'DB',
+  'G48833118': 'WFRD',
+  'G66721104': 'NCLH',
+  'G9618E107': 'WTM',
+  'G0692U109': 'AXS',
+  'G39108108': 'GTES',
+  'G4R20B107': 'INTR',
+  'G52694109': 'KNSA',
+  'H50430232': 'LOGI',
 };
 
 export type GuruHoldingResponse = {
@@ -453,11 +469,11 @@ export class GuruPortfoliosService implements OnModuleInit {
       order: { weight: 'DESC' },
     });
     const tickers = holdings
-      .map((holding) => holding.ticker ?? KNOWN_CUSIP_TICKERS[holding.cusip])
+      .map((holding) => KNOWN_CUSIP_TICKERS[holding.cusip] ?? holding.ticker)
       .filter((ticker): ticker is string => Boolean(ticker));
     const sectorData = await this.buildSectorMap(tickers);
     const mapped = holdings.map((holding) => {
-      const ticker = holding.ticker ?? KNOWN_CUSIP_TICKERS[holding.cusip] ?? '';
+      const ticker = KNOWN_CUSIP_TICKERS[holding.cusip] ?? holding.ticker ?? '';
       return this.toHolding(holding, sectorData.map.get(ticker) ?? null);
     });
     const collectedAtByAccession = await this.buildCollectedAtByAccession([
@@ -1463,12 +1479,12 @@ export class GuruPortfoliosService implements OnModuleInit {
     tickerMap: Map<string, string>,
     cusipTickerMap: Map<string, string>,
   ): string | null {
+    if (KNOWN_CUSIP_TICKERS[cusip]) {
+      return KNOWN_CUSIP_TICKERS[cusip];
+    }
     const masteredTicker = cusipTickerMap.get(cusip);
     if (masteredTicker) {
       return masteredTicker;
-    }
-    if (KNOWN_CUSIP_TICKERS[cusip]) {
-      return KNOWN_CUSIP_TICKERS[cusip];
     }
     const candidates = [
       this.normalizeCompanyName(`${issuer} ${classTitle}`),
@@ -1680,7 +1696,7 @@ export class GuruPortfoliosService implements OnModuleInit {
   ): GuruHoldingResponse {
     return {
       id: holding.id,
-      ticker: holding.ticker ?? KNOWN_CUSIP_TICKERS[holding.cusip] ?? null,
+      ticker: KNOWN_CUSIP_TICKERS[holding.cusip] ?? holding.ticker ?? null,
       issuerName: holding.issuerName,
       cusip: holding.cusip,
       putCall: holding.putCall,
