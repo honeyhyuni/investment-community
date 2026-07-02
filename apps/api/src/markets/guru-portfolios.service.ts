@@ -100,6 +100,26 @@ type NasdaqScreenerRow = {
   lastsale?: string;
 };
 
+const KNOWN_CUSIP_TICKERS: Record<string, string> = {
+  '46137V357': 'RSP',
+  '81369Y605': 'XLF',
+  '02079K305': 'GOOGL',
+  '02079K107': 'GOOG',
+  '861012102': 'STM',
+  '984245100': 'YPF',
+  '632307104': 'NTRA',
+  '11135F101': 'AVGO',
+  '874039100': 'TSM',
+  '78462F103': 'SPY',
+  '060505104': 'BAC',
+  '01609W102': 'BABA',
+  '674599105': 'OXY',
+  '881624209': 'TEVA',
+  '023135106': 'AMZN',
+  '22266T109': 'CPNG',
+  '92206C870': 'VCIT',
+};
+
 export type GuruHoldingResponse = {
   id: string;
   ticker: string | null;
@@ -274,12 +294,13 @@ export class GuruPortfoliosService implements OnModuleInit {
       order: { weight: 'DESC' },
     });
     const tickers = holdings
-      .map((holding) => holding.ticker)
+      .map((holding) => holding.ticker ?? KNOWN_CUSIP_TICKERS[holding.cusip])
       .filter((ticker): ticker is string => Boolean(ticker));
     const sectorData = await this.buildSectorMap(tickers);
-    const mapped = holdings.map((holding) =>
-      this.toHolding(holding, sectorData.map.get(holding.ticker ?? '') ?? null),
-    );
+    const mapped = holdings.map((holding) => {
+      const ticker = holding.ticker ?? KNOWN_CUSIP_TICKERS[holding.cusip] ?? '';
+      return this.toHolding(holding, sectorData.map.get(ticker) ?? null);
+    });
     const collectedAtByAccession = await this.buildCollectedAtByAccession([
       manager.accessionNumber,
     ]);
@@ -1287,26 +1308,8 @@ export class GuruPortfoliosService implements OnModuleInit {
     if (masteredTicker) {
       return masteredTicker;
     }
-    const cusipTicker: Record<string, string> = {
-      '46137V357': 'RSP',
-      '81369Y605': 'XLF',
-      '02079K305': 'GOOGL',
-      '02079K107': 'GOOG',
-      '861012102': 'STM',
-      '984245100': 'YPF',
-      '632307104': 'NTRA',
-      '11135F101': 'AVGO',
-      '874039100': 'TSM',
-      '78462F103': 'SPY',
-      '060505104': 'BAC',
-      '01609W102': 'BABA',
-      '674599105': 'OXY',
-      '881624209': 'TEVA',
-      '023135106': 'AMZN',
-      '22266T109': 'CPNG',
-    };
-    if (cusipTicker[cusip]) {
-      return cusipTicker[cusip];
+    if (KNOWN_CUSIP_TICKERS[cusip]) {
+      return KNOWN_CUSIP_TICKERS[cusip];
     }
     const candidates = [
       this.normalizeCompanyName(`${issuer} ${classTitle}`),
@@ -1518,7 +1521,7 @@ export class GuruPortfoliosService implements OnModuleInit {
   ): GuruHoldingResponse {
     return {
       id: holding.id,
-      ticker: holding.ticker,
+      ticker: holding.ticker ?? KNOWN_CUSIP_TICKERS[holding.cusip] ?? null,
       issuerName: holding.issuerName,
       cusip: holding.cusip,
       putCall: holding.putCall,

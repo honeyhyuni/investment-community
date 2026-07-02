@@ -173,6 +173,7 @@ The Guru/13F feature lives in `src/markets/guru-portfolios.service.ts` and expos
 - Admin manual batch: `POST /api/markets/gurus/batch`
 
 Guru summaries expose `lastCollectedAt`. Detail responses keep active positions in `holdings` for current-portfolio calculations and expose `activityHoldings` for the holdings table; `activityHoldings` includes prior positions whose current weight is zero so full exits remain searchable. The collection timestamp comes from the matching applied EDGAR filing, falling back to the manager update timestamp.
+Known CUSIP-to-ticker overrides must be applied both while storing new holdings and while serializing existing holdings. This keeps unchanged-accession skips from leaving previously stored null tickers visible in the UI; `92206C870` is Vanguard Intermediate-Term Corporate Bond ETF (`VCIT`).
 
 Operational schedule uses `Asia/Seoul` and respects `ENABLE_SCHEDULED_JOBS` like other market jobs.
 
