@@ -17,6 +17,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { UserRole } from '../users/user-role.enum';
 import {
   CandlePoint,
+  CandleChart,
   FavoriteStock,
   IpoCalendarItem,
   MarketNews,
@@ -309,8 +310,13 @@ export class MarketsController {
     @Query('symbol') symbol: string,
     @Query('period') period: ChartPeriod = '1M',
     @Query('market') market?: string,
-  ): Promise<CandlePoint[]> {
-    return this.marketsService.getCandles(symbol, period);
+    @Query('warmup') warmup?: string,
+    @Query('indicators') indicators?: string,
+  ): Promise<CandlePoint[] | CandleChart> {
+    if (indicators === 'true') {
+      return this.marketsService.getCandleChart(symbol, period);
+    }
+    return this.marketsService.getCandles(symbol, period, warmup === 'true');
   }
 
   @Post('profiles/batch')
@@ -414,7 +420,12 @@ export class MarketsController {
     skippedManagers: number;
     failedManagers: number;
     generatedAt: string;
-    secDataset: { managers: number; holdings: number; skippedManagers: number; generatedAt: string } | null;
+    secDataset: {
+      managers: number;
+      holdings: number;
+      skippedManagers: number;
+      generatedAt: string;
+    } | null;
     nasdaq: { scanned: number; updated: number; failed: number };
   }> {
     return this.guruPortfoliosService.refreshOperationalBatch(force === 'true');

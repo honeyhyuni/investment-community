@@ -182,6 +182,21 @@ Do not replace TipTap with ad hoc paragraph/image block controls.
 - All US-to-KRW values on stock prices, charts, financial details, and earnings use the shared Zustand `exchangeRate` loaded from the market-pulse quote `KIS_FX:USDKRW`. Conversion is USD x rate for KRW and KRW / rate for USD.
 - The stock-detail earnings badge is a link to the earnings route. It shows the next scheduled event before release and a recent-period earnings link after actual data arrives.
 
+## Stock Chart And Recent Stocks
+
+- Chart periods include `1D`, `1M`, `3M`, `6M`, `1Y`, `3Y`, `5Y`, and `ALL`, and each selected period displays its return.
+- The 20/50/120-day moving averages are calculated from daily history independently of the visible chart range. They are off by default; enabling them requests `indicators=true`, and server-side indicator results are cached.
+- Korean 52-week ranges use the quote/detail providers with the Naver fallback. The stock header shows drawdown from the 52-week high and split-adjusted all-time high; 52-week high/low are not duplicated in the valuation panel.
+- Korean valuation displays live/cached market capitalization, PER, PBR, EPS, and BPS from the API; ROE remains based on stored financial statements.
+- Stock detail company information intentionally omits open and previous-close boxes; those values remain part of quote calculations but are not displayed there.
+- Recent stocks store canonical symbols but display the Korean company name from stock master data. Country-tab defaults must not be added automatically. The whole list and each individual item can be removed; the former recent-search feature is intentionally absent.
+
+## Guru Portfolio UI
+
+- Guru cards, detail headers, and portfolio maps display the report quarter and last collection time in KST. Freshness badges are green through 3 days, blue through 14 days, amber when older, and explicit when no collection history exists.
+- Guru detail holdings support text search, sector filtering, activity filtering, and sorting. The full-exit filter uses `activityHoldings`; zero-weight positions display a red `전량매도` badge but are excluded from the current portfolio map.
+- Guru detail is touch-first below the `sm`/`md` breakpoints: the primary tabs stay visible while scrolling, holdings sorting uses a compact select, the wide holdings table becomes mobile cards, and the treemap becomes a readable holding list. Desktop keeps the full table and treemap. No guru control may force page-level horizontal overflow.
+
 ## Verification
 
 Run from repository root:
@@ -202,7 +217,7 @@ Before finishing market/community changes, manually verify:
 
 ## Deployment
 
-- Working branch for requested changes: `LSH6` unless the user explicitly creates a newer branch.
+- Working branch for requested changes: `LSH7` unless the user explicitly creates a newer branch.
 - Docker image: `honeyhyuni12/investment-community-web:latest`
 - Current operating VM: `172.16.11.137` (Ubuntu). The previous Rocky VM `172.16.11.126` was replaced after storage/VM corruption.
 - Deployment directory: `/home/ncloud/investment-community`

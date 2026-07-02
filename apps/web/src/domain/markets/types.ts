@@ -3,7 +3,15 @@ import { UsEarningsCalendarItem } from "@/domain/ipo/types";
 
 export type StockTab = "US" | "KR";
 
-export type ChartPeriod = "1D" | "1M" | "1Y" | "3Y" | "5Y" | "ALL";
+export type ChartPeriod =
+  | "1D"
+  | "1M"
+  | "3M"
+  | "6M"
+  | "1Y"
+  | "3Y"
+  | "5Y"
+  | "ALL";
 
 export type StockDetail = {
   symbol: string;
@@ -81,6 +89,16 @@ export type CandlePoint = {
   low: number;
   close: number;
   volume: number;
+};
+
+export type MovingAveragePoint = {
+  time: number;
+  value: number;
+};
+
+export type CandleChart = {
+  candles: CandlePoint[];
+  movingAverages: Record<"20" | "50" | "120", MovingAveragePoint[]>;
 };
 
 export type MarketNews = {

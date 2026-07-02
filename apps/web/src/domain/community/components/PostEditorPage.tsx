@@ -16,10 +16,43 @@ import { useSessionStore } from "@/common/stores/session";
 import { CommunityContentBlock, CommunityPost, StockTag } from "@/domain/community/types";
 import { PostEditor } from "@/domain/community/components/PostEditor";
 
+const COMMUNITY_DRAFT_VERSION = 1;
+
+type CommunityPostDraft = {
+  version: typeof COMMUNITY_DRAFT_VERSION;
+  title: string;
+  blocks: CommunityContentBlock[];
+  tags: StockTag[];
+  savedAt: string;
+};
+
+function readCommunityDraft(key: string): CommunityPostDraft | null {
+  try {
+    const value = window.localStorage.getItem(key);
+    if (!value) {
+      return null;
+    }
+    const draft = JSON.parse(value) as Partial<CommunityPostDraft>;
+    if (
+      draft.version !== COMMUNITY_DRAFT_VERSION ||
+      typeof draft.title !== "string" ||
+      !Array.isArray(draft.blocks) ||
+      !Array.isArray(draft.tags) ||
+      typeof draft.savedAt !== "string"
+    ) {
+      return null;
+    }
+    return draft as CommunityPostDraft;
+  } catch {
+    return null;
+  }
+}
+
 /** 새 글(`/community/new`) · 수정(`/community/[postId]/edit`) 공유 에디터 라우트. */
 export function PostEditorPage({ postId }: { postId?: string }) {
   const router = useRouter();
   const accessToken = useSessionStore((s) => s.accessToken);
+  const userId = useSessionStore((s) => s.user?.id ?? null);
   const usStocks = useMarketDataStore((s) => s.usStocks);
   const usSymbols = useMarketDataStore((s) => s.usSymbols);
   const krStocks = useMarketDataStore((s) => s.krStocks);
@@ -38,8 +71,31 @@ export function PostEditorPage({ postId }: { postId?: string }) {
   const [tags, setTags] = useState<StockTag[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [draftError, setDraftError] = useState("");
 
   const stockSymbols = useMemo(() => [...krSymbols, ...usSymbols], [krSymbols, usSymbols]);
+  const draftKey = useMemo(
+    () => userId ? `15f:community-draft:${userId}:${postId ?? "new"}` : null,
+    [postId, userId],
+  );
+
+  const restoreDraft = useCallback((key: string) => {
+    const draft = readCommunityDraft(key);
+    if (!draft) {
+      return false;
+    }
+    setTitle(draft.title);
+    setBlocks(draft.blocks.length ? draft.blocks : [
+      { id: makeEditorBlockId(), type: "text", text: "" },
+    ]);
+    setTags(draft.tags);
+    setDraftSavedAt(draft.savedAt);
+    setDraftRestored(true);
+    return true;
+  }, []);
 
   useEffect(() => {
     if (accessToken) {
@@ -48,7 +104,7 @@ export function PostEditorPage({ postId }: { postId?: string }) {
   }, [accessToken, loadStockSymbols]);
 
   // 수정 모드: 기존 글을 불러와 에디터에 prefill
-  const loadExistingPost = useCallback(async (token: string, targetId: string) => {
+  const loadExistingPost = useCallback(async (token: string, targetId: string, key: string) => {
     setLoading(true);
     setError("");
     try {
@@ -60,21 +116,33 @@ export function PostEditorPage({ postId }: { postId?: string }) {
       setTitle(post.title ?? "");
       setBlocks([{ id: makeEditorBlockId(), type: "text", text: getPostHtml(post) }]);
       setTags(post.stockTags);
+      restoreDraft(key);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Could not load post.");
     } finally {
       setLoading(false);
+      setDraftReady(true);
     }
-  }, []);
+  }, [restoreDraft]);
 
   useEffect(() => {
-    if (!accessToken || !postId) {
+    if (!accessToken || !postId || !draftKey) {
       return;
     }
     queueMicrotask(() => {
-      loadExistingPost(accessToken, postId);
+      loadExistingPost(accessToken, postId, draftKey);
     });
-  }, [accessToken, postId, loadExistingPost]);
+  }, [accessToken, draftKey, postId, loadExistingPost]);
+
+  useEffect(() => {
+    if (!accessToken || postId || !draftKey) {
+      return;
+    }
+    queueMicrotask(() => {
+      restoreDraft(draftKey);
+      setDraftReady(true);
+    });
+  }, [accessToken, draftKey, postId, restoreDraft]);
 
   // 태그 칩 시세 표시용 quote 로딩
   useEffect(() => {
@@ -86,6 +154,43 @@ export function PostEditorPage({ postId }: { postId?: string }) {
       accessToken,
     );
   }, [accessToken, loadStockQuotes, tags, stockSymbols]);
+
+  const saveDraft = useCallback((manual = true) => {
+    if (!draftKey || !draftReady) {
+      return;
+    }
+    const html = blocks.find((block) => block.type === "text")?.text ?? "";
+    const untouchedNewPost =
+      !postId && !title.trim() && html === NEW_POST_TEMPLATE && tags.length === 0;
+    if (!manual && untouchedNewPost) {
+      return;
+    }
+
+    const savedAt = new Date().toISOString();
+    const draft: CommunityPostDraft = {
+      version: COMMUNITY_DRAFT_VERSION,
+      title,
+      blocks,
+      tags,
+      savedAt,
+    };
+    try {
+      window.localStorage.setItem(draftKey, JSON.stringify(draft));
+      setDraftSavedAt(savedAt);
+      setDraftRestored(false);
+      setDraftError("");
+    } catch {
+      setDraftError("임시저장 공간이 부족합니다. 큰 이미지를 줄인 뒤 다시 시도해 주세요.");
+    }
+  }, [blocks, draftKey, draftReady, postId, tags, title]);
+
+  useEffect(() => {
+    if (!draftReady) {
+      return;
+    }
+    const timeout = window.setTimeout(() => saveDraft(false), 1200);
+    return () => window.clearTimeout(timeout);
+  }, [draftReady, saveDraft]);
 
   async function savePost() {
     const html = blocks.find((block) => block.type === "text")?.text?.trim() ?? "";
@@ -115,6 +220,9 @@ export function PostEditorPage({ postId }: { postId?: string }) {
           },
         },
       );
+      if (draftKey) {
+        window.localStorage.removeItem(draftKey);
+      }
       router.push(`/community/${postId ?? result.id}`);
     } catch (postError) {
       setError(postError instanceof Error ? postError.message : "Could not post.");
@@ -144,6 +252,10 @@ export function PostEditorPage({ postId }: { postId?: string }) {
           exchangeRate={exchangeRate}
           editingPostId={postId ?? null}
           loading={loading}
+          draftSavedAt={draftSavedAt}
+          draftRestored={draftRestored}
+          draftError={draftError}
+          onSaveDraft={() => saveDraft(true)}
           onSubmit={savePost}
           onCancel={() => router.back()}
         />

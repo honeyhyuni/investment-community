@@ -12,6 +12,7 @@ import Redis from 'ioredis';
 import {
   CandlePoint,
   ChartPeriod,
+  CandleChart,
   CompanyProfile,
   CompanyMetrics,
   FinnhubQuote,
@@ -1135,7 +1136,7 @@ export class MarketsService {
       }
     }
 
-    const [metrics, nextEarnings, usFinancials] = await Promise.all([
+    const [metrics, nextEarnings, usFinancials, allTimeHigh] = await Promise.all([
       this.getMetrics(normalizedSymbol).catch(() => null),
       this.getNextUsEarnings(normalizedSymbol),
       this.usStockFinancials.getIfSp500(normalizedSymbol).catch((error) => {
@@ -1146,11 +1147,15 @@ export class MarketsService {
         );
         return null;
       }),
+      this.getAllTimeHigh(normalizedSymbol).catch(() => null),
     ]);
 
     const displayMetrics = usFinancials
       ? this.buildUsSp500Metrics(usFinancials, quote.current, profile, metrics)
       : metrics;
+    if (displayMetrics && allTimeHigh) {
+      displayMetrics['AllTimeHigh'] = allTimeHigh;
+    }
 
     return {
       symbol: normalizedSymbol,
@@ -1427,18 +1432,52 @@ export class MarketsService {
         });
       }
     }
-    const financials = await this.getKoreanFinancials(normalizedSymbol);
     const fallbackStock: KisStock = {
       symbol: normalizedSymbol,
       name: masterStock?.name ?? normalizedSymbol,
       marketDiv: masterStock?.market === 'KR:KOSDAQ' ? 'Q' : 'J',
     };
     const selectedStock = stock ?? fallbackStock;
-    const output = await this.getKoreanPriceOutputCached(selectedStock);
+    const [financials, output, range52Week, allTimeHigh] = await Promise.all([
+      this.getKoreanFinancials(normalizedSymbol),
+      this.getKoreanPriceOutputCached(selectedStock),
+      this.getKorean52WeekRange(selectedStock).catch(() => null),
+      this.getAllTimeHigh(normalizedSymbol).catch(() => null),
+    ]);
+    const outputMarketCap =
+      this.toNumber(output.hts_avls) > 0
+        ? this.toNumber(output.hts_avls) * 100_000_000
+        : null;
+    const outputPer = this.toOptionalNumber(output.per);
+    const outputPbr = this.toOptionalNumber(output.pbr);
+    const outputEps = this.toOptionalNumber(output.eps);
+    const outputBps = this.toOptionalNumber(output.bps);
+    const naverValuation =
+      outputMarketCap === null ||
+      outputPer === null ||
+      outputPbr === null ||
+      outputEps === null ||
+      outputBps === null
+        ? await this.getNaverKoreanValuation(normalizedSymbol).catch(() => null)
+        : null;
+    const liveMarketCap = outputMarketCap ?? naverValuation?.marketCap ?? null;
     const metrics = this.buildKoreanMetricsFromFinancials(
       financials[0] ?? null,
       output,
     );
+    if (metrics) {
+      metrics.peTTM = outputPer ?? naverValuation?.per ?? metrics.peTTM;
+      metrics.pbAnnual = outputPbr ?? naverValuation?.pbr ?? metrics.pbAnnual;
+      metrics.epsTTM = outputEps ?? naverValuation?.eps ?? metrics.epsTTM;
+      metrics.bpsAnnual = outputBps ?? naverValuation?.bps ?? metrics.bpsAnnual;
+    }
+    if (metrics && range52Week) {
+      metrics['52WeekHigh'] ??= range52Week.high;
+      metrics['52WeekLow'] ??= range52Week.low;
+    }
+    if (metrics && allTimeHigh) {
+      metrics['AllTimeHigh'] = allTimeHigh;
+    }
     const stockName =
       masterStock?.name ?? cachedProfile?.name ?? selectedStock.name;
     const quote: MarketQuote = {
@@ -1465,9 +1504,7 @@ export class MarketsService {
       country: '대한민국',
       finnhubIndustry: '국내주식',
       marketCapitalization:
-        this.toNumber(output.hts_avls) > 0
-          ? this.toNumber(output.hts_avls) * 100_000_000
-          : (financials[0]?.marketCap ?? undefined),
+        liveMarketCap ?? financials[0]?.marketCap ?? undefined,
     };
     if (cachedProfile) {
       profile.name = cachedProfile.name ?? profile.name;
@@ -1691,11 +1728,43 @@ export class MarketsService {
     await this.runScheduledMarketBriefing('US');
   }
 
+  @Cron('0 40 8 * * 2-6', { timeZone: 'Asia/Seoul' })
+  async retryScheduledUsMarketBriefingEarly(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) {
+      return;
+    }
+    await this.runScheduledMarketBriefing('US');
+  }
+
+  @Cron('0 0,30 9 * * 2-6', { timeZone: 'Asia/Seoul' })
+  async retryScheduledUsMarketBriefingLate(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) {
+      return;
+    }
+    await this.runScheduledMarketBriefing('US');
+  }
+
   // 한국장 마켓브리핑 cron. 운영환경에서 장 마감 후 오늘장 요약을 생성한다.
   @Cron('0 55 15 * * 1-5', { timeZone: 'Asia/Seoul' })
   async runScheduledKrMarketBriefing(): Promise<void> {
     if (!this.isScheduledJobsEnabled()) {
       this.logger.log('Scheduled KR market briefing disabled.');
+      return;
+    }
+    await this.runScheduledMarketBriefing('KR');
+  }
+
+  @Cron('0 10,30 16 * * 1-5', { timeZone: 'Asia/Seoul' })
+  async retryScheduledKrMarketBriefingEarly(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) {
+      return;
+    }
+    await this.runScheduledMarketBriefing('KR');
+  }
+
+  @Cron('0 0 17 * * 1-5', { timeZone: 'Asia/Seoul' })
+  async retryScheduledKrMarketBriefingLate(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) {
       return;
     }
     await this.runScheduledMarketBriefing('KR');
@@ -2207,9 +2276,10 @@ export class MarketsService {
   async getCandles(
     symbol: string,
     period: ChartPeriod,
+    warmup = false,
   ): Promise<CandlePoint[]> {
     const normalizedSymbol = symbol.toUpperCase().trim();
-    const cacheKey = `market:candles:v1:${normalizedSymbol}:${period}`;
+    const cacheKey = `market:candles:v4:${normalizedSymbol}:${period}:${warmup ? 'warmup' : 'display'}`;
     const cached = await this.redis
       .get(cacheKey)
       .then((value) => (value ? (JSON.parse(value) as CandlePoint[]) : null))
@@ -2219,7 +2289,7 @@ export class MarketsService {
       return cached;
     }
 
-    const candles = await this.loadCandles(normalizedSymbol, period);
+    const candles = await this.loadCandles(normalizedSymbol, period, warmup);
     const ttl = period === '1D' ? 60 : 6 * 60 * 60;
     await this.redis
       .set(cacheKey, JSON.stringify(candles), 'EX', ttl)
@@ -2227,16 +2297,95 @@ export class MarketsService {
     return candles;
   }
 
+  async getCandleChart(
+    symbol: string,
+    period: ChartPeriod,
+  ): Promise<CandleChart> {
+    const normalizedSymbol = symbol.toUpperCase().trim();
+    const cacheKey = `market:candle-chart:v2:${normalizedSymbol}:${period}`;
+    const cached = await this.redis
+      .get(cacheKey)
+      .then((value) => (value ? (JSON.parse(value) as CandleChart) : null))
+      .catch(() => null);
+    if (cached) return cached;
+
+    const [candles, warmupCandles] = await Promise.all([
+      this.getCandles(normalizedSymbol, period),
+      this.getCandles(normalizedSymbol, period, true),
+    ]);
+    const source = warmupCandles.length ? warmupCandles : candles;
+    const visibleFrom = candles.reduce(
+      (earliest, candle) => Math.min(earliest, candle.time),
+      Number.POSITIVE_INFINITY,
+    );
+    const chart: CandleChart = {
+      candles,
+      movingAverages: {
+        '20': this.calculateMovingAverage(source, 20, visibleFrom),
+        '50': this.calculateMovingAverage(source, 50, visibleFrom),
+        '120': this.calculateMovingAverage(source, 120, visibleFrom),
+      },
+    };
+    const ttl = period === '1D' ? 60 : 6 * 60 * 60;
+    await this.redis
+      .set(cacheKey, JSON.stringify(chart), 'EX', ttl)
+      .catch(() => undefined);
+    return chart;
+  }
+
+  private async getAllTimeHigh(symbol: string): Promise<number | null> {
+    const normalizedSymbol = symbol.toUpperCase().trim();
+    const cacheKey = `market:all-time-high:v2:${normalizedSymbol}`;
+    const cached = await this.redis
+      .get(cacheKey)
+      .then((value) => (value ? Number(value) : null))
+      .catch(() => null);
+    if (cached && Number.isFinite(cached) && cached > 0) {
+      return cached;
+    }
+
+    const candles = await this.getCandles(normalizedSymbol, 'ALL');
+    const highs = candles
+      .map((candle) => candle.high)
+      .filter((value) => Number.isFinite(value) && value > 0);
+    if (!highs.length) return null;
+
+    const high = Math.max(...highs);
+    await this.redis
+      .set(cacheKey, String(high), 'EX', 24 * 60 * 60)
+      .catch(() => undefined);
+    return high;
+  }
+
+  private calculateMovingAverage(
+    source: CandlePoint[],
+    period: number,
+    visibleFrom: number,
+  ): Array<{ time: number; value: number }> {
+    const candles = [...source].sort((a, b) => a.time - b.time);
+    let total = 0;
+    const result: Array<{ time: number; value: number }> = [];
+    candles.forEach((candle, index) => {
+      total += candle.close;
+      if (index >= period) total -= candles[index - period].close;
+      if (index >= period - 1 && candle.time >= visibleFrom) {
+        result.push({ time: candle.time, value: total / period });
+      }
+    });
+    return result;
+  }
+
   private async loadCandles(
     symbol: string,
     period: ChartPeriod,
+    warmup = false,
   ): Promise<CandlePoint[]> {
     if (/^\d{6}$/.test(symbol)) {
-      return this.getKoreanCandles(symbol, period);
+      return this.getKoreanCandles(symbol, period, warmup);
     }
 
     const yahooSymbol = this.toYahooSymbol(symbol);
-    const { range, interval } = this.toYahooRange(period);
+    const { range, interval } = this.toYahooRange(period, warmup);
     const url = new URL(
       `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
         yahooSymbol,
@@ -2291,6 +2440,7 @@ export class MarketsService {
   private async getKoreanCandles(
     symbol: string,
     period: ChartPeriod,
+    warmup = false,
   ): Promise<CandlePoint[]> {
     const stock = DEFAULT_KR_STOCKS_CLEAN.find(
       (item) => item.symbol === symbol,
@@ -2301,6 +2451,8 @@ export class MarketsService {
     };
     const end = new Date();
     const start = new Date(end);
+    let periodDivCode: 'D' | 'W' | 'M' = 'D';
+    let maxPages = 1;
 
     switch (period) {
       case '1D':
@@ -2309,52 +2461,123 @@ export class MarketsService {
       case '1M':
         start.setMonth(start.getMonth() - 2);
         break;
+      case '3M':
+        start.setMonth(start.getMonth() - 3);
+        break;
+      case '6M':
+        start.setMonth(start.getMonth() - 6);
+        maxPages = 3;
+        break;
       case '1Y':
         start.setFullYear(start.getFullYear() - 1);
+        maxPages = 4;
         break;
       case '3Y':
         start.setFullYear(start.getFullYear() - 3);
+        periodDivCode = 'W';
+        maxPages = 3;
         break;
       case '5Y':
-      case 'ALL':
         start.setFullYear(start.getFullYear() - 5);
+        periodDivCode = 'W';
+        maxPages = 4;
+        break;
+      case 'ALL':
+        start.setFullYear(1970, 0, 1);
+        periodDivCode = 'M';
+        maxPages = 8;
         break;
       default:
         start.setMonth(start.getMonth() - 2);
         break;
     }
 
-    const response = await this.kisGet<KisDailyCandleResponse>(
-      '/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice',
-      {
-        FID_COND_MRKT_DIV_CODE: stock.marketDiv,
-        FID_INPUT_ISCD: stock.symbol,
-        FID_INPUT_DATE_1: this.formatKisDate(start),
-        FID_INPUT_DATE_2: this.formatKisDate(end),
-        FID_PERIOD_DIV_CODE: 'D',
-        FID_ORG_ADJ_PRC: '1',
-      },
-      'FHKST03010100',
-    );
+    if (warmup) {
+      if (period === '1D') {
+        start.setDate(start.getDate() - 7);
+        maxPages = Math.max(maxPages, 2);
+      } else if (period === '1M' || period === '3M') {
+        start.setMonth(start.getMonth() - 8);
+        maxPages = Math.max(maxPages, 3);
+      } else if (period === '6M' || period === '1Y') {
+        start.setMonth(start.getMonth() - 8);
+        maxPages = Math.max(maxPages, 5);
+      } else if (period === '3Y' || period === '5Y') {
+        start.setFullYear(start.getFullYear() - 3);
+        maxPages = Math.max(maxPages, 7);
+      }
+    }
 
-    const rows = response.output2 ?? [];
-    return rows
-      .map((row) => ({
-        time: this.kisDateToUnix(row.stck_bsop_date),
-        open: this.toNumber(row.stck_oprc),
-        high: this.toNumber(row.stck_hgpr),
-        low: this.toNumber(row.stck_lwpr),
-        close: this.toNumber(row.stck_clpr),
-        volume: this.toNumber(row.acml_vol),
-      }))
-      .filter(
-        (point) =>
+    const startDate = this.formatKisDate(start);
+    let cursorEnd = new Date(end);
+    const candlesByTime = new Map<number, CandlePoint>();
+
+    for (let page = 0; page < maxPages; page += 1) {
+      const response = await this.kisGet<KisDailyCandleResponse>(
+        '/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice',
+        {
+          FID_COND_MRKT_DIV_CODE: stock.marketDiv,
+          FID_INPUT_ISCD: stock.symbol,
+          FID_INPUT_DATE_1: startDate,
+          FID_INPUT_DATE_2: this.formatKisDate(cursorEnd),
+          FID_PERIOD_DIV_CODE: periodDivCode,
+          FID_ORG_ADJ_PRC: '0',
+        },
+        'FHKST03010100',
+      );
+
+      if (response.rt_cd && response.rt_cd !== '0') {
+        throw new ServiceUnavailableException(
+          `KIS chart request failed: ${response.msg1 ?? response.msg_cd ?? response.rt_cd}`,
+        );
+      }
+
+      const rows = response.output2 ?? [];
+      let oldestDate = '';
+      rows.forEach((row) => {
+        const rowDate = row.stck_bsop_date ?? '';
+        if (/^\d{8}$/.test(rowDate) && (!oldestDate || rowDate < oldestDate)) {
+          oldestDate = rowDate;
+        }
+        const point = {
+          time: this.kisDateToUnix(rowDate),
+          open: this.toNumber(row.stck_oprc),
+          high: this.toNumber(row.stck_hgpr),
+          low: this.toNumber(row.stck_lwpr),
+          close: this.toNumber(row.stck_clpr),
+          volume: this.toNumber(row.acml_vol),
+        };
+        if (
           point.time > 0 &&
           point.open > 0 &&
           point.high > 0 &&
           point.low > 0 &&
-          point.close > 0,
-      )
+          point.close > 0
+        ) {
+          candlesByTime.set(point.time, point);
+        }
+      });
+
+      if (!oldestDate || oldestDate <= startDate || rows.length < 100) {
+        break;
+      }
+
+      const nextEnd = new Date(
+        Date.UTC(
+          Number(oldestDate.slice(0, 4)),
+          Number(oldestDate.slice(4, 6)) - 1,
+          Number(oldestDate.slice(6, 8)) - 1,
+        ),
+      );
+      if (nextEnd >= cursorEnd) {
+        break;
+      }
+      cursorEnd = nextEnd;
+    }
+
+    const startTime = this.kisDateToUnix(startDate);
+    return [...candlesByTime.values()]
+      .filter((point) => point.time >= startTime)
       .sort((a, b) => a.time - b.time);
   }
 
@@ -4520,6 +4743,85 @@ export class MarketsService {
     };
   }
 
+  private async getKorean52WeekRange(
+    stock: KisStock,
+  ): Promise<{ high: number; low: number } | null> {
+    const key = `market:range52:kr:${stock.symbol}`;
+    const cached = await this.redis
+      .get(key)
+      .then((value) =>
+        value ? (JSON.parse(value) as { high: number; low: number }) : null,
+      )
+      .catch(() => null);
+    if (cached && cached.high > 0 && cached.low > 0) return cached;
+
+    const kisRange = await this.kisGet<KisPriceResponse>(
+      '/uapi/domestic-stock/v1/quotations/inquire-price',
+      {
+        FID_COND_MRKT_DIV_CODE: stock.marketDiv,
+        FID_INPUT_ISCD: stock.symbol,
+      },
+    )
+      .then((response) => {
+        const output = response.output ?? {};
+        return {
+          high: this.toOptionalNumber(output.w52_hgpr ?? output.stck_hgpr_52w),
+          low: this.toOptionalNumber(output.w52_lwpr ?? output.stck_lwpr_52w),
+        };
+      })
+      .catch(() => null);
+
+    let range =
+      kisRange?.high && kisRange.low
+        ? { high: kisRange.high, low: kisRange.low }
+        : null;
+    if (!range) {
+      range = await this.getNaverKorean52WeekRange(stock.symbol).catch(
+        () => null,
+      );
+    }
+    if (range) {
+      await this.redis
+        .set(key, JSON.stringify(range), 'EX', 12 * 60 * 60)
+        .catch(() => undefined);
+    }
+    return range;
+  }
+
+  private async getNaverKorean52WeekRange(
+    symbol: string,
+  ): Promise<{ high: number; low: number } | null> {
+    const pages = await Promise.all(
+      Array.from({ length: 13 }, (_, index) =>
+        fetch(
+          `https://m.stock.naver.com/api/stock/${encodeURIComponent(symbol)}/price?pageSize=20&page=${index + 1}`,
+          { headers: { 'user-agent': 'Mozilla/5.0' } },
+        ).then(async (response) => {
+          if (!response.ok) return [];
+          return (await response.json()) as Array<{
+            localTradedAt?: string;
+            highPrice?: string;
+            lowPrice?: string;
+          }>;
+        }),
+      ),
+    );
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - 1);
+    const cutoffText = cutoff.toISOString().slice(0, 10);
+    const rows = pages.flat().filter((row) => {
+      return !row.localTradedAt || row.localTradedAt >= cutoffText;
+    });
+    const highs = rows
+      .map((row) => this.toOptionalNumber(row.highPrice))
+      .filter((value): value is number => value !== null && value > 0);
+    const lows = rows
+      .map((row) => this.toOptionalNumber(row.lowPrice))
+      .filter((value): value is number => value !== null && value > 0);
+    if (!highs.length || !lows.length) return null;
+    return { high: Math.max(...highs), low: Math.min(...lows) };
+  }
+
   private async getKoreanPriceOutputCached(
     stock: KisStock,
     maxAgeMs = 20_000,
@@ -4633,6 +4935,70 @@ export class MarketsService {
       market_status: body.marketStatus,
       quote_timestamp: body.localTradedAt,
     };
+  }
+
+  private async getNaverKoreanValuation(symbol: string): Promise<{
+    marketCap: number | null;
+    per: number | null;
+    pbr: number | null;
+    eps: number | null;
+    bps: number | null;
+  }> {
+    const key = `market:valuation:kr:v1:${symbol}`;
+    const cached = await this.redis.get(key).catch(() => null);
+    if (cached) {
+      return JSON.parse(cached) as {
+        marketCap: number | null;
+        per: number | null;
+        pbr: number | null;
+        eps: number | null;
+        bps: number | null;
+      };
+    }
+
+    const response = await fetch(
+      `https://m.stock.naver.com/api/stock/${encodeURIComponent(symbol)}/integration`,
+      {
+        headers: {
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      },
+    );
+    if (!response.ok) {
+      throw new ServiceUnavailableException(
+        'Naver stock market capitalization request failed.',
+      );
+    }
+    const body = (await response.json()) as {
+      totalInfos?: Array<{ code?: string; value?: string }>;
+    };
+    const values = new Map(
+      (body.totalInfos ?? []).map((item) => [item.code, item.value]),
+    );
+    const marketCapText = values.get('marketValue') ?? '';
+    const trillion = this.toNumber(marketCapText.match(/([\d,]+)조/)?.[1]);
+    const hundredMillion = this.toNumber(
+      marketCapText.match(/([\d,]+)억/)?.[1],
+    );
+    const parsedMarketCap =
+      trillion * 1_000_000_000_000 + hundredMillion * 100_000_000;
+    const parseMetric = (code: string): number | null => {
+      const text = values.get(code)?.replace(/[^\d.-]/g, '');
+      return this.toOptionalNumber(text);
+    };
+    const valuation = {
+      marketCap: parsedMarketCap > 0 ? parsedMarketCap : null,
+      per: parseMetric('per'),
+      pbr: parseMetric('pbr'),
+      eps: parseMetric('eps'),
+      bps: parseMetric('bps'),
+    };
+
+    await this.redis
+      .set(key, JSON.stringify(valuation), 'EX', 60)
+      .catch(() => undefined);
+    return valuation;
   }
 
   private async getKoreanFinancialRatio(
@@ -4903,15 +5269,40 @@ export class MarketsService {
     return ['QQQ', 'SPY', 'DIA', 'GLD', 'USO'].includes(symbol);
   }
 
-  private toYahooRange(period: ChartPeriod): {
+  private toYahooRange(
+    period: ChartPeriod,
+    warmup = false,
+  ): {
     range: string;
     interval: string;
   } {
+    if (warmup) {
+      switch (period) {
+        case '1D':
+          return { range: '5d', interval: '5m' };
+        case '1M':
+        case '3M':
+          return { range: '1y', interval: '1d' };
+        case '6M':
+        case '1Y':
+          return { range: '2y', interval: '1d' };
+        case '3Y':
+          return { range: '5y', interval: '1wk' };
+        case '5Y':
+          return { range: '10y', interval: '1wk' };
+        case 'ALL':
+          return { range: 'max', interval: '1mo' };
+      }
+    }
     switch (period) {
       case '1D':
         return { range: '1d', interval: '5m' };
       case '1M':
         return { range: '1mo', interval: '1d' };
+      case '3M':
+        return { range: '3mo', interval: '1d' };
+      case '6M':
+        return { range: '6mo', interval: '1d' };
       case '1Y':
         return { range: '1y', interval: '1d' };
       case '3Y':

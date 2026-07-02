@@ -16,7 +16,8 @@ export type AppNotification = {
     | "COMMENT"
     | "LIKE"
     | "NEW_POST"
-    | "MARKET_BRIEFING";
+    | "MARKET_BRIEFING"
+    | "ACCOUNT";
   title: string;
   body: string;
   url: string;

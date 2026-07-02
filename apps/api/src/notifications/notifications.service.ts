@@ -199,6 +199,44 @@ export class NotificationsService {
     );
   }
 
+  async sendSystemToUser(
+    userId: string,
+    message: NotificationMessage,
+    dedupeKey?: string,
+  ): Promise<boolean> {
+    if (dedupeKey && !(await this.claimDelivery(userId, dedupeKey, message))) {
+      return false;
+    }
+    const notification = await this.notifications.save(
+      this.notifications.create({
+        userId,
+        type: message.type,
+        title: message.title.slice(0, 240),
+        body: message.body,
+        url: message.url,
+        data: message.data ?? {},
+        readAt: null,
+      }),
+    );
+    await this.sendPush(userId, {
+      ...message,
+      notificationId: notification.id,
+    });
+    return true;
+  }
+
+  async sendSystemToUsers(
+    userIds: string[],
+    message: NotificationMessage,
+    dedupeKey?: (userId: string) => string,
+  ): Promise<void> {
+    await Promise.allSettled(
+      [...new Set(userIds)].map((userId) =>
+        this.sendSystemToUser(userId, message, dedupeKey?.(userId)),
+      ),
+    );
+  }
+
   async claimDelivery(
     userId: string | null,
     dedupeKey: string,

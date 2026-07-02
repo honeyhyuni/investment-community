@@ -100,6 +100,42 @@ type NasdaqScreenerRow = {
   lastsale?: string;
 };
 
+const KNOWN_CUSIP_TICKERS: Record<string, string> = {
+  '46137V357': 'RSP',
+  '81369Y605': 'XLF',
+  '02079K305': 'GOOGL',
+  '02079K107': 'GOOG',
+  '861012102': 'STM',
+  '984245100': 'YPF',
+  '632307104': 'NTRA',
+  '11135F101': 'AVGO',
+  '874039100': 'TSM',
+  '78462F103': 'SPY',
+  '060505104': 'BAC',
+  '01609W102': 'BABA',
+  '674599105': 'OXY',
+  '881624209': 'TEVA',
+  '023135106': 'AMZN',
+  '22266T109': 'CPNG',
+  '92206C870': 'VCIT',
+  'N07059210': 'ASML',
+  'G6683N103': 'NU',
+  'G1151C101': 'ACN',
+  'G3643J108': 'FLUT',
+  'N20944109': 'CNH',
+  'G51502105': 'JCI',
+  'G98239109': 'XP',
+  'D18190898': 'DB',
+  'G48833118': 'WFRD',
+  'G66721104': 'NCLH',
+  'G9618E107': 'WTM',
+  'G0692U109': 'AXS',
+  'G39108108': 'GTES',
+  'G4R20B107': 'INTR',
+  'G52694109': 'KNSA',
+  'H50430232': 'LOGI',
+};
+
 export type GuruHoldingResponse = {
   id: string;
   ticker: string | null;
@@ -123,6 +159,7 @@ export type GuruSummaryResponse = {
   firmName: string;
   reportDate: string | null;
   filingDate: string | null;
+  lastCollectedAt: string | null;
   totalValue: number;
   positionCount: number;
   topHolding: GuruHoldingResponse | null;
@@ -132,6 +169,7 @@ export type GuruDetailResponse = GuruSummaryResponse & {
   topBuys: GuruHoldingResponse[];
   topSells: GuruHoldingResponse[];
   holdings: GuruHoldingResponse[];
+  activityHoldings: GuruHoldingResponse[];
   dataSource: string;
   returnAsOf: string | null;
   stats: {
@@ -185,8 +223,9 @@ export class GuruPortfoliosService implements OnModuleInit {
       return;
     }
     const result = await this.refreshFromEdgarFilings();
+    const tickerMappings = await this.refreshMissingTickerMappings();
     this.logger.log(
-      `Scheduled guru EDGAR fast batch completed: managers=${result.managers}, holdings=${result.holdings}, skipped=${result.skippedManagers}, failed=${result.failedManagers}, generatedAt=${result.generatedAt}.`,
+      `Scheduled guru EDGAR fast batch completed: managers=${result.managers}, holdings=${result.holdings}, skipped=${result.skippedManagers}, failed=${result.failedManagers}, mapped=${tickerMappings.mapped}, unresolved=${tickerMappings.unresolved}, generatedAt=${result.generatedAt}.`,
     );
   }
 
@@ -209,9 +248,10 @@ export class GuruPortfoliosService implements OnModuleInit {
       this.logger.log('Scheduled guru Nasdaq classification batch disabled.');
       return;
     }
+    const tickerMappings = await this.refreshMissingTickerMappings();
     const result = await this.refreshNasdaqClassifications();
     this.logger.log(
-      `Scheduled guru Nasdaq classification batch completed: scanned=${result.scanned}, updated=${result.updated}, failed=${result.failed}.`,
+      `Scheduled guru Nasdaq classification batch completed: mapped=${tickerMappings.mapped}, unresolved=${tickerMappings.unresolved}, scanned=${result.scanned}, updated=${result.updated}, failed=${result.failed}.`,
     );
   }
 
@@ -222,12 +262,169 @@ export class GuruPortfoliosService implements OnModuleInit {
     failedManagers: number;
     generatedAt: string;
     secDataset: { managers: number; holdings: number; skippedManagers: number; generatedAt: string } | null;
+    tickerMappings: { scanned: number; mapped: number; unresolved: number; failed: number };
     nasdaq: { scanned: number; updated: number; failed: number };
   }> {
     const edgar = await this.refreshFromEdgarFilings({ force });
     const secDataset = edgar.holdings > 0 ? null : await this.refreshFromSecDatasets({ force });
+    const tickerMappings = await this.refreshMissingTickerMappings();
     const nasdaq = await this.refreshNasdaqClassifications();
-    return { ...edgar, secDataset, nasdaq };
+    return { ...edgar, secDataset, tickerMappings, nasdaq };
+  }
+
+  async refreshMissingTickerMappings(): Promise<{
+    scanned: number;
+    mapped: number;
+    unresolved: number;
+    failed: number;
+  }> {
+    const holdings = await this.holdingRepository
+      .createQueryBuilder('holding')
+      .where("holding.ticker IS NULL OR holding.ticker = ''")
+      .getMany();
+    const representativeByCusip = new Map<string, GuruHoldingEntity>();
+    for (const holding of holdings) {
+      if (!representativeByCusip.has(holding.cusip)) {
+        representativeByCusip.set(holding.cusip, holding);
+      }
+    }
+    if (!representativeByCusip.size) {
+      return { scanned: 0, mapped: 0, unresolved: 0, failed: 0 };
+    }
+
+    const tickerMap = await this.buildTickerMap();
+    const mastered = await this.securityMasterRepository.find();
+    const masteredEntityByCusip = new Map(
+      mastered.map((security) => [security.cusip, security] as const),
+    );
+    const masteredByCusip = new Map(
+      mastered.flatMap((security) =>
+        security.ticker ? [[security.cusip, security.ticker] as const] : [],
+      ),
+    );
+    const resolved = new Map<string, { ticker: string; figi: string | null; name: string; source: string }>();
+    for (const [cusip, holding] of representativeByCusip) {
+      const ticker = this.findTicker(
+        cusip,
+        holding.issuerName,
+        holding.classTitle,
+        tickerMap,
+        masteredByCusip,
+      );
+      if (ticker) {
+        resolved.set(cusip, {
+          ticker,
+          figi: holding.figi,
+          name: holding.issuerName,
+          source: KNOWN_CUSIP_TICKERS[cusip] ? 'known_cusip' : 'issuer_name',
+        });
+      }
+    }
+
+    let failed = 0;
+    const unresolvedCusips = [...representativeByCusip.keys()].filter(
+      (cusip) => !resolved.has(cusip),
+    );
+    const apiKey = this.configService.get<string>('OPENFIGI_API_KEY')?.trim();
+    const batchSize = apiKey ? 100 : 10;
+    for (let index = 0; index < unresolvedCusips.length; index += batchSize) {
+      const batch = unresolvedCusips.slice(index, index + batchSize);
+      try {
+        const response = await fetch('https://api.openfigi.com/v3/mapping', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            ...(apiKey ? { 'X-OPENFIGI-APIKEY': apiKey } : {}),
+          },
+          body: JSON.stringify(
+            batch.map((cusip) => ({ idType: 'ID_CUSIP', idValue: cusip })),
+          ),
+        });
+        if (!response.ok) {
+          throw new Error(`OpenFIGI mapping failed: ${response.status}`);
+        }
+        const results = (await response.json()) as Array<{
+          data?: Array<{
+            figi?: string;
+            ticker?: string;
+            name?: string;
+            exchCode?: string;
+          }>;
+        }>;
+        results.forEach((result, resultIndex) => {
+          const cusip = batch[resultIndex];
+          const candidates = result.data ?? [];
+          const selected =
+            candidates.find(
+              (item) =>
+                item.exchCode === 'US' &&
+                Boolean(item.ticker) &&
+                !item.ticker!.includes('*'),
+            ) ??
+            candidates.find(
+              (item) =>
+                Boolean(item.ticker) &&
+                /^[A-Z0-9.-]+$/.test(item.ticker!),
+            );
+          if (!selected?.ticker) return;
+          resolved.set(cusip, {
+            ticker: selected.ticker.toUpperCase(),
+            figi: selected.figi ?? null,
+            name:
+              selected.name ?? representativeByCusip.get(cusip)?.issuerName ?? cusip,
+            source: 'openfigi',
+          });
+        });
+      } catch (error) {
+        failed += batch.length;
+        this.logger.warn(
+          `Guru OpenFIGI ticker mapping failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+      if (!apiKey && index + batchSize < unresolvedCusips.length) {
+        await new Promise((resolve) => setTimeout(resolve, 2_600));
+      }
+    }
+
+    const now = new Date();
+    for (const [cusip, mapping] of resolved) {
+      const existingSecurity = masteredEntityByCusip.get(cusip);
+      await this.holdingRepository
+        .createQueryBuilder()
+        .update(GuruHoldingEntity)
+        .set({ ticker: mapping.ticker })
+        .where('cusip = :cusip', { cusip })
+        .andWhere("ticker IS NULL OR ticker = ''")
+        .execute();
+      await this.securityMasterRepository.upsert(
+        {
+          cusip,
+          ticker: mapping.ticker,
+          figi: mapping.figi ?? existingSecurity?.figi ?? null,
+          name: existingSecurity?.name ?? mapping.name,
+          sector: existingSecurity?.sector ?? null,
+          industry: existingSecurity?.industry ?? null,
+          currentPrice: existingSecurity?.currentPrice ?? null,
+          priceUpdatedAt: existingSecurity?.priceUpdatedAt ?? null,
+          source: existingSecurity?.source?.includes(mapping.source)
+            ? existingSecurity.source
+            : existingSecurity?.source
+              ? `${existingSecurity.source},${mapping.source}`
+              : mapping.source,
+          fetchedAt: now,
+        },
+        ['cusip'],
+      );
+    }
+
+    return {
+      scanned: representativeByCusip.size,
+      mapped: resolved.size,
+      unresolved: representativeByCusip.size - resolved.size,
+      failed,
+    };
   }
 
   async getManagers(): Promise<GuruSummaryResponse[]> {
@@ -248,9 +445,16 @@ export class GuruPortfoliosService implements OnModuleInit {
         firstByManager.set(holding.managerId, holding);
       }
     }
+    const collectedAtByAccession = await this.buildCollectedAtByAccession(
+      managers.map((manager) => manager.accessionNumber),
+    );
 
     return managers.map((manager) =>
-      this.toSummary(manager, firstByManager.get(manager.id) ?? null),
+      this.toSummary(
+        manager,
+        firstByManager.get(manager.id) ?? null,
+        this.resolveManagerCollectedAt(manager, collectedAtByAccession),
+      ),
     );
   }
 
@@ -265,14 +469,22 @@ export class GuruPortfoliosService implements OnModuleInit {
       order: { weight: 'DESC' },
     });
     const tickers = holdings
-      .map((holding) => holding.ticker)
+      .map((holding) => KNOWN_CUSIP_TICKERS[holding.cusip] ?? holding.ticker)
       .filter((ticker): ticker is string => Boolean(ticker));
     const sectorData = await this.buildSectorMap(tickers);
-    const mapped = holdings.map((holding) =>
-      this.toHolding(holding, sectorData.map.get(holding.ticker ?? '') ?? null),
-    );
+    const mapped = holdings.map((holding) => {
+      const ticker = KNOWN_CUSIP_TICKERS[holding.cusip] ?? holding.ticker ?? '';
+      return this.toHolding(holding, sectorData.map.get(ticker) ?? null);
+    });
+    const collectedAtByAccession = await this.buildCollectedAtByAccession([
+      manager.accessionNumber,
+    ]);
     return {
-      ...this.toSummary(manager, holdings[0] ?? null),
+      ...this.toSummary(
+        manager,
+        holdings[0] ?? null,
+        this.resolveManagerCollectedAt(manager, collectedAtByAccession),
+      ),
       topBuys: [...mapped]
         .filter((holding) => holding.shareChange > 0)
         .sort((a, b) => b.weightChange - a.weightChange)
@@ -282,6 +494,9 @@ export class GuruPortfoliosService implements OnModuleInit {
         .sort((a, b) => a.weightChange - b.weightChange)
         .slice(0, 5),
       holdings: mapped.filter((holding) => holding.weight > 0),
+      activityHoldings: mapped.filter(
+        (holding) => holding.weight > 0 || holding.previousWeight > 0,
+      ),
       dataSource: 'SEC Form 13F',
       returnAsOf: sectorData.generatedAt,
       stats: {
@@ -1264,30 +1479,12 @@ export class GuruPortfoliosService implements OnModuleInit {
     tickerMap: Map<string, string>,
     cusipTickerMap: Map<string, string>,
   ): string | null {
+    if (KNOWN_CUSIP_TICKERS[cusip]) {
+      return KNOWN_CUSIP_TICKERS[cusip];
+    }
     const masteredTicker = cusipTickerMap.get(cusip);
     if (masteredTicker) {
       return masteredTicker;
-    }
-    const cusipTicker: Record<string, string> = {
-      '46137V357': 'RSP',
-      '81369Y605': 'XLF',
-      '02079K305': 'GOOGL',
-      '02079K107': 'GOOG',
-      '861012102': 'STM',
-      '984245100': 'YPF',
-      '632307104': 'NTRA',
-      '11135F101': 'AVGO',
-      '874039100': 'TSM',
-      '78462F103': 'SPY',
-      '060505104': 'BAC',
-      '01609W102': 'BABA',
-      '674599105': 'OXY',
-      '881624209': 'TEVA',
-      '023135106': 'AMZN',
-      '22266T109': 'CPNG',
-    };
-    if (cusipTicker[cusip]) {
-      return cusipTicker[cusip];
     }
     const candidates = [
       this.normalizeCompanyName(`${issuer} ${classTitle}`),
@@ -1320,7 +1517,7 @@ export class GuruPortfoliosService implements OnModuleInit {
       .toUpperCase()
       .replace(/&/g, ' AND ')
       .replace(
-        /\b(INCORPORATED|INC|CORPORATION|CORP|COMPANY|CO|LIMITED|LTD|PLC|HOLDINGS?|GROUP|THE|COM|CLASS|CL|COMMON|STOCK|SHARES?|ADR|ADS|NEW|DEL)\b/g,
+        /\b(INCORPORATED|INC|CORPORATION|CORP|COMPANY|CO|LIMITED|LTD|PLC|HOLDINGS?|HLDG|GROUP|THE|COM|CLASS|CL|COMMON|STOCK|SHARES?|SHS|ADR|ADS|NEW|DEL|NV|NYS|REGISTRY)\b/g,
         ' ',
       )
       .replace(/[^A-Z0-9]/g, '');
@@ -1446,6 +1643,7 @@ export class GuruPortfoliosService implements OnModuleInit {
   private toSummary(
     manager: GuruManagerEntity,
     topHolding: GuruHoldingEntity | null,
+    lastCollectedAt: string | null = null,
   ): GuruSummaryResponse {
     return {
       slug: manager.slug,
@@ -1453,10 +1651,39 @@ export class GuruPortfoliosService implements OnModuleInit {
       firmName: manager.firmName,
       reportDate: manager.reportDate,
       filingDate: manager.filingDate,
+      lastCollectedAt,
       totalValue: manager.totalValue,
       positionCount: manager.positionCount,
       topHolding: topHolding ? this.toHolding(topHolding) : null,
     };
+  }
+
+  private async buildCollectedAtByAccession(
+    accessions: Array<string | null | undefined>,
+  ): Promise<Map<string, string>> {
+    const uniqueAccessions = [...new Set(accessions.filter((value): value is string => Boolean(value)))];
+    if (!uniqueAccessions.length) {
+      return new Map();
+    }
+    const filings = await this.edgarFilingRepository.find({
+      where: { accessionNumber: In(uniqueAccessions) },
+    });
+    return new Map(
+      filings.map((filing) => [
+        filing.accessionNumber,
+        (filing.appliedAt ?? filing.updatedAt)?.toISOString() ?? null,
+      ]).filter((entry): entry is [string, string] => Boolean(entry[1])),
+    );
+  }
+
+  private resolveManagerCollectedAt(
+    manager: GuruManagerEntity,
+    collectedAtByAccession: Map<string, string>,
+  ): string | null {
+    const fromFiling = manager.accessionNumber
+      ? collectedAtByAccession.get(manager.accessionNumber)
+      : null;
+    return fromFiling ?? manager.updatedAt?.toISOString() ?? null;
   }
 
   private toHolding(
@@ -1469,7 +1696,7 @@ export class GuruPortfoliosService implements OnModuleInit {
   ): GuruHoldingResponse {
     return {
       id: holding.id,
-      ticker: holding.ticker,
+      ticker: KNOWN_CUSIP_TICKERS[holding.cusip] ?? holding.ticker ?? null,
       issuerName: holding.issuerName,
       cusip: holding.cusip,
       putCall: holding.putCall,

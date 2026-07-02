@@ -21,6 +21,7 @@ export type GuruSummary = {
   firmName: string;
   reportDate: string | null;
   filingDate: string | null;
+  lastCollectedAt: string | null;
   totalValue: number;
   positionCount: number;
   topHolding: GuruHolding | null;
@@ -30,6 +31,7 @@ export type GuruDetail = GuruSummary & {
   topBuys: GuruHolding[];
   topSells: GuruHolding[];
   holdings: GuruHolding[];
+  activityHoldings?: GuruHolding[];
   dataSource: string;
   returnAsOf: string | null;
   stats: {

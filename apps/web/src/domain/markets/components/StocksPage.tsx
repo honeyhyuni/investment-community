@@ -17,6 +17,7 @@ import {
   createChart,
   IChartApi,
   ISeriesApi,
+  LineSeries,
   Time,
 } from "lightweight-charts";
 import Link from "next/link";
@@ -55,13 +56,34 @@ import {
 } from "@/domain/markets/utils/format";
 import {
   CandlePoint,
+  CandleChart,
   ChartPeriod,
   MarketNews,
   StockDetail,
   StockTab,
 } from "@/domain/markets/types";
 
-const chartPeriods: ChartPeriod[] = ["1D", "1M", "1Y", "3Y", "5Y", "ALL"];
+const chartPeriods: ChartPeriod[] = [
+  "1D",
+  "1M",
+  "3M",
+  "6M",
+  "1Y",
+  "3Y",
+  "5Y",
+  "ALL",
+];
+
+type RecentStock = {
+  symbol: string;
+  description: string;
+};
+
+const movingAverages = [
+  { period: 20, color: "#2563eb" },
+  { period: 50, color: "#d97706" },
+  { period: 120, color: "#7c3aed" },
+] as const;
 
 const copy = {
   en: {
@@ -145,11 +167,16 @@ export function StocksPage() {
   const [priceCurrency, setPriceCurrency] =
     useState<DisplayCurrency>(initialCurrency);
   const [candles, setCandles] = useState<CandlePoint[]>([]);
+  const [movingAverageSeries, setMovingAverageSeries] = useState<
+    CandleChart["movingAverages"]
+  >({ "20": [], "50": [], "120": [] });
+  const [movingAveragesEnabled, setMovingAveragesEnabled] = useState(false);
   const [chartLoading, setChartLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [error, setError] = useState("");
   const detailRequestIdRef = useRef(0);
+  const candleRequestIdRef = useRef(0);
   const debouncedSearch = useDebouncedValue(search, 180);
   const selectedFavorite = useMemo(
     () =>
@@ -179,6 +206,28 @@ export function StocksPage() {
     setPriceCurrency,
     setSearch,
   });
+
+  useEffect(() => {
+    try {
+      setMovingAveragesEnabled(
+        window.localStorage.getItem("15f:stocks:moving-averages") === "true",
+      );
+    } catch {
+      setMovingAveragesEnabled(false);
+    }
+  }, []);
+
+  function toggleMovingAverages() {
+    setMovingAveragesEnabled((enabled) => {
+      const next = !enabled;
+      try {
+        window.localStorage.setItem("15f:stocks:moving-averages", String(next));
+      } catch {
+        // Ignore storage failures; the in-memory toggle still works.
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!selectedSymbol) {
@@ -368,22 +417,38 @@ export function StocksPage() {
       return;
     }
 
+    const requestId = ++candleRequestIdRef.current;
+    setCandles([]);
+    setMovingAverageSeries({ "20": [], "50": [], "120": [] });
     setChartLoading(true);
     try {
-      const nextCandles = await apiRequest<CandlePoint[]>(
-        `/markets/candles?symbol=${encodeURIComponent(symbol)}&period=${period}&market=${stockTab === "KR" ? "KR" : "US"}`,
+      const baseUrl = `/markets/candles?symbol=${encodeURIComponent(symbol)}&period=${period}&market=${stockTab === "KR" ? "KR" : "US"}`;
+      const response = await apiRequest<CandlePoint[] | CandleChart>(
+        movingAveragesEnabled ? `${baseUrl}&indicators=true` : baseUrl,
         "GET",
         { accessToken: token },
       );
-      setCandles(nextCandles);
+      if (requestId === candleRequestIdRef.current) {
+        if (Array.isArray(response)) {
+          setCandles(response);
+          setMovingAverageSeries({ "20": [], "50": [], "120": [] });
+        } else {
+          setCandles(response.candles);
+          setMovingAverageSeries(response.movingAverages);
+        }
+      }
     } catch (candleError) {
-      setError(
-        candleError instanceof Error
-          ? candleError.message
-          : "Could not load chart candles.",
-      );
+      if (requestId === candleRequestIdRef.current) {
+        setError(
+          candleError instanceof Error
+            ? candleError.message
+            : "Could not load chart candles.",
+        );
+      }
     } finally {
-      setChartLoading(false);
+      if (requestId === candleRequestIdRef.current) {
+        setChartLoading(false);
+      }
     }
   }
 
@@ -417,7 +482,7 @@ export function StocksPage() {
     queueMicrotask(() => {
       loadCandles(selectedSymbol, chartPeriod, accessToken);
     });
-  }, [accessToken, selectedSymbol, chartPeriod, stockTab]);
+  }, [accessToken, selectedSymbol, chartPeriod, stockTab, movingAveragesEnabled]);
 
   useEffect(() => {
     if (stockTab === "US" && selectedSymbol) {
@@ -478,6 +543,9 @@ export function StocksPage() {
           livePrices={livePrices}
           liveSeries={liveSeries}
           candles={candles}
+          movingAverageSeries={movingAverageSeries}
+          movingAveragesEnabled={movingAveragesEnabled}
+          onToggleMovingAverages={toggleMovingAverages}
           chartPeriod={chartPeriod}
           setChartPeriod={setChartPeriod}
           chartLoading={chartLoading}
@@ -516,6 +584,9 @@ function StocksView({
   livePrices,
   liveSeries,
   candles,
+  movingAverageSeries,
+  movingAveragesEnabled,
+  onToggleMovingAverages,
   chartPeriod,
   setChartPeriod,
   chartLoading,
@@ -548,6 +619,9 @@ function StocksView({
   livePrices: Record<string, TradeTick>;
   liveSeries: Record<string, TradeTick[]>;
   candles: CandlePoint[];
+  movingAverageSeries: CandleChart["movingAverages"];
+  movingAveragesEnabled: boolean;
+  onToggleMovingAverages: () => void;
   chartPeriod: ChartPeriod;
   setChartPeriod: (period: ChartPeriod) => void;
   chartLoading: boolean;
@@ -636,6 +710,9 @@ function StocksView({
             live={livePrices[selectedSymbol]}
             series={liveSeries[selectedSymbol] ?? []}
             candles={candles}
+            movingAverageSeries={movingAverageSeries}
+            movingAveragesEnabled={movingAveragesEnabled}
+            onToggleMovingAverages={onToggleMovingAverages}
             chartPeriod={chartPeriod}
             setChartPeriod={setChartPeriod}
             chartLoading={chartLoading}
@@ -689,6 +766,9 @@ function StocksView({
             live={livePrices[selectedSymbol]}
             series={liveSeries[selectedSymbol] ?? []}
             candles={candles}
+            movingAverageSeries={movingAverageSeries}
+            movingAveragesEnabled={movingAveragesEnabled}
+            onToggleMovingAverages={onToggleMovingAverages}
             chartPeriod={chartPeriod}
             setChartPeriod={setChartPeriod}
             chartLoading={chartLoading}
@@ -719,6 +799,9 @@ function StockDetailPanel({
   live,
   series,
   candles,
+  movingAverageSeries,
+  movingAveragesEnabled,
+  onToggleMovingAverages,
   chartPeriod,
   setChartPeriod,
   chartLoading,
@@ -734,6 +817,9 @@ function StockDetailPanel({
   live?: TradeTick;
   series: TradeTick[];
   candles: CandlePoint[];
+  movingAverageSeries: CandleChart["movingAverages"];
+  movingAveragesEnabled: boolean;
+  onToggleMovingAverages: () => void;
   chartPeriod: ChartPeriod;
   setChartPeriod: (period: ChartPeriod) => void;
   chartLoading: boolean;
@@ -750,6 +836,12 @@ function StockDetailPanel({
   }
 
   const quote = applyLiveTrade(detail.quote, live);
+  const chartReturn = calculateChartPeriodReturn(
+    chartPeriod,
+    candles,
+    quote,
+    chartLoading,
+  );
   const detailSourceCurrency =
     detail.profile.currency === "KRW"
       ? "KRW"
@@ -762,15 +854,16 @@ function StockDetailPanel({
         exchangeRate,
       )
     : "-";
+  const isKoreanMarket =
+    detail.profile.currency === "KRW" && detail.profile.country === "대한민국";
   const metricItems = buildMetricItems(
     detail.metrics,
     language,
     priceCurrency,
     detailSourceCurrency,
     exchangeRate,
+    isKoreanMarket,
   );
-  const isKoreanMarket =
-    detail.profile.currency === "KRW" && detail.profile.country === "대한민국";
   const logoUrl =
     detail.profile.logo ||
     (isKoreanMarket
@@ -879,25 +972,69 @@ function StockDetailPanel({
           language={language}
         />
       </div>
+      <PriceRange52Week
+        current={quote.current}
+        low={numericMetric(detail.metrics, "52WeekLow")}
+        high={numericMetric(detail.metrics, "52WeekHigh")}
+        allTimeHigh={numericMetric(detail.metrics, "AllTimeHigh")}
+        displayCurrency={priceCurrency}
+        sourceCurrency={detailSourceCurrency}
+        exchangeRate={exchangeRate}
+        language={language}
+      />
       <div className="mt-5 rounded-md border border-border bg-surface-muted p-3 sm:p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm font-semibold text-foreground">
-            {translateDetailLabel(language, "realtimeChart")}
-          </p>
-          <SegmentedControl
-            className="w-full sm:w-auto"
-            aria-label={translateDetailLabel(language, "realtimeChart")}
-            options={chartPeriods.map((period) => ({
-              value: period,
-              label: period,
-            }))}
-            value={chartPeriod}
-            onChange={setChartPeriod}
-          />
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              {translateDetailLabel(language, "realtimeChart")}
+            </p>
+            <p
+              className={`mt-1 text-sm font-semibold ${
+                chartReturn === null || chartReturn === 0
+                  ? "text-muted"
+                  : chartReturn > 0
+                    ? "text-positive"
+                    : "text-negative"
+              }`}
+            >
+              {language === "ko"
+                ? `${chartPeriod} 수익률`
+                : `${chartPeriod} return`}{" "}
+              {chartReturn === null
+                ? "-"
+                : `${chartReturn > 0 ? "+" : ""}${formatNumber(chartReturn)}%`}
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 sm:items-end">
+            <SegmentedControl
+              className="grid w-full grid-cols-4 sm:inline-flex sm:w-auto"
+              buttonClassName="min-w-0 px-2 text-xs sm:px-4 sm:text-sm"
+              aria-label={translateDetailLabel(language, "realtimeChart")}
+              options={chartPeriods.map((period) => ({
+                value: period,
+                label: period,
+              }))}
+              value={chartPeriod}
+              onChange={setChartPeriod}
+            />
+            <button
+              type="button"
+              onClick={onToggleMovingAverages}
+              className={`inline-flex h-8 items-center justify-center rounded-md border px-3 text-xs font-semibold transition-colors ${
+                movingAveragesEnabled
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-surface text-muted hover:text-foreground"
+              }`}
+            >
+              {language === "ko" ? "이평선" : "Moving averages"} {movingAveragesEnabled ? "ON" : "OFF"}
+            </button>
+          </div>
         </div>
         <>
           <RealtimeChart
             candles={candles}
+            movingAverageSeries={movingAverageSeries}
+            movingAveragesEnabled={movingAveragesEnabled}
             live={live}
             loading={chartLoading}
             period={chartPeriod}
@@ -954,26 +1091,6 @@ function StockDetailPanel({
             }
           />
         </div>
-        <div className="mt-3 grid gap-2 sm:gap-3 md:grid-cols-2">
-          <InfoBox
-            label={translateDetailLabel(language, "open")}
-            value={formatMoney(
-              quote.open,
-              priceCurrency,
-              quote.currency,
-              exchangeRate,
-            )}
-          />
-          <InfoBox
-            label={translateDetailLabel(language, "previousClose")}
-            value={formatMoney(
-              quote.previousClose,
-              priceCurrency,
-              quote.currency,
-              exchangeRate,
-            )}
-          />
-        </div>
       </div>
       <div className="mt-5 rounded-md border border-border p-3 sm:p-4">
         <p className="text-sm font-semibold text-foreground">
@@ -994,6 +1111,112 @@ function StockDetailPanel({
         exchangeRate={exchangeRate}
         showMore={!!detail.isSp500}
       />
+    </div>
+  );
+}
+
+function numericMetric(
+  metrics: StockDetail["metrics"],
+  key: string,
+): number | null {
+  const value = Number(metrics?.[key]);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function PriceRange52Week({
+  current,
+  low,
+  high,
+  allTimeHigh,
+  displayCurrency,
+  sourceCurrency,
+  exchangeRate,
+  language,
+}: {
+  current: number;
+  low: number | null;
+  high: number | null;
+  allTimeHigh: number | null;
+  displayCurrency: DisplayCurrency;
+  sourceCurrency: string;
+  exchangeRate: number | null;
+  language: Language;
+}) {
+  if (low === null || high === null || high <= low) return null;
+  const position = Math.min(
+    100,
+    Math.max(0, ((current - low) / (high - low)) * 100),
+  );
+  const drawdownFromHigh = ((current - high) / high) * 100;
+  const drawdownFromAllTimeHigh =
+    allTimeHigh && allTimeHigh > 0
+      ? ((current - allTimeHigh) / allTimeHigh) * 100
+      : null;
+
+  return (
+    <div className="mt-5 rounded-md border border-border p-3 sm:p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-foreground">
+          {language === "ko" ? "52주 가격 범위" : "52-week price range"}
+        </p>
+        <p className="text-xs font-semibold text-muted">
+          {language === "ko" ? "현재 위치" : "Current position"}{" "}
+          {formatNumber(position)}%
+        </p>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+        <span className="rounded-md bg-surface-muted px-2 py-1 text-muted">
+          {language === "ko" ? "52주 고점 대비" : "From 52W high"}{" "}
+          <span className={drawdownFromHigh < 0 ? "text-negative" : "text-positive"}>
+            {drawdownFromHigh > 0 ? "+" : ""}
+            {formatNumber(drawdownFromHigh)}%
+          </span>
+        </span>
+        {drawdownFromAllTimeHigh !== null ? (
+          <span className="rounded-md bg-surface-muted px-2 py-1 text-muted">
+            {language === "ko" ? "전체 고점 대비" : "From all-time high"}{" "}
+            <span className={drawdownFromAllTimeHigh < 0 ? "text-negative" : "text-positive"}>
+              {drawdownFromAllTimeHigh > 0 ? "+" : ""}
+              {formatNumber(drawdownFromAllTimeHigh)}%
+            </span>
+          </span>
+        ) : null}
+      </div>
+      <div className="relative mt-5 h-2 rounded-full bg-surface-muted">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-primary"
+          style={{ width: `${position}%` }}
+        />
+        <span
+          className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-primary shadow"
+          style={{ left: `${position}%` }}
+        />
+      </div>
+      <div className="mt-3 flex items-start justify-between gap-3 text-xs">
+        <div>
+          <p className="text-muted">{language === "ko" ? "최저" : "Low"}</p>
+          <p className="mt-0.5 font-semibold text-foreground">
+            {formatMoney(low, displayCurrency, sourceCurrency, exchangeRate)}
+          </p>
+        </div>
+        <div className="text-center">
+          <p className="text-muted">{language === "ko" ? "현재" : "Current"}</p>
+          <p className="mt-0.5 font-semibold text-primary">
+            {formatMoney(
+              current,
+              displayCurrency,
+              sourceCurrency,
+              exchangeRate,
+            )}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-muted">{language === "ko" ? "최고" : "High"}</p>
+          <p className="mt-0.5 font-semibold text-foreground">
+            {formatMoney(high, displayCurrency, sourceCurrency, exchangeRate)}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1041,13 +1264,19 @@ function StockSearchPopover({
   exchangeRate: number | null;
   onSelect: (symbol: string) => void;
 }) {
+  const [recentStocks, setRecentStocks] = useState<RecentStock[]>([]);
+  const storagePrefix = `15f:stocks:v3:${market.toLowerCase()}`;
   const quoteBySymbol = useMemo(
     () => new Map(quotes.map((quote) => [quote.symbol, quote])),
     [quotes],
   );
   const query = debouncedSearch.trim();
   const isDebouncing = search.trim() !== query;
-  const showPopover = open && (search.trim().length > 0 || symbols.length > 0);
+  const showPopover =
+    open &&
+    (search.trim().length > 0 ||
+      symbols.length > 0 ||
+      recentStocks.length > 0);
   const resultLabel =
     language === "ko"
       ? query
@@ -1057,10 +1286,65 @@ function StockSearchPopover({
         ? "Search results"
         : "Suggested";
 
+  useEffect(() => {
+    try {
+      setRecentStocks(
+        JSON.parse(
+          window.localStorage.getItem(`${storagePrefix}:viewed`) ?? "[]",
+        ) as RecentStock[],
+      );
+      window.localStorage.removeItem(`${storagePrefix}:searches`);
+    } catch {
+      setRecentStocks([]);
+    }
+  }, [storagePrefix]);
+
   function selectSymbol(symbol: string) {
+    const selected = symbols.find((candidate) => candidate.symbol === symbol);
+    const previous = recentStocks.find((candidate) => candidate.symbol === symbol);
+    const selectedDescription = selected?.description?.trim();
+    const previousDescription = previous?.description?.trim();
+    const description =
+      market === "KR"
+        ? resolveKoreanRecentName(
+            symbol,
+            selectedDescription,
+            previousDescription,
+          )
+        : selectedDescription || previousDescription || symbol;
+    const nextStocks = [
+      {
+        symbol,
+        description,
+      },
+      ...recentStocks.filter((candidate) => candidate.symbol !== symbol),
+    ].slice(0, 8);
+    setRecentStocks(nextStocks);
+    window.localStorage.setItem(
+      `${storagePrefix}:viewed`,
+      JSON.stringify(nextStocks),
+    );
     onSelect(symbol);
     setSearch("");
     setOpen(false);
+  }
+
+  function removeRecentStock(symbol: string) {
+    const nextStocks = recentStocks.filter((item) => item.symbol !== symbol);
+    setRecentStocks(nextStocks);
+    if (nextStocks.length) {
+      window.localStorage.setItem(
+        `${storagePrefix}:viewed`,
+        JSON.stringify(nextStocks),
+      );
+    } else {
+      window.localStorage.removeItem(`${storagePrefix}:viewed`);
+    }
+  }
+
+  function clearRecentStocks() {
+    setRecentStocks([]);
+    window.localStorage.removeItem(`${storagePrefix}:viewed`);
   }
 
   return (
@@ -1115,6 +1399,55 @@ function StockSearchPopover({
 
       {showPopover ? (
         <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-30 overflow-hidden rounded-md border border-border bg-surface shadow-xl shadow-[#152033]/10">
+          {!query && recentStocks.length ? (
+            <div className="border-b border-border p-3">
+              {recentStocks.length ? (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-muted">
+                      {language === "ko" ? "최근 본 종목" : "Recently viewed"}
+                    </p>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={clearRecentStocks}
+                      className="grid size-6 shrink-0 place-items-center rounded-md text-muted hover:bg-surface-muted hover:text-foreground"
+                      aria-label={language === "ko" ? "최근 본 종목 지우기" : "Clear recently viewed"}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {recentStocks.map((item) => (
+                      <span
+                        key={item.symbol}
+                        title={item.description}
+                        className="inline-flex items-center overflow-hidden rounded-md border border-border bg-surface-muted text-xs font-semibold text-foreground hover:border-primary"
+                      >
+                        <button
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectSymbol(item.symbol)}
+                          className="cursor-pointer px-2.5 py-1.5 hover:text-primary"
+                        >
+                          {market === "KR" ? item.description : item.symbol}
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => removeRecentStock(item.symbol)}
+                          className="grid size-6 shrink-0 place-items-center border-l border-border text-muted hover:bg-surface hover:text-foreground"
+                          aria-label={language === "ko" ? "최근 본 종목에서 제거" : "Remove from recently viewed"}
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
           <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
             <p className="text-xs font-semibold text-muted">{resultLabel}</p>
             <p className="text-xs font-semibold text-muted">{symbols.length}</p>
@@ -1178,6 +1511,21 @@ function StockSearchPopover({
       ) : null}
     </div>
   );
+}
+
+function resolveKoreanRecentName(
+  symbol: string,
+  selectedDescription?: string,
+  previousDescription?: string,
+) {
+  const isCodeLike = (value?: string) => !!value && /^\d{5,6}$/.test(value);
+  if (selectedDescription && !isCodeLike(selectedDescription)) {
+    return selectedDescription;
+  }
+  if (previousDescription && !isCodeLike(previousDescription)) {
+    return previousDescription;
+  }
+  return selectedDescription || previousDescription || symbol;
 }
 
 function FavoriteStockList({
@@ -1283,14 +1631,40 @@ function FavoriteStockList({
   );
 }
 
+function calculateChartPeriodReturn(
+  period: ChartPeriod,
+  candles: CandlePoint[],
+  quote: MarketQuote,
+  loading: boolean,
+): number | null {
+  if (loading) {
+    return null;
+  }
+  if (period === "1D") {
+    return Number.isFinite(quote.percentChange) ? quote.percentChange : null;
+  }
+  const firstClose = candles[0]?.close;
+  const latestPrice =
+    quote.current > 0 ? quote.current : candles[candles.length - 1]?.close;
+  if (!firstClose || !latestPrice) {
+    return null;
+  }
+  const result = ((latestPrice - firstClose) / firstClose) * 100;
+  return Number.isFinite(result) ? result : null;
+}
+
 function RealtimeChart({
   candles,
+  movingAverageSeries,
+  movingAveragesEnabled,
   live,
   loading,
   period,
   language,
 }: {
   candles: CandlePoint[];
+  movingAverageSeries: CandleChart["movingAverages"];
+  movingAveragesEnabled: boolean;
   live?: TradeTick;
   loading: boolean;
   period: ChartPeriod;
@@ -1299,6 +1673,7 @@ function RealtimeChart({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const movingAverageRefs = useRef(new Map<number, ISeriesApi<"Line">>());
 
   useEffect(() => {
     if (!containerRef.current || chartRef.current) {
@@ -1332,6 +1707,18 @@ function RealtimeChart({
       wickUpColor: "#2e7d4f",
       wickDownColor: "#b64242",
     });
+    movingAverages.forEach((average) => {
+      movingAverageRefs.current.set(
+        average.period,
+        chart.addSeries(LineSeries, {
+          color: average.color,
+          lineWidth: 2,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        }),
+      );
+    });
 
     chartRef.current = chart;
     seriesRef.current = series;
@@ -1350,6 +1737,7 @@ function RealtimeChart({
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      movingAverageRefs.current.clear();
     };
   }, []);
 
@@ -1368,6 +1756,17 @@ function RealtimeChart({
         close: candle.close,
       }));
     seriesRef.current.setData(data);
+    movingAverages.forEach((average) => {
+      const data = movingAveragesEnabled
+        ? movingAverageSeries[
+            String(average.period) as "20" | "50" | "120"
+          ].map((point) => ({
+            time: toChartTime(point.time, period),
+            value: point.value,
+          }))
+        : [];
+      movingAverageRefs.current.get(average.period)?.setData(data);
+    });
     chartRef.current?.timeScale().fitContent();
     chartRef.current?.applyOptions({
       timeScale: {
@@ -1375,7 +1774,7 @@ function RealtimeChart({
         secondsVisible: false,
       },
     });
-  }, [candles, period]);
+  }, [candles, movingAverageSeries, movingAveragesEnabled, period]);
 
   useEffect(() => {
     if (!seriesRef.current || !live || candles.length === 0) {
@@ -1395,6 +1794,22 @@ function RealtimeChart({
 
   return (
     <div className="relative mt-3">
+      {movingAveragesEnabled ? (
+        <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+          {movingAverages.map((average) => (
+            <span
+              key={average.period}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted"
+            >
+              <span
+                className="h-0.5 w-4"
+                style={{ backgroundColor: average.color }}
+              />
+              MA{average.period}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {loading ? (
         <div className="absolute right-3 top-3 z-10 rounded-md bg-surface/90 px-2 py-1 text-xs font-semibold text-muted">
           {language === "ko" ? "불러오는 중" : "Loading"}

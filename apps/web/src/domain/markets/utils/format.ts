@@ -68,6 +68,7 @@ export function translateDetailLabel(
     | "per"
     | "pbr"
     | "eps"
+    | "bps"
     | "high52"
     | "low52"
     | "psr"
@@ -92,6 +93,7 @@ export function translateDetailLabel(
       per: "PER",
       pbr: "PBR",
       eps: "EPS",
+      bps: "BPS",
       high52: "52W High",
       low52: "52W Low",
       psr: "PSR",
@@ -115,6 +117,7 @@ export function translateDetailLabel(
       per: "PER",
       pbr: "PBR",
       eps: "EPS",
+      bps: "BPS",
       high52: "52주 고가",
       low52: "52주 저가",
       psr: "PSR",
@@ -132,6 +135,7 @@ export function buildMetricItems(
   currency: DisplayCurrency,
   sourceCurrency: DisplayCurrency = "USD",
   exchangeRate?: number | null,
+  includeBps = false,
 ) {
   return [
     {
@@ -155,24 +159,19 @@ export function buildMetricItems(
         exchangeRate,
       ),
     },
-    {
-      label: translateDetailLabel(language, "high52"),
-      value: formatMoneyValue(
-        pickMetric(metrics, ["52WeekHigh"]),
-        currency,
-        sourceCurrency,
-        exchangeRate,
-      ),
-    },
-    {
-      label: translateDetailLabel(language, "low52"),
-      value: formatMoneyValue(
-        pickMetric(metrics, ["52WeekLow"]),
-        currency,
-        sourceCurrency,
-        exchangeRate,
-      ),
-    },
+    ...(includeBps
+      ? [
+          {
+            label: translateDetailLabel(language, "bps"),
+            value: formatMoneyValue(
+              pickMetric(metrics, ["bpsAnnual", "bpsTTM", "bookValuePerShare"]),
+              currency,
+              sourceCurrency,
+              exchangeRate,
+            ),
+          },
+        ]
+      : []),
     {
       label: translateDetailLabel(language, "psr"),
       value: formatRatio(
