@@ -119,6 +119,57 @@ select {
   touch-action: manipulation;
 }
 
+@keyframes modal-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modal-overlay-in {
+  animation: modal-overlay-in 160ms ease-out;
+}
+
+.modal-panel-in {
+  animation: modal-panel-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes donut-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.donut-in {
+  animation: donut-in 320ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay-in,
+  .modal-panel-in,
+  .donut-in {
+    animation-duration: 1ms;
+  }
+}
+
 .dark-app {
   background: #11151b !important;
   color: #edf1f7 !important;
