@@ -337,6 +337,18 @@ export function GuruPortfoliosPage({
       ),
     [detail, metric],
   );
+  const mobileMapHoldings = useMemo(
+    () =>
+      [...(detail?.holdings ?? [])]
+        .filter((holding) => holding.weight > 0)
+        .sort((a, b) =>
+          metric === 'weight'
+            ? b.weight - a.weight
+            : (b.returnPercent ?? Number.NEGATIVE_INFINITY) -
+              (a.returnPercent ?? Number.NEGATIVE_INFINITY),
+        ),
+    [detail, metric],
+  );
 
   const holdingSectorOptions = useMemo(() => {
     const sectors = [...new Set((detail?.activityHoldings ?? detail?.holdings ?? []).map((holding) => holding.sector).filter(Boolean))].sort();
@@ -478,14 +490,14 @@ export function GuruPortfoliosPage({
   if (!detail) return null;
 
   return (
-    <div className="grid gap-4 py-4 sm:gap-6 sm:py-6">
+    <div className="grid min-w-0 gap-4 overflow-x-hidden py-4 sm:gap-6 sm:py-6">
       <section className="rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
         <Link href="/gurus" className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-muted hover:text-primary">
           <ArrowLeft size={16} />
           {ko ? "거장 목록" : "All gurus"}
         </Link>
-        <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
-          <div>
+        <div className="mt-5 flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">13F Portfolio</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <h2 className="text-2xl font-bold">{detail.personName}</h2>
@@ -493,7 +505,7 @@ export function GuruPortfoliosPage({
             </div>
             <p className="mt-1 text-sm text-muted">{detail.firmName}</p>
           </div>
-          <div className="text-right text-sm">
+          <div className="min-w-0 text-left text-sm sm:text-right">
             <p className="font-semibold">{formatMoney(detail.totalValue)} · {detail.positionCount} {ko ? "종목" : "positions"}</p>
             <p className="mt-1 text-xs text-muted">
               {detail.reportDate ? `${quarterLabel(detail.reportDate)} ${ko ? "기준" : "as of"}` : ko ? "최근 자료 없음" : "No recent filing"}
@@ -506,8 +518,8 @@ export function GuruPortfoliosPage({
       </section>
 
       <SegmentedControl<DetailTab>
-        className="inline-flex w-fit max-w-full justify-self-start"
-        buttonClassName="flex-none px-3 py-2"
+        className="sticky top-1 z-20 flex w-full min-w-0 justify-self-start shadow-sm sm:static sm:w-fit"
+        buttonClassName="min-w-0 px-2 py-2 sm:flex-none sm:px-3"
         aria-label={ko ? "\uAC70\uC7A5 \uC0C1\uC138 \uD654\uBA74 \uC120\uD0DD" : "Guru detail view"}
         value={detailTab}
         onChange={(tab) => {
@@ -582,9 +594,9 @@ export function GuruPortfoliosPage({
           <section className="rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-base font-semibold">13F {ko ? "\uC804\uCCB4\uBCF4\uAE30" : "All holdings"}</h3>
-              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+              <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
                 <SegmentedControl<HoldingSort>
-                  className="min-w-0 flex-1 sm:flex-none"
+                  className="hidden min-w-0 flex-1 sm:flex"
                   value={holdingSort}
                   onChange={(value) => { setHoldingSort(value); setHoldingPage(1); }}
                   options={[
@@ -595,6 +607,21 @@ export function GuruPortfoliosPage({
                     { value: "name", label: ko ? "\uC885\uBAA9\uBA85" : "Name" },
                   ]}
                 />
+                <select
+                  value={holdingSort}
+                  onChange={(event) => {
+                    setHoldingSort(event.target.value as HoldingSort);
+                    setHoldingPage(1);
+                  }}
+                  className="h-10 min-w-0 flex-1 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none focus:border-primary sm:hidden"
+                  aria-label={ko ? "보유종목 정렬" : "Sort holdings"}
+                >
+                  <option value="weight">{ko ? "종목 비중순" : "Weight"}</option>
+                  <option value="activity">{ko ? "매수매도큰순" : "Activity"}</option>
+                  <option value="value">{ko ? "평가액" : "Value"}</option>
+                  <option value="return">{ko ? "수익률" : "Return"}</option>
+                  <option value="name">{ko ? "종목명" : "Name"}</option>
+                </select>
                 <button
                   type="button"
                   onClick={() => {
@@ -625,7 +652,7 @@ export function GuruPortfoliosPage({
                   setHoldingSector(event.target.value);
                   setHoldingPage(1);
                 }}
-                className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
+                className="h-10 min-w-0 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
               >
                 {holdingSectorOptions.map((sector) => (
                   <option key={sector} value={sector}>{sector === "all" ? (ko ? "전체 섹터" : "All sectors") : sectorLabel(sector, ko)}</option>
@@ -637,7 +664,7 @@ export function GuruPortfoliosPage({
                   setHoldingActivity(event.target.value as HoldingActivityFilter);
                   setHoldingPage(1);
                 }}
-                className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
+                className="h-10 min-w-0 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
               >
                 <option value="all">{ko ? "전체 매매" : "All activity"}</option>
                 <option value="new">{ko ? "신규매수" : "New buys"}</option>
@@ -651,7 +678,7 @@ export function GuruPortfoliosPage({
                   setHoldingReturn(event.target.value as HoldingReturnFilter);
                   setHoldingPage(1);
                 }}
-                className="h-10 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
+                className="h-10 min-w-0 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
               >
                 <option value="all">{ko ? "전체 수익률" : "All returns"}</option>
                 <option value="positive">{ko ? "플러스" : "Positive"}</option>
@@ -662,7 +689,29 @@ export function GuruPortfoliosPage({
             <p className="mt-2 text-xs font-semibold text-muted">
               {ko ? `${sortedHoldings.length}개 표시 / 전체 ${tableHoldings.length}개` : `${sortedHoldings.length} shown / ${tableHoldings.length} total`}
             </p>
-            <div className="mt-4 overflow-x-auto">
+            <div className="mt-4 grid gap-2 md:hidden">
+              {visibleHoldings.map((item) => (
+                <article key={item.id} className="min-w-0 rounded-md border border-border bg-surface-muted p-3">
+                  <div className="flex min-w-0 items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">
+                        {item.ticker ?? item.cusip}{item.putCall ? ` ${item.putCall.toUpperCase()}` : ""}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-muted">{item.issuerName}</p>
+                    </div>
+                    {isSoldOut(item) ? <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700">{ko ? "전량매도" : "Sold out"}</span> : null}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                    <div><p className="text-muted">{ko ? "섹터" : "Sector"}</p><p className="mt-0.5 truncate font-semibold">{sectorLabel(item.sector, ko)}</p></div>
+                    <div className="text-right"><p className="text-muted">{ko ? "평가액" : "Value"}</p><p className="mt-0.5 font-semibold">{formatMoney(item.value)}</p></div>
+                    <div><p className="text-muted">{ko ? "현재 비중" : "Weight"}</p><p className="mt-0.5 font-semibold">{item.weight.toFixed(2)}%</p></div>
+                    <div className="text-right"><p className="text-muted">{ko ? "비중 변화 / 수익률" : "Change / Return"}</p><p className="mt-0.5 font-semibold"><span className={item.weightChange >= 0 ? "text-green-600" : "text-red-600"}>{formatPercent(item.weightChange)}</span> <span className={item.returnPercent === null ? "text-muted" : item.returnPercent >= 0 ? "text-green-600" : "text-red-600"}>{item.returnPercent === null ? "-" : formatPercent(item.returnPercent)}</span></p></div>
+                  </div>
+                </article>
+              ))}
+              {!visibleHoldings.length ? <div className="py-8 text-center text-sm font-semibold text-muted">{ko ? "조건에 맞는 보유종목이 없습니다." : "No holdings match the current filters."}</div> : null}
+            </div>
+            <div className="mt-4 hidden overflow-x-auto md:block">
               <table className="w-full min-w-[880px] text-left text-sm">
                 <thead className="border-b border-border text-xs text-muted">
                   <tr><th className="px-2 py-3">{ko ? "\uC885\uBAA9" : "Holding"}</th><th className="px-2 py-3">{ko ? "\uC139\uD130" : "Sector"}</th><th className="px-2 py-3 text-right">{ko ? "\uBCF4\uC720\uB7C9" : "Shares"}</th><th className="px-2 py-3 text-right">{ko ? "\uD3C9\uAC00\uC561" : "Value"}</th><th className="px-2 py-3 text-right">{ko ? "\uD604\uC7AC \uBE44\uC911" : "Weight"}</th><th className="px-2 py-3 text-right">{ko ? "\uBE44\uC911 \uBCC0\uD654" : "Change"}</th><th className="px-2 py-3 text-right">{ko ? "\uC218\uC775\uB960" : "Return"}</th></tr>
@@ -733,7 +782,19 @@ export function GuruPortfoliosPage({
                 <span className="font-semibold">{ko ? "수익이 큼" : "Large gain"}</span>
               </div>
             </div>
-            <div className="relative mt-3 h-[42rem] overflow-hidden rounded-lg bg-surface-muted sm:h-[50rem] lg:h-[60rem]">
+            <div className="mt-3 grid gap-2 sm:hidden">
+              {mobileMapHoldings.map((item) => {
+                const label = metric === "weight" ? `${item.weight.toFixed(2)}%` : item.returnPercent === null ? "-" : formatPercent(item.returnPercent);
+                const content = (
+                  <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-border bg-surface-muted p-3">
+                    <div className="min-w-0"><p className="truncate text-sm font-semibold">{item.ticker ?? item.issuerName}</p><p className="mt-0.5 truncate text-xs text-muted">{sectorLabel(item.sector, ko)}</p></div>
+                    <span className={`shrink-0 text-sm font-bold ${metric === "return" && item.returnPercent !== null ? item.returnPercent >= 0 ? "text-green-600" : "text-red-600" : "text-foreground"}`}>{label}</span>
+                  </div>
+                );
+                return item.ticker ? <Link key={item.id} href={`/?symbol=${encodeURIComponent(item.ticker)}&market=US`}>{content}</Link> : <div key={item.id}>{content}</div>;
+              })}
+            </div>
+            <div className="relative mt-3 hidden h-[50rem] overflow-hidden rounded-lg bg-surface-muted sm:block lg:h-[60rem]">
               {sectorBlocks.map((block) => (
                 <div
                   key={block.sector}

@@ -195,6 +195,7 @@ Do not replace TipTap with ad hoc paragraph/image block controls.
 
 - Guru cards, detail headers, and portfolio maps display the report quarter and last collection time in KST. Freshness badges are green through 3 days, blue through 14 days, amber when older, and explicit when no collection history exists.
 - Guru detail holdings support text search, sector filtering, activity filtering, and sorting. The full-exit filter uses `activityHoldings`; zero-weight positions display a red `전량매도` badge but are excluded from the current portfolio map.
+- Guru detail is touch-first below the `sm`/`md` breakpoints: the primary tabs stay visible while scrolling, holdings sorting uses a compact select, the wide holdings table becomes mobile cards, and the treemap becomes a readable holding list. Desktop keeps the full table and treemap. No guru control may force page-level horizontal overflow.
 
 ## Verification
 
