@@ -207,8 +207,9 @@ export class GuruPortfoliosService implements OnModuleInit {
       return;
     }
     const result = await this.refreshFromEdgarFilings();
+    const tickerMappings = await this.refreshMissingTickerMappings();
     this.logger.log(
-      `Scheduled guru EDGAR fast batch completed: managers=${result.managers}, holdings=${result.holdings}, skipped=${result.skippedManagers}, failed=${result.failedManagers}, generatedAt=${result.generatedAt}.`,
+      `Scheduled guru EDGAR fast batch completed: managers=${result.managers}, holdings=${result.holdings}, skipped=${result.skippedManagers}, failed=${result.failedManagers}, mapped=${tickerMappings.mapped}, unresolved=${tickerMappings.unresolved}, generatedAt=${result.generatedAt}.`,
     );
   }
 
@@ -231,9 +232,10 @@ export class GuruPortfoliosService implements OnModuleInit {
       this.logger.log('Scheduled guru Nasdaq classification batch disabled.');
       return;
     }
+    const tickerMappings = await this.refreshMissingTickerMappings();
     const result = await this.refreshNasdaqClassifications();
     this.logger.log(
-      `Scheduled guru Nasdaq classification batch completed: scanned=${result.scanned}, updated=${result.updated}, failed=${result.failed}.`,
+      `Scheduled guru Nasdaq classification batch completed: mapped=${tickerMappings.mapped}, unresolved=${tickerMappings.unresolved}, scanned=${result.scanned}, updated=${result.updated}, failed=${result.failed}.`,
     );
   }
 
@@ -244,12 +246,169 @@ export class GuruPortfoliosService implements OnModuleInit {
     failedManagers: number;
     generatedAt: string;
     secDataset: { managers: number; holdings: number; skippedManagers: number; generatedAt: string } | null;
+    tickerMappings: { scanned: number; mapped: number; unresolved: number; failed: number };
     nasdaq: { scanned: number; updated: number; failed: number };
   }> {
     const edgar = await this.refreshFromEdgarFilings({ force });
     const secDataset = edgar.holdings > 0 ? null : await this.refreshFromSecDatasets({ force });
+    const tickerMappings = await this.refreshMissingTickerMappings();
     const nasdaq = await this.refreshNasdaqClassifications();
-    return { ...edgar, secDataset, nasdaq };
+    return { ...edgar, secDataset, tickerMappings, nasdaq };
+  }
+
+  async refreshMissingTickerMappings(): Promise<{
+    scanned: number;
+    mapped: number;
+    unresolved: number;
+    failed: number;
+  }> {
+    const holdings = await this.holdingRepository
+      .createQueryBuilder('holding')
+      .where("holding.ticker IS NULL OR holding.ticker = ''")
+      .getMany();
+    const representativeByCusip = new Map<string, GuruHoldingEntity>();
+    for (const holding of holdings) {
+      if (!representativeByCusip.has(holding.cusip)) {
+        representativeByCusip.set(holding.cusip, holding);
+      }
+    }
+    if (!representativeByCusip.size) {
+      return { scanned: 0, mapped: 0, unresolved: 0, failed: 0 };
+    }
+
+    const tickerMap = await this.buildTickerMap();
+    const mastered = await this.securityMasterRepository.find();
+    const masteredEntityByCusip = new Map(
+      mastered.map((security) => [security.cusip, security] as const),
+    );
+    const masteredByCusip = new Map(
+      mastered.flatMap((security) =>
+        security.ticker ? [[security.cusip, security.ticker] as const] : [],
+      ),
+    );
+    const resolved = new Map<string, { ticker: string; figi: string | null; name: string; source: string }>();
+    for (const [cusip, holding] of representativeByCusip) {
+      const ticker = this.findTicker(
+        cusip,
+        holding.issuerName,
+        holding.classTitle,
+        tickerMap,
+        masteredByCusip,
+      );
+      if (ticker) {
+        resolved.set(cusip, {
+          ticker,
+          figi: holding.figi,
+          name: holding.issuerName,
+          source: KNOWN_CUSIP_TICKERS[cusip] ? 'known_cusip' : 'issuer_name',
+        });
+      }
+    }
+
+    let failed = 0;
+    const unresolvedCusips = [...representativeByCusip.keys()].filter(
+      (cusip) => !resolved.has(cusip),
+    );
+    const apiKey = this.configService.get<string>('OPENFIGI_API_KEY')?.trim();
+    const batchSize = apiKey ? 100 : 10;
+    for (let index = 0; index < unresolvedCusips.length; index += batchSize) {
+      const batch = unresolvedCusips.slice(index, index + batchSize);
+      try {
+        const response = await fetch('https://api.openfigi.com/v3/mapping', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            ...(apiKey ? { 'X-OPENFIGI-APIKEY': apiKey } : {}),
+          },
+          body: JSON.stringify(
+            batch.map((cusip) => ({ idType: 'ID_CUSIP', idValue: cusip })),
+          ),
+        });
+        if (!response.ok) {
+          throw new Error(`OpenFIGI mapping failed: ${response.status}`);
+        }
+        const results = (await response.json()) as Array<{
+          data?: Array<{
+            figi?: string;
+            ticker?: string;
+            name?: string;
+            exchCode?: string;
+          }>;
+        }>;
+        results.forEach((result, resultIndex) => {
+          const cusip = batch[resultIndex];
+          const candidates = result.data ?? [];
+          const selected =
+            candidates.find(
+              (item) =>
+                item.exchCode === 'US' &&
+                Boolean(item.ticker) &&
+                !item.ticker!.includes('*'),
+            ) ??
+            candidates.find(
+              (item) =>
+                Boolean(item.ticker) &&
+                /^[A-Z0-9.-]+$/.test(item.ticker!),
+            );
+          if (!selected?.ticker) return;
+          resolved.set(cusip, {
+            ticker: selected.ticker.toUpperCase(),
+            figi: selected.figi ?? null,
+            name:
+              selected.name ?? representativeByCusip.get(cusip)?.issuerName ?? cusip,
+            source: 'openfigi',
+          });
+        });
+      } catch (error) {
+        failed += batch.length;
+        this.logger.warn(
+          `Guru OpenFIGI ticker mapping failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+      if (!apiKey && index + batchSize < unresolvedCusips.length) {
+        await new Promise((resolve) => setTimeout(resolve, 2_600));
+      }
+    }
+
+    const now = new Date();
+    for (const [cusip, mapping] of resolved) {
+      const existingSecurity = masteredEntityByCusip.get(cusip);
+      await this.holdingRepository
+        .createQueryBuilder()
+        .update(GuruHoldingEntity)
+        .set({ ticker: mapping.ticker })
+        .where('cusip = :cusip', { cusip })
+        .andWhere("ticker IS NULL OR ticker = ''")
+        .execute();
+      await this.securityMasterRepository.upsert(
+        {
+          cusip,
+          ticker: mapping.ticker,
+          figi: mapping.figi ?? existingSecurity?.figi ?? null,
+          name: existingSecurity?.name ?? mapping.name,
+          sector: existingSecurity?.sector ?? null,
+          industry: existingSecurity?.industry ?? null,
+          currentPrice: existingSecurity?.currentPrice ?? null,
+          priceUpdatedAt: existingSecurity?.priceUpdatedAt ?? null,
+          source: existingSecurity?.source?.includes(mapping.source)
+            ? existingSecurity.source
+            : existingSecurity?.source
+              ? `${existingSecurity.source},${mapping.source}`
+              : mapping.source,
+          fetchedAt: now,
+        },
+        ['cusip'],
+      );
+    }
+
+    return {
+      scanned: representativeByCusip.size,
+      mapped: resolved.size,
+      unresolved: representativeByCusip.size - resolved.size,
+      failed,
+    };
   }
 
   async getManagers(): Promise<GuruSummaryResponse[]> {
@@ -1342,7 +1501,7 @@ export class GuruPortfoliosService implements OnModuleInit {
       .toUpperCase()
       .replace(/&/g, ' AND ')
       .replace(
-        /\b(INCORPORATED|INC|CORPORATION|CORP|COMPANY|CO|LIMITED|LTD|PLC|HOLDINGS?|GROUP|THE|COM|CLASS|CL|COMMON|STOCK|SHARES?|ADR|ADS|NEW|DEL)\b/g,
+        /\b(INCORPORATED|INC|CORPORATION|CORP|COMPANY|CO|LIMITED|LTD|PLC|HOLDINGS?|HLDG|GROUP|THE|COM|CLASS|CL|COMMON|STOCK|SHARES?|SHS|ADR|ADS|NEW|DEL|NV|NYS|REGISTRY)\b/g,
         ' ',
       )
       .replace(/[^A-Z0-9]/g, '');

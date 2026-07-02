@@ -46,6 +46,10 @@ function isSoldOut(holding: GuruHolding): boolean {
   return holding.previousWeight > 0 && holding.weight <= 0;
 }
 
+function holdingLabel(holding: GuruHolding): string {
+  return holding.ticker ?? holding.issuerName;
+}
+
 function layoutTreemap(
   items: LayoutHolding[],
   x = 0,
@@ -246,7 +250,7 @@ function HoldingRows({
                 <p className="truncate font-semibold">
                   {item.issuerName}
                   <span className="ml-1 text-sm text-primary">
-                    ({item.ticker ?? item.cusip}{item.putCall ? ` ${item.putCall.toUpperCase()}` : ""})
+                    ({holdingLabel(item)}{item.putCall ? ` ${item.putCall.toUpperCase()}` : ""})
                   </span>
                 </p>
                 <p className="mt-1 text-xs text-muted">
@@ -695,7 +699,7 @@ export function GuruPortfoliosPage({
                   <div className="flex min-w-0 items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-semibold">
-                        {item.ticker ?? item.cusip}{item.putCall ? ` ${item.putCall.toUpperCase()}` : ""}
+                        {holdingLabel(item)}{item.putCall ? ` ${item.putCall.toUpperCase()}` : ""}
                       </p>
                       <p className="mt-0.5 truncate text-xs text-muted">{item.issuerName}</p>
                     </div>
@@ -719,7 +723,7 @@ export function GuruPortfoliosPage({
                 <tbody className="divide-y divide-border">
                   {visibleHoldings.map((item) => (
                     <tr key={item.id} className="hover:bg-surface-muted">
-                      <td className="px-2 py-3"><p className="font-semibold">{item.ticker ?? item.cusip}{item.putCall ? ` ${item.putCall.toUpperCase()}` : ""}{isSoldOut(item) ? <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700">{ko ? "\uC804\uB7C9\uB9E4\uB3C4" : "Sold out"}</span> : null}</p><p className="max-w-72 truncate text-xs text-muted">{item.issuerName}</p></td>
+                      <td className="px-2 py-3"><p className="font-semibold">{holdingLabel(item)}{item.putCall ? ` ${item.putCall.toUpperCase()}` : ""}{isSoldOut(item) ? <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700">{ko ? "\uC804\uB7C9\uB9E4\uB3C4" : "Sold out"}</span> : null}</p><p className="max-w-72 truncate text-xs text-muted">{item.ticker ? item.issuerName : item.cusip}</p></td>
                       <td className="px-2 py-3"><p className="font-semibold">{sectorLabel(item.sector, ko)}</p><p className="max-w-48 truncate text-xs text-muted">{item.industry ?? "-"}</p></td>
                       <td className="px-2 py-3 text-right">{number.format(item.shares)}</td>
                       <td className="px-2 py-3 text-right">{formatMoney(item.value)}</td>
@@ -787,7 +791,7 @@ export function GuruPortfoliosPage({
                 const label = metric === "weight" ? `${item.weight.toFixed(2)}%` : item.returnPercent === null ? "-" : formatPercent(item.returnPercent);
                 const content = (
                   <div className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-border bg-surface-muted p-3">
-                    <div className="min-w-0"><p className="truncate text-sm font-semibold">{item.ticker ?? item.issuerName}</p><p className="mt-0.5 truncate text-xs text-muted">{sectorLabel(item.sector, ko)}</p></div>
+                    <div className="min-w-0"><p className="truncate text-sm font-semibold">{holdingLabel(item)}</p><p className="mt-0.5 truncate text-xs text-muted">{sectorLabel(item.sector, ko)}</p></div>
                     <span className={`shrink-0 text-sm font-bold ${metric === "return" && item.returnPercent !== null ? item.returnPercent >= 0 ? "text-green-600" : "text-red-600" : "text-foreground"}`}>{label}</span>
                   </div>
                 );
@@ -812,13 +816,13 @@ export function GuruPortfoliosPage({
                         : item.returnPercent === null ? "-" : formatPercent(item.returnPercent);
                       const content = (
                         <div className="flex h-full flex-col items-center justify-center overflow-hidden p-1 text-center text-white drop-shadow-sm">
-                          {width > 8 && height > 8 ? <strong className="max-w-full truncate text-[10px] sm:text-xs">{item.ticker ?? item.issuerName}{item.putCall ? ` ${item.putCall.toUpperCase()}` : ""}</strong> : null}
+                          {width > 8 && height > 8 ? <strong className="max-w-full truncate text-[10px] sm:text-xs">{holdingLabel(item)}{item.putCall ? ` ${item.putCall.toUpperCase()}` : ""}</strong> : null}
                           {width > 11 && height > 11 ? <span className="mt-0.5 text-[9px] font-semibold sm:text-[11px]">{label}</span> : null}
                         </div>
                       );
                       const className = "absolute cursor-pointer overflow-hidden border border-white/60 transition hover:z-10 hover:brightness-110";
                       const style = { left: `${x}%`, top: `${y}%`, width: `${width}%`, height: `${height}%`, backgroundColor: tileColor(item) };
-                      const title = `${item.issuerName} (${item.ticker ?? item.cusip}${item.putCall ? ` ${item.putCall.toUpperCase()}` : ""}) \u00B7 ${sectorLabel(item.sector, ko)} / ${item.industry ?? "-"} \u00B7 ${item.weight.toFixed(2)}% \u00B7 ${item.returnPercent === null ? "-" : formatPercent(item.returnPercent)}`;
+                      const title = `${item.issuerName} (${holdingLabel(item)}${item.putCall ? ` ${item.putCall.toUpperCase()}` : ""}) \u00B7 ${sectorLabel(item.sector, ko)} / ${item.industry ?? "-"} \u00B7 ${item.weight.toFixed(2)}% \u00B7 ${item.returnPercent === null ? "-" : formatPercent(item.returnPercent)}`;
                       return item.ticker ? (
                         <Link key={item.id} href={`/?symbol=${encodeURIComponent(item.ticker)}&market=US`} className={className} style={style} title={title}>{content}</Link>
                       ) : (
