@@ -1,18 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Check,
   Pencil,
+  Percent,
   PieChart,
   Plus,
-  RefreshCw,
+  Search,
   Star,
   Trash2,
   TrendingDown,
   TrendingUp,
-  X,
 } from 'lucide-react';
 import {
   DndContext,
@@ -35,10 +35,12 @@ import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/common/utils/cn';
 import { apiRequest } from '@/common/lib/api';
 import { Button } from '@/common/components/Button';
+import { Modal } from '@/common/components/Modal';
 import { Notice } from '@/common/components/Notice';
 import { SectionHeader } from '@/common/components/SectionHeader';
 import { SegmentedControl } from '@/common/components/SegmentedControl';
 import { Skeleton } from '@/common/components/Skeleton';
+import { useModal } from '@/common/hooks/useModal';
 import { useSessionStore } from '@/common/stores/session';
 import { useMarketDataStore } from '@/common/stores/market-data';
 import { usePreferencesStore } from '@/common/stores/preferences';
@@ -70,17 +72,22 @@ type PositionDraft = {
 };
 
 const PIE_COLORS = [
-  '#2563eb',
-  '#16a34a',
-  '#f97316',
-  '#9333ea',
-  '#dc2626',
-  '#0891b2',
-  '#ca8a04',
-  '#4f46e5',
-  '#db2777',
-  '#0f766e',
+  '#3b82a0',
+  '#57a773',
+  '#d18b55',
+  '#7c75b8',
+  '#c76b72',
+  '#4f9a94',
+  '#b79b4f',
+  '#6b8fd6',
+  '#b46b9f',
+  '#6f8796',
 ];
+
+// Shared field styling for the portfolio modal inputs. Background is applied per
+// use (surface-muted directly on the modal, surface inside a grouped row).
+const INPUT_BASE =
+  'w-full rounded-lg border border-border text-sm font-semibold text-foreground outline-none transition-colors placeholder:font-medium placeholder:text-muted/60 focus:border-primary focus:ring-2 focus:ring-primary/15';
 
 export function FavoritesPage({
   initialTab = 'watchlist',
@@ -117,8 +124,10 @@ export function FavoritesPage({
       <section className="-mx-4 min-w-0 border-y border-border bg-surface p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border sm:p-5">
         <div className="flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
           <SectionHeader
-            eyebrow="Portfolio Dashboard"
-            title="My"
+            eyebrow={
+              language === 'ko' ? '포트폴리오 대시보드' : 'Portfolio Dashboard'
+            }
+            title={language === 'ko' ? '내 투자' : 'My'}
           />
           <SegmentedControl<PortfolioTab>
             className="w-full sm:inline-flex sm:w-auto"
@@ -452,17 +461,20 @@ function PortfolioSection({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const portfolioModal = useModal();
   const [editingPortfolioId, setEditingPortfolioId] = useState<string | null>(
     null,
   );
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [portfolioName, setPortfolioName] = useState('');
   const [drafts, setDrafts] = useState<PositionDraft[]>([makeDraft()]);
   const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'KRW'>('KRW');
   const [portfolioSort, setPortfolioSort] = useState<PortfolioSort>('weight');
   const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
+  const allocationScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollAllocationUp, setCanScrollAllocationUp] = useState(false);
+  const [canScrollAllocationDown, setCanScrollAllocationDown] = useState(false);
 
   const stockSymbols = useMemo(
     () => [...krSymbols, ...usSymbols],
@@ -501,6 +513,34 @@ function PortfolioSection({
   const totalProfitAmount = totalValue - totalCost;
   const totalProfitRate =
     totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : null;
+  const emptyPortfolioTitle =
+    selectedPortfolios.length === 0
+      ? language === 'ko'
+        ? '선택된 포트폴리오가 없습니다.'
+        : 'No portfolio selected.'
+      : language === 'ko'
+        ? '선택된 포트폴리오에 종목이 없습니다.'
+        : 'No positions in the selected portfolio.';
+  const emptyPortfolioBody =
+    selectedPortfolios.length === 0
+      ? ''
+      : language === 'ko'
+        ? '포트폴리오를 수정해 보유 종목을 추가해 주세요.'
+        : 'Edit the portfolio to add positions.';
+
+  const updateAllocationScrollHint = useCallback(() => {
+    const element = allocationScrollRef.current;
+    if (!element) {
+      setCanScrollAllocationUp(false);
+      setCanScrollAllocationDown(false);
+      return;
+    }
+
+    const remainingScroll =
+      element.scrollHeight - element.clientHeight - element.scrollTop;
+    setCanScrollAllocationUp(element.scrollTop > 4);
+    setCanScrollAllocationDown(remainingScroll > 4);
+  }, []);
 
   useEffect(() => {
     if (!accessToken) {
@@ -520,6 +560,13 @@ function PortfolioSection({
       );
     }
   }, [rows]);
+
+  useEffect(() => {
+    updateAllocationScrollHint();
+    window.addEventListener('resize', updateAllocationScrollHint);
+    return () =>
+      window.removeEventListener('resize', updateAllocationScrollHint);
+  }, [sortedRows.length, updateAllocationScrollHint]);
 
   async function loadPortfolios() {
     if (!accessToken) {
@@ -545,7 +592,9 @@ function PortfolioSection({
       setError(
         loadError instanceof Error
           ? loadError.message
-          : '포트폴리오를 불러오지 못했습니다.',
+          : language === 'ko'
+            ? '포트폴리오를 불러오지 못했습니다.'
+            : 'Could not load portfolios.',
       );
     } finally {
       setLoading(false);
@@ -556,16 +605,15 @@ function PortfolioSection({
     setPortfolioName('');
     setDrafts([makeDraft()]);
     setEditingPortfolioId(null);
-    setShowForm(false);
+    portfolioModal.close();
   }
 
   function startCreatePortfolio() {
     setPortfolioName('');
     setDrafts([makeDraft()]);
     setEditingPortfolioId(null);
-    setConfirmDeleteId(null);
     setError('');
-    setShowForm(true);
+    portfolioModal.open();
   }
 
   function startEditPortfolio(portfolio: Portfolio) {
@@ -585,9 +633,8 @@ function PortfolioSection({
         : [makeDraft()],
     );
     setEditingPortfolioId(portfolio.id);
-    setConfirmDeleteId(null);
     setError('');
-    setShowForm(true);
+    portfolioModal.open();
   }
 
   async function savePortfolio() {
@@ -595,7 +642,11 @@ function PortfolioSection({
       return;
     }
     if (!portfolioName.trim()) {
-      setError('포트폴리오 이름은 필수입니다.');
+      setError(
+        language === 'ko'
+          ? '포트폴리오 이름은 필수입니다.'
+          : 'Portfolio name is required.',
+      );
       return;
     }
 
@@ -617,7 +668,11 @@ function PortfolioSection({
     });
 
     if (positions.length === 0) {
-      setError('종목과 수량을 입력해 주세요.');
+      setError(
+        language === 'ko'
+          ? '종목과 수량을 입력해 주세요.'
+          : 'Add at least one stock and quantity.',
+      );
       return;
     }
 
@@ -653,25 +708,51 @@ function PortfolioSection({
       setError(
         saveError instanceof Error
           ? saveError.message
-          : '포트폴리오를 저장하지 못했습니다.',
+          : language === 'ko'
+            ? '포트폴리오를 저장하지 못했습니다.'
+            : 'Could not save portfolio.',
       );
     } finally {
       setSaving(false);
     }
   }
 
-  async function deletePortfolio(id: string) {
-    if (!accessToken) {
+  async function deletePortfolio() {
+    if (!accessToken || !editingPortfolioId) {
       return;
     }
-    await apiRequest<{ ok: true }>(`/markets/portfolios/${id}`, 'DELETE', {
-      accessToken,
-    });
-    setPortfolios((items) => items.filter((item) => item.id !== id));
-    setSelectedIds((ids) => ids.filter((selectedId) => selectedId !== id));
-    setConfirmDeleteId(null);
-    if (editingPortfolioId === id) {
+    const target = portfolios.find((item) => item.id === editingPortfolioId);
+    const confirmed = window.confirm(
+      language === 'ko'
+        ? `'${target?.name ?? ''}' 포트폴리오를 삭제할까요? 되돌릴 수 없습니다.`
+        : `Delete portfolio '${target?.name ?? ''}'? This cannot be undone.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await apiRequest<{ ok: true }>(
+        `/markets/portfolios/${editingPortfolioId}`,
+        'DELETE',
+        { accessToken },
+      );
+      const removedId = editingPortfolioId;
+      setPortfolios((items) => items.filter((item) => item.id !== removedId));
+      setSelectedIds((ids) => ids.filter((id) => id !== removedId));
       resetPortfolioForm();
+      setError('');
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : language === 'ko'
+            ? '포트폴리오를 삭제하지 못했습니다.'
+            : 'Could not delete portfolio.',
+      );
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -708,80 +789,63 @@ function PortfolioSection({
           title={language === 'ko' ? '포트폴리오' : 'Portfolio'}
         />
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            leftIcon={<RefreshCw size={15} />}
-            onClick={loadPortfolios}
-            loading={loading}
-          >
-            새로고침
-          </Button>
+          {portfolios.length ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadPortfolios}
+              loading={loading}
+              className="shrink-0"
+            >
+              {language === 'ko' ? '새로고침' : 'Refresh'}
+            </Button>
+          ) : null}
           <Button
             variant="primary"
             size="sm"
             leftIcon={<Plus size={15} />}
             onClick={startCreatePortfolio}
           >
-            포트폴리오 추가
+            {language === 'ko' ? '포트폴리오 추가' : 'Add portfolio'}
           </Button>
         </div>
       </div>
 
-      {showForm ? (
-        <div className="mt-4 rounded-lg border border-border bg-surface-muted p-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-base font-semibold text-foreground">
-              {editingPortfolioId ? '포트폴리오 수정' : '새 포트폴리오'}
-            </p>
-            <button
-              type="button"
-              onClick={resetPortfolioForm}
-              className="grid size-8 cursor-pointer place-items-center rounded-md text-muted hover:bg-surface hover:text-primary"
-              aria-label="닫기"
-            >
-              <X size={17} />
-            </button>
-          </div>
-          <input
-            value={portfolioName}
-            onChange={(event) => setPortfolioName(event.target.value)}
-            placeholder="포트폴리오 이름"
-            className="mt-4 h-11 w-full rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
-          />
-          <div className="mt-4 grid gap-3">
-            {drafts.map((draft, index) => (
-              <PositionDraftRow
-                key={draft.key}
-                draft={draft}
-                index={index}
-                stockSymbols={stockSymbols}
-                onChange={(patch) => updateDraft(draft.key, patch)}
-                onSelect={(symbol) => selectSymbol(draft.key, symbol)}
-                onRemove={() =>
-                  setDrafts((items) =>
-                    items.filter((item) => item.key !== draft.key),
-                  )
-                }
-                canRemove={drafts.length > 1}
-              />
-            ))}
-          </div>
-          <div className="mt-4 flex flex-wrap justify-between gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setDrafts((items) => [...items, makeDraft()])}
-            >
-              종목 추가
-            </Button>
-            <div className="flex flex-wrap gap-2">
+      <Modal
+        open={portfolioModal.isOpen}
+        onClose={resetPortfolioForm}
+        closeLabel={language === 'ko' ? '닫기' : 'Close'}
+        size="lg"
+        title={
+          editingPortfolioId
+            ? language === 'ko'
+              ? '포트폴리오 수정'
+              : 'Edit portfolio'
+            : language === 'ko'
+              ? '새 포트폴리오'
+              : 'New portfolio'
+        }
+        footerClassName={editingPortfolioId ? 'justify-between' : 'justify-end'}
+        footer={
+          <>
+            {editingPortfolioId ? (
+              <Button
+                variant="ghost-danger"
+                size="sm"
+                onClick={deletePortfolio}
+                loading={deleting}
+                leftIcon={<Trash2 size={15} />}
+              >
+                {language === 'ko' ? '삭제' : 'Delete'}
+              </Button>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={resetPortfolioForm}
               >
-                취소
+                {language === 'ko' ? '취소' : 'Cancel'}
               </Button>
               <Button
                 variant="primary"
@@ -789,58 +853,200 @@ function PortfolioSection({
                 onClick={savePortfolio}
                 loading={saving}
               >
-                {editingPortfolioId ? '수정 저장' : '저장'}
+                {editingPortfolioId
+                  ? language === 'ko'
+                    ? '수정 저장'
+                    : 'Save changes'
+                  : language === 'ko'
+                    ? '저장'
+                    : 'Save'}
               </Button>
             </div>
-          </div>
+          </>
+        }
+      >
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-semibold text-muted">
+            {language === 'ko' ? '포트폴리오 이름' : 'Portfolio name'}
+          </span>
+          <input
+            value={portfolioName}
+            onChange={(event) => setPortfolioName(event.target.value)}
+            placeholder={
+              language === 'ko' ? '예: 미국 성장주' : 'e.g. US Growth'
+            }
+            className={cn(INPUT_BASE, 'h-11 bg-surface-muted px-3.5')}
+          />
+        </label>
+        <div className="mb-2 mt-5 flex items-center justify-between">
+          <span className="text-xs font-semibold text-muted">
+            {language === 'ko' ? '보유 종목' : 'Holdings'}
+          </span>
+          <span className="text-xs font-medium text-muted/70">
+            {drafts.length}
+            {language === 'ko' ? '개' : ''}
+          </span>
         </div>
-      ) : null}
+        <div className="grid gap-3">
+          {drafts.map((draft, index) => (
+            <PositionDraftRow
+              key={draft.key}
+              draft={draft}
+              index={index}
+              stockSymbols={stockSymbols}
+              language={language}
+              onChange={(patch) => updateDraft(draft.key, patch)}
+              onSelect={(symbol) => selectSymbol(draft.key, symbol)}
+              onRemove={() =>
+                setDrafts((items) =>
+                  items.filter((item) => item.key !== draft.key),
+                )
+              }
+              canRemove={drafts.length > 1}
+            />
+          ))}
+          <button
+            type="button"
+            onClick={() => setDrafts((items) => [...items, makeDraft()])}
+            className="flex h-11 w-full cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-dashed border-border text-sm font-semibold text-muted transition-colors hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
+          >
+            <Plus size={16} />
+            {language === 'ko' ? '종목 추가' : 'Add stock'}
+          </button>
+        </div>
+      </Modal>
 
       {loading ? (
-        <div className="mt-4 grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
-          <Skeleton className="h-80 rounded-lg" />
-          <Skeleton className="h-80 rounded-lg" />
-        </div>
+        <>
+          <div className="mt-4 flex h-9 flex-wrap gap-2 overflow-hidden">
+            <Skeleton className="h-9 w-28 rounded-md" />
+            <Skeleton className="h-9 w-36 rounded-md" />
+            <Skeleton className="h-9 w-24 rounded-md" />
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
+            <div className="rounded-lg border border-border bg-surface-muted p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="size-[17px] rounded" />
+                  <Skeleton className="h-5 w-24 rounded" />
+                </div>
+                <Skeleton className="h-8 w-24 rounded-md" />
+              </div>
+              <div className="mt-4 h-80 overflow-hidden">
+                <Skeleton className="h-8 w-48 rounded" />
+                <div className="mt-4 flex h-[17rem] items-center justify-center">
+                  <Skeleton className="size-64 rounded-full" />
+                </div>
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-surface-muted p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="size-[17px] rounded" />
+                  <Skeleton className="h-5 w-20 rounded" />
+                </div>
+                <Skeleton className="h-8 w-36 rounded-md" />
+              </div>
+              <div className="mt-4 grid h-80 content-start gap-2 overflow-hidden pr-1">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <Skeleton key={index} className="h-[4.25rem] rounded-md" />
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
       ) : portfolios.length ? (
         <>
           <div className="mt-4 flex flex-wrap gap-2">
             {portfolios.map((portfolio) => {
               const selected = selectedIds.includes(portfolio.id);
               return (
-                <button
+                <span
                   key={portfolio.id}
-                  type="button"
-                  onClick={() =>
-                    setSelectedIds((ids) =>
-                      selected
-                        ? ids.filter((id) => id !== portfolio.id)
-                        : [...ids, portfolio.id],
-                    )
-                  }
                   className={cn(
-                    'flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm font-semibold transition-colors',
+                    'inline-flex h-9 max-w-full overflow-hidden rounded-md border text-sm font-semibold transition-colors',
                     selected
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border bg-surface-muted text-muted hover:border-primary/40 hover:text-primary',
                   )}
                 >
-                  {portfolio.name}
-                  <span className="text-xs opacity-70">
-                    {portfolio.positions.length}
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedIds((ids) =>
+                        selected
+                          ? ids.filter((id) => id !== portfolio.id)
+                          : [...ids, portfolio.id],
+                      )
+                    }
+                    className="flex h-full min-w-0 cursor-pointer items-center gap-2 px-3"
+                    aria-pressed={selected}
+                  >
+                    <span className="max-w-40 truncate">{portfolio.name}</span>
+                    <span className="text-xs opacity-70">
+                      {portfolio.positions.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => startEditPortfolio(portfolio)}
+                    className={cn(
+                      'grid h-full w-8 shrink-0 cursor-pointer place-items-center border-l transition-colors',
+                      selected
+                        ? 'border-primary/20 text-primary hover:bg-primary/10'
+                        : 'border-border text-muted hover:bg-surface hover:text-primary',
+                    )}
+                    aria-label={
+                      language === 'ko'
+                        ? `${portfolio.name} 수정`
+                        : `Edit ${portfolio.name}`
+                    }
+                    title={language === 'ko' ? '수정' : 'Edit'}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                </span>
               );
             })}
+            <button
+              type="button"
+              onClick={startCreatePortfolio}
+              className="grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-md border border-dashed border-border bg-surface-muted text-muted transition-colors hover:border-primary/40 hover:text-primary"
+              aria-label={
+                language === 'ko' ? '포트폴리오 추가' : 'Add portfolio'
+              }
+              title={language === 'ko' ? '포트폴리오 추가' : 'Add portfolio'}
+            >
+              <Plus size={16} />
+            </button>
           </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
             <div className="rounded-lg border border-border bg-surface-muted p-4">
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-                    Total value
+                <div className="flex items-center gap-2">
+                  <PieChart size={17} className="text-primary" />
+                  <p className="text-sm font-semibold text-foreground">
+                    {language === 'ko' ? '총 평가금액' : 'Total value'}
                   </p>
-                  <p className="mt-1 text-2xl font-bold text-foreground">
+                </div>
+                <SegmentedControl<'KRW' | 'USD'>
+                  className="shrink-0"
+                  buttonClassName="px-3 py-1.5 text-xs"
+                  aria-label={
+                    language === 'ko' ? '표시 통화' : 'Display currency'
+                  }
+                  options={[
+                    { value: 'KRW', label: language === 'ko' ? '원' : 'KRW' },
+                    { value: 'USD', label: language === 'ko' ? '$' : 'USD' },
+                  ]}
+                  value={displayCurrency}
+                  onChange={setDisplayCurrency}
+                />
+              </div>
+              {rows.length ? (
+                <div className="mt-4 flex h-80 min-h-0 flex-col overflow-hidden">
+                  <p className="text-2xl font-bold text-foreground">
                     {formatMoney(
                       totalValue,
                       displayCurrency,
@@ -863,37 +1069,29 @@ function PortfolioSection({
                       </span>
                     ) : null}
                   </p>
+                  <PortfolioPieChart
+                    rows={rows}
+                    totalValue={totalValue}
+                    hoveredSlice={hoveredSlice}
+                    onHover={setHoveredSlice}
+                    language={language}
+                    displayCurrency={displayCurrency}
+                    exchangeRate={exchangeRate}
+                  />
                 </div>
-                <div className="grid grid-cols-2 rounded-md border border-border bg-surface p-1">
-                  {(['KRW', 'USD'] as const).map((currency) => (
-                    <button
-                      key={currency}
-                      type="button"
-                      onClick={() => setDisplayCurrency(currency)}
-                      className={cn(
-                        'h-8 cursor-pointer rounded-md px-3 text-xs font-bold',
-                        displayCurrency === currency
-                          ? 'bg-primary text-white'
-                          : 'text-muted hover:text-primary',
-                      )}
-                    >
-                      {currency === 'KRW' ? '원' : '$'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <PortfolioPieChart
-                rows={rows}
-                totalValue={totalValue}
-                hoveredSlice={hoveredSlice}
-                onHover={setHoveredSlice}
-              />
+              ) : (
+                <PortfolioEmptyState
+                  icon="chart"
+                  title={emptyPortfolioTitle}
+                  body={emptyPortfolioBody}
+                />
+              )}
             </div>
 
             <div className="rounded-lg border border-border bg-surface-muted p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">
-                  <PieChart size={17} className="text-primary" />
+                  <Percent size={17} className="text-primary" />
                   <p className="text-sm font-semibold text-foreground">
                     {language === 'ko' ? '구성비중' : 'Allocation'}
                   </p>
@@ -918,145 +1116,113 @@ function PortfolioSection({
                   onChange={setPortfolioSort}
                 />
               </div>
-              <div className="mt-4 grid max-h-[28rem] gap-2 overflow-y-auto pr-1">
-                {sortedRows.map((row) => (
-                  <button
-                    key={`${row.market}-${row.symbol}`}
-                    type="button"
-                    onClick={() => openStock(row)}
-                    onMouseEnter={() => setHoveredSlice(row.key)}
-                    onMouseLeave={() => setHoveredSlice(null)}
-                    className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2 text-left transition-colors hover:border-primary/50"
+              {sortedRows.length ? (
+                <div className="relative mt-4">
+                  <div
+                    ref={allocationScrollRef}
+                    onScroll={updateAllocationScrollHint}
+                    className="grid h-80 content-start gap-2 overflow-y-auto pr-1"
                   >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span
-                        className="size-3 shrink-0 rounded-full"
-                        style={{ backgroundColor: row.color }}
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">
-                          {row.market === 'KR'
-                            ? row.name || row.symbol
-                            : row.symbol}
-                        </p>
-                        <p className="text-xs text-muted">
-                          {row.market} ·{' '}
-                          {row.market === 'KR'
-                            ? row.symbol
-                            : row.name || row.symbol}{' '}
-                          · {formatNumber(row.quantity)}주
-                        </p>
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-sm font-bold text-foreground">
-                        {formatMoney(
-                          row.displayValue,
-                          displayCurrency,
-                          displayCurrency,
-                          exchangeRate,
-                        )}
-                      </p>
-                      <p className="text-xs font-semibold text-muted">
-                        {formatNumber(row.percent)}%
-                      </p>
-                      {row.profitRate !== null ? (
-                        <p
-                          className={cn(
-                            'text-xs font-bold',
-                            row.profitAmount >= 0
-                              ? 'text-positive'
-                              : 'text-negative',
-                          )}
-                        >
-                          {row.profitRate >= 0 ? '+' : ''}
-                          {formatNumber(row.profitRate)}% (
-                          {formatProfitAmount(
-                            row.profitAmount,
-                            displayCurrency,
-                          )}
-                          )
-                        </p>
-                      ) : null}
-                    </div>
-                  </button>
-                ))}
-              </div>
+                    {sortedRows.map((row) => (
+                      <button
+                        key={`${row.market}-${row.symbol}`}
+                        type="button"
+                        onClick={() => openStock(row)}
+                        onMouseEnter={() => setHoveredSlice(row.key)}
+                        onMouseLeave={() => setHoveredSlice(null)}
+                        className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2 text-left transition-colors hover:border-primary/50"
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className="size-3 shrink-0 rounded-full"
+                            style={{ backgroundColor: row.color }}
+                          />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-foreground">
+                              {row.market === 'KR'
+                                ? row.name || row.symbol
+                                : row.symbol}
+                            </p>
+                            <p className="text-xs text-muted">
+                              {row.market} ·{' '}
+                              {row.market === 'KR'
+                                ? row.symbol
+                                : row.name || row.symbol}{' '}
+                              · {formatNumber(row.quantity)}
+                              {language === 'ko' ? '주' : ' shares'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-sm font-bold text-foreground">
+                            {formatMoney(
+                              row.displayValue,
+                              displayCurrency,
+                              displayCurrency,
+                              exchangeRate,
+                            )}
+                          </p>
+                          <p className="text-xs font-semibold text-muted">
+                            {formatNumber(row.percent)}%
+                          </p>
+                          {row.profitRate !== null ? (
+                            <p
+                              className={cn(
+                                'text-xs font-bold',
+                                row.profitAmount >= 0
+                                  ? 'text-positive'
+                                  : 'text-negative',
+                              )}
+                            >
+                              {row.profitRate >= 0 ? '+' : ''}
+                              {formatNumber(row.profitRate)}% (
+                              {formatProfitAmount(
+                                row.profitAmount,
+                                displayCurrency,
+                              )}
+                              )
+                            </p>
+                          ) : null}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <div
+                    className={`pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-surface-muted via-surface-muted/90 to-transparent backdrop-blur-[1px] transition-opacity duration-200 ${
+                      canScrollAllocationUp ? 'opacity-100' : 'opacity-0'
+                    }`}
+                    aria-hidden
+                  />
+                  <div
+                    className={`pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-surface-muted via-surface-muted/90 to-transparent backdrop-blur-[1px] transition-opacity duration-200 ${
+                      canScrollAllocationDown ? 'opacity-100' : 'opacity-0'
+                    }`}
+                    aria-hidden
+                  />
+                </div>
+              ) : (
+                <PortfolioEmptyState
+                  icon="percent"
+                  title={emptyPortfolioTitle}
+                  body={emptyPortfolioBody}
+                />
+              )}
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3">
-            {portfolios.map((portfolio) => {
-              const confirming = confirmDeleteId === portfolio.id;
-              return (
-                <div
-                  key={portfolio.id}
-                  className="rounded-lg border border-border bg-surface-muted p-4"
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-base font-bold text-foreground">
-                        {portfolio.name}
-                      </p>
-                      <p className="text-xs text-muted">
-                        {portfolio.positions.length}개 종목
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        leftIcon={<Pencil size={15} />}
-                        onClick={() => startEditPortfolio(portfolio)}
-                      >
-                        수정
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        leftIcon={<Trash2 size={15} />}
-                        onClick={() => setConfirmDeleteId(portfolio.id)}
-                      >
-                        삭제
-                      </Button>
-                    </div>
-                  </div>
-                  {confirming ? (
-                    <div className="mt-3 flex flex-col gap-3 rounded-md border border-negative/30 bg-negative-surface p-3 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-sm font-semibold text-negative">
-                        정말 삭제하시겠습니까?
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setConfirmDeleteId(null)}
-                        >
-                          아니오
-                        </Button>
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={() => deletePortfolio(portfolio.id)}
-                        >
-                          예
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
         </>
       ) : (
         <div className="mt-4 rounded-md border border-dashed border-border bg-surface-muted px-4 py-12 text-center">
           <PieChart size={32} className="mx-auto text-primary" />
           <p className="mt-3 text-base font-semibold text-foreground">
-            아직 포트폴리오가 없습니다.
+            {language === 'ko'
+              ? '아직 포트폴리오가 없습니다.'
+              : 'No portfolios yet.'}
           </p>
           <p className="mt-1 text-sm text-muted">
-            포트폴리오 추가를 눌러 종목과 보유 수량을 입력하세요.
+            {language === 'ko'
+              ? '포트폴리오 추가를 눌러 종목과 보유 수량을 입력하세요.'
+              : 'Add a portfolio, then enter stocks and quantities.'}
           </p>
         </div>
       )}
@@ -1068,6 +1234,7 @@ function PositionDraftRow({
   draft,
   index,
   stockSymbols,
+  language,
   onChange,
   onSelect,
   onRemove,
@@ -1076,6 +1243,7 @@ function PositionDraftRow({
   draft: PositionDraft;
   index: number;
   stockSymbols: StockSymbol[];
+  language: 'en' | 'ko';
   onChange: (patch: Partial<PositionDraft>) => void;
   onSelect: (symbol: StockSymbol) => void;
   onRemove: () => void;
@@ -1093,75 +1261,127 @@ function PositionDraftRow({
       .map(({ item }) => item);
   }, [draft.query, stockSymbols]);
 
+  const selected = Boolean(draft.symbol);
+  const marketLabel =
+    draft.market === 'KR'
+      ? language === 'ko'
+        ? '한국'
+        : 'KR'
+      : language === 'ko'
+        ? '미국'
+        : 'US';
+  const currencySymbol = draft.market === 'KR' ? '₩' : '$';
+
   return (
-    <div className="rounded-md border border-border bg-surface p-3">
-      <div className="grid gap-2 sm:grid-cols-[1fr_92px_110px_120px_36px]">
-        <div className="relative">
-          <input
-            value={draft.query}
-            onChange={(event) =>
-              onChange({
-                query: event.target.value,
-                symbol: '',
-                name: '',
-              })
-            }
-            placeholder={`종목 검색 ${index + 1}`}
-            className="h-10 w-full rounded-md border border-border bg-surface-muted px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
-          />
-          {suggestions.length ? (
-            <div className="absolute left-0 right-0 top-11 z-20 overflow-hidden rounded-md border border-border bg-surface shadow-lg">
-              {suggestions.map((symbol) => {
-                const market = symbol.currency === 'KRW' ? 'KR' : 'US';
-                const primary =
-                  market === 'KR' ? symbol.description : symbol.symbol;
-                const secondary =
-                  market === 'KR' ? symbol.symbol : symbol.description;
-                return (
-                  <button
-                    key={`${symbol.currency}-${symbol.symbol}`}
-                    type="button"
-                    onClick={() => onSelect(symbol)}
-                    className="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-surface-muted"
-                  >
-                    <span className="font-semibold text-foreground">
-                      {primary}
-                    </span>
-                    <span className="min-w-0 truncate text-xs text-muted">
-                      {secondary}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
-        <div className="flex h-10 items-center justify-center rounded-md border border-border bg-surface-muted px-3 text-xs font-bold text-muted">
-          {draft.symbol ? (draft.market === 'KR' ? '한국' : '미국') : '자동'}
-        </div>
-        <input
-          value={draft.quantity}
-          onChange={(event) => onChange({ quantity: event.target.value })}
-          placeholder="수량"
-          inputMode="decimal"
-          className="h-10 rounded-md border border-border bg-surface-muted px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
-        />
-        <input
-          value={draft.averagePrice}
-          onChange={(event) => onChange({ averagePrice: event.target.value })}
-          placeholder={draft.market === 'KR' ? '1주평균(원)' : '1주평균($)'}
-          inputMode="decimal"
-          className="h-10 rounded-md border border-border bg-surface-muted px-3 text-sm font-semibold text-foreground outline-none focus:border-primary"
-        />
+    <div className="rounded-xl border border-border bg-surface-muted p-3.5">
+      <div className="mb-2.5 flex items-center gap-2">
+        <span className="grid size-5 shrink-0 place-items-center rounded-md bg-surface text-[11px] font-bold text-muted">
+          {index + 1}
+        </span>
+        {selected ? (
+          <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">
+            {marketLabel}
+          </span>
+        ) : (
+          <span className="text-[11px] font-medium text-muted/80">
+            {language === 'ko' ? '종목을 검색해 추가' : 'Search to add a stock'}
+          </span>
+        )}
         <button
           type="button"
           onClick={onRemove}
           disabled={!canRemove}
-          className="grid size-10 cursor-pointer place-items-center rounded-md text-muted hover:bg-surface-muted hover:text-negative disabled:cursor-not-allowed disabled:opacity-30"
-          aria-label="종목 제거"
+          className="ml-auto grid size-7 cursor-pointer place-items-center rounded-md text-muted transition-colors hover:bg-surface hover:text-negative disabled:cursor-not-allowed disabled:opacity-30"
+          aria-label={language === 'ko' ? '종목 제거' : 'Remove stock'}
         >
-          <Trash2 size={16} />
+          <Trash2 size={15} />
         </button>
+      </div>
+
+      <div className="relative">
+        <Search
+          size={15}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+        />
+        <input
+          value={draft.query}
+          onChange={(event) =>
+            onChange({
+              query: event.target.value,
+              symbol: '',
+              name: '',
+            })
+          }
+          placeholder={
+            language === 'ko' ? '종목명 또는 티커' : 'Company or ticker'
+          }
+          className={cn(INPUT_BASE, 'h-11 bg-surface pl-9 pr-3')}
+        />
+        {suggestions.length ? (
+          <div className="absolute left-0 right-0 top-full z-20 mt-1.5 overflow-hidden rounded-lg border border-border bg-surface shadow-lg">
+            {suggestions.map((symbol) => {
+              const market = symbol.currency === 'KRW' ? 'KR' : 'US';
+              const primary =
+                market === 'KR' ? symbol.description : symbol.symbol;
+              const secondary =
+                market === 'KR' ? symbol.symbol : symbol.description;
+              return (
+                <button
+                  key={`${symbol.currency}-${symbol.symbol}`}
+                  type="button"
+                  onClick={() => onSelect(symbol)}
+                  className="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-surface-muted"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="inline-flex shrink-0 items-center rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] font-bold text-muted">
+                      {market}
+                    </span>
+                    <span className="truncate font-semibold text-foreground">
+                      {primary}
+                    </span>
+                  </span>
+                  <span className="min-w-0 shrink-0 truncate text-xs text-muted">
+                    {secondary}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-medium text-muted">
+            {language === 'ko' ? '수량' : 'Quantity'}
+          </span>
+          <input
+            value={draft.quantity}
+            onChange={(event) => onChange({ quantity: event.target.value })}
+            placeholder="0"
+            inputMode="decimal"
+            className={cn(INPUT_BASE, 'h-11 bg-surface px-3.5')}
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-medium text-muted">
+            {language === 'ko' ? '평균 단가' : 'Avg price'}
+          </span>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted">
+              {currencySymbol}
+            </span>
+            <input
+              value={draft.averagePrice}
+              onChange={(event) =>
+                onChange({ averagePrice: event.target.value })
+              }
+              placeholder="0"
+              inputMode="decimal"
+              className={cn(INPUT_BASE, 'h-11 bg-surface pl-7 pr-3')}
+            />
+          </div>
+        </label>
       </div>
     </div>
   );
@@ -1272,87 +1492,192 @@ function PortfolioPieChart({
   totalValue,
   hoveredSlice,
   onHover,
+  language,
+  displayCurrency,
+  exchangeRate,
 }: {
   rows: PortfolioRow[];
   totalValue: number;
   hoveredSlice: string | null;
   onHover: (key: string | null) => void;
+  language: 'en' | 'ko';
+  displayCurrency: 'USD' | 'KRW';
+  exchangeRate: number | null;
 }) {
   if (!rows.length || totalValue <= 0) {
     return (
       <div className="mt-6 grid aspect-square max-h-72 place-items-center rounded-full border border-dashed border-border text-sm font-semibold text-muted">
-        데이터 없음
+        {language === 'ko' ? '데이터 없음' : 'No data'}
       </div>
     );
   }
 
-  let startAngle = -90;
-  const active = rows.find((row) => row.key === hoveredSlice) ?? rows[0];
-  const activeLabel =
-    active.market === 'KR' ? active.name || active.symbol : active.symbol;
+  const hoveredRow = hoveredSlice
+    ? (rows.find((row) => row.key === hoveredSlice) ?? null)
+    : null;
+  const hoveredLabel = hoveredRow
+    ? hoveredRow.market === 'KR'
+      ? hoveredRow.name || hoveredRow.symbol
+      : hoveredRow.symbol
+    : '';
+  const center = 120;
+  const ringRadius = 88;
+  const ringWidth = 32;
+  const gapAngle = rows.length > 1 ? 2.4 : 0;
+  const segments = rows.reduce<
+    {
+      row: PortfolioRow;
+      startAngle: number;
+      endAngle: number;
+      visualStartAngle: number;
+      visualEndAngle: number;
+    }[]
+  >((items, row) => {
+    const startAngle = items.at(-1)?.endAngle ?? -90;
+    const endAngle = startAngle + (row.percent / 100) * 360;
+    const shouldUseGap = endAngle - startAngle > gapAngle * 2;
+    return [
+      ...items,
+      {
+        row,
+        startAngle,
+        endAngle,
+        visualStartAngle: shouldUseGap
+          ? startAngle + gapAngle / 2
+          : startAngle,
+        visualEndAngle: shouldUseGap ? endAngle - gapAngle / 2 : endAngle,
+      },
+    ];
+  }, []);
 
   return (
-    <div className="mt-6 flex flex-col items-center">
-      <svg viewBox="0 0 240 240" className="aspect-square w-full max-w-72">
-        {rows.map((row) => {
-          if (row.percent >= 99.99) {
+    <div className="mt-4 flex min-h-0 flex-1 items-center justify-center">
+      <div className="donut-in relative aspect-square w-full max-w-[16.5rem]">
+        <svg
+          viewBox="0 0 240 240"
+          className="h-full w-full overflow-visible"
+          onMouseLeave={() => onHover(null)}
+        >
+          <circle
+            cx={center}
+            cy={center}
+            r={ringRadius}
+            fill="none"
+            stroke="var(--surface-subtle)"
+            strokeWidth={ringWidth}
+          />
+          {segments.map(({ row, visualStartAngle, visualEndAngle }) => {
+            const isActive = !hoveredSlice || hoveredSlice === row.key;
+            const lifted = hoveredSlice === row.key;
+            const style = {
+              transformBox: 'view-box',
+              transformOrigin: `${center}px ${center}px`,
+              transform: lifted ? 'scale(1.04)' : 'scale(1)',
+              transition: 'transform 200ms ease, opacity 200ms ease',
+            } as const;
+
+            if (row.percent >= 99.99) {
+              return (
+                <circle
+                  key={row.key}
+                  cx={center}
+                  cy={center}
+                  r={ringRadius}
+                  fill="none"
+                  stroke={row.color}
+                  strokeWidth={ringWidth}
+                  className="cursor-pointer"
+                  style={style}
+                  opacity={isActive ? 1 : 0.28}
+                  onMouseEnter={() => onHover(row.key)}
+                />
+              );
+            }
+            const d = describeArc(
+              center,
+              center,
+              ringRadius,
+              visualStartAngle,
+              visualEndAngle,
+            );
             return (
-              <circle
+              <path
                 key={row.key}
-                cx="120"
-                cy="120"
-                r={hoveredSlice === row.key ? 98 : 94}
+                d={d}
                 fill="none"
                 stroke={row.color}
-                strokeWidth={hoveredSlice === row.key ? 36 : 30}
-                className="cursor-pointer transition-all duration-200"
+                strokeWidth={ringWidth}
+                strokeLinecap="butt"
+                className="cursor-pointer"
+                style={style}
+                opacity={isActive ? 1 : 0.28}
                 onMouseEnter={() => onHover(row.key)}
-                onMouseLeave={() => onHover(null)}
               />
             );
-          }
-          const endAngle = startAngle + (row.percent / 100) * 360;
-          const d = describeArc(
-            120,
-            120,
-            hoveredSlice === row.key ? 98 : 94,
-            startAngle,
-            endAngle,
-          );
-          startAngle = endAngle;
-          return (
-            <path
-              key={row.key}
-              d={d}
-              fill="none"
-              stroke={row.color}
-              strokeWidth={hoveredSlice === row.key ? 36 : 30}
-              strokeLinecap="round"
-              className="cursor-pointer transition-all duration-200"
-              opacity={!hoveredSlice || hoveredSlice === row.key ? 1 : 0.45}
-              onMouseEnter={() => onHover(row.key)}
-              onMouseLeave={() => onHover(null)}
-            />
-          );
-        })}
-        <circle cx="120" cy="120" r="62" className="fill-surface" />
-        <text
-          x="120"
-          y="112"
-          textAnchor="middle"
-          className="fill-muted text-[12px] font-semibold"
-        >
-          {activeLabel}
-        </text>
-        <text
-          x="120"
-          y="135"
-          textAnchor="middle"
-          className="fill-foreground text-[20px] font-bold"
-        >
-          {formatNumber(active.percent)}%
-        </text>
-      </svg>
+          })}
+        </svg>
+
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 px-12 text-center">
+          {hoveredRow ? (
+            <>
+              <span className="flex max-w-full items-center gap-1.5">
+                <span
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: hoveredRow.color }}
+                />
+                <span className="truncate text-[11px] font-semibold text-muted">
+                  {hoveredLabel}
+                </span>
+              </span>
+              <span className="text-[30px] font-bold leading-none tracking-tight text-foreground">
+                {formatNumber(hoveredRow.percent)}%
+              </span>
+              <span className="truncate text-[11px] font-semibold text-muted">
+                {formatMoney(
+                  hoveredRow.displayValue,
+                  displayCurrency,
+                  displayCurrency,
+                  exchangeRate,
+                )}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-[30px] font-bold leading-none tracking-tight text-foreground">
+                {rows.length}
+                <span className="ml-1 text-base font-semibold text-muted">
+                  {language === 'ko' ? '종목' : rows.length === 1 ? 'stock' : 'stocks'}
+                </span>
+              </span>
+              <span className="text-[11px] font-semibold text-muted">
+                {language === 'ko' ? '전체 보유' : 'Total holdings'}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PortfolioEmptyState({
+  icon,
+  title,
+  body,
+}: {
+  icon: 'chart' | 'percent';
+  title: string;
+  body: string;
+}) {
+  const Icon = icon === 'chart' ? PieChart : Percent;
+
+  return (
+    <div className="mt-4 grid h-80 place-items-center rounded-md border border-dashed border-border bg-surface px-4 py-10 text-center">
+      <div>
+        <Icon size={30} className="mx-auto text-primary" />
+        <p className="mt-3 text-sm font-semibold text-foreground">{title}</p>
+        {body ? <p className="mt-1 max-w-sm text-sm text-muted">{body}</p> : null}
+      </div>
     </div>
   );
 }
