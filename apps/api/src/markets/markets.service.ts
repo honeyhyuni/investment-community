@@ -3331,6 +3331,7 @@ export class MarketsService {
       },
       120_000,
       300_000,
+      true,
     );
 
     if (!response.ok) {
@@ -3580,7 +3581,9 @@ export class MarketsService {
     init: RequestInit,
     firstTimeoutMs: number,
     retryTimeoutMs: number,
+    fallbackToDefaultTier = false,
   ): Promise<Response> {
+    let retryInit = init;
     try {
       const response = await fetch(url, {
         ...init,
@@ -3595,10 +3598,17 @@ export class MarketsService {
         .text()
         .catch(() => '');
       this.logger.warn(
-        `OpenAI request retrying after retryable response ${response.status}: ${
+        `OpenAI request retrying${
+          fallbackToDefaultTier && response.status === 429
+            ? ' with default service tier'
+            : ''
+        } after retryable response ${response.status}: ${
           message || response.statusText
         }`,
       );
+      if (fallbackToDefaultTier && response.status === 429) {
+        retryInit = this.withOpenAiServiceTier(init, 'default');
+      }
     } catch (error) {
       if (!this.isRetryableOpenAiError(error)) {
         throw error;
@@ -3611,9 +3621,27 @@ export class MarketsService {
     }
 
     return fetch(url, {
-      ...init,
+      ...retryInit,
       signal: AbortSignal.timeout(retryTimeoutMs),
     });
+  }
+
+  private withOpenAiServiceTier(
+    init: RequestInit,
+    serviceTier: 'flex' | 'default',
+  ): RequestInit {
+    if (typeof init.body !== 'string') {
+      return init;
+    }
+    try {
+      const body = JSON.parse(init.body) as Record<string, unknown>;
+      return {
+        ...init,
+        body: JSON.stringify({ ...body, service_tier: serviceTier }),
+      };
+    } catch {
+      return init;
+    }
   }
 
   private shouldRetryOpenAiResponse(response: Response): boolean {

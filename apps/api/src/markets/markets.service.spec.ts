@@ -26,6 +26,14 @@ type TestMarketsService = {
     interval: string;
   };
   kisGet: jest.MockedFunction<KisGet>;
+  fetchOpenAiWithRetry: (
+    url: string,
+    init: RequestInit,
+    firstTimeoutMs: number,
+    retryTimeoutMs: number,
+    fallbackToDefaultTier?: boolean,
+  ) => Promise<Response>;
+  logger: { warn: jest.Mock };
 };
 
 function toKisDate(date: Date): string {
@@ -177,5 +185,47 @@ describe('MarketsService Korean candles', () => {
       { time: 5, value: 4 },
       { time: 6, value: 5 },
     ]);
+  });
+});
+
+describe('MarketsService OpenAI service tiers', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('falls back from flex to default after a 429 for briefing requests', async () => {
+    const service = Object.create(
+      MarketsService.prototype,
+    ) as TestMarketsService;
+    service.logger = { warn: jest.fn() };
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: { code: 'rate_limit_exceeded' } }),
+          { status: 429 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+    const response = await service.fetchOpenAiWithRetry(
+      'https://api.openai.com/v1/responses',
+      {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-5.5', service_tier: 'flex' }),
+      },
+      1_000,
+      1_000,
+      true,
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
+      service_tier: 'flex',
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({
+      service_tier: 'default',
+    });
   });
 });

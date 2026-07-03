@@ -124,6 +124,7 @@ Manual admin endpoints:
 - `POST /api/markets/calendar/earnings/us/batch`
 
 Market briefing OpenAI calls use `OPENAI_MODEL` and `service_tier: "flex"`. The text request retries once for timeout/429/resource-unavailable. A failed scheduled generation must skip publishing instead of creating partial data.
+For market briefing text only, a Flex 429 retry switches to `service_tier: "default"`; a successful Flex request never incurs the default-tier call. Other OpenAI requests keep their existing retry tier.
 Every scheduled attempt checks PostgreSQL before collecting news or calling OpenAI. Once that market has a briefing for the current KST date, later retry cron executions return immediately and must not incur another OpenAI call or send another notification.
 
 ## IPO Calendar Batch
