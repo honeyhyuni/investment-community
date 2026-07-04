@@ -362,7 +362,7 @@ export class MarketsService {
       )
       .catch(() => null);
 
-    if (cached?.quote) {
+    if (cached?.quote && cached.quote.current > 0) {
       if (Date.now() - cached.updatedAt > maxAgeMs) {
         void this.refreshUsStockQuoteCache(key, symbol).catch((error) => {
           this.logger.warn(
@@ -383,9 +383,11 @@ export class MarketsService {
     symbol: string,
   ): Promise<MarketQuote> {
     const quote = await this.getQuote(symbol);
-    await this.redis
-      .set(key, JSON.stringify({ updatedAt: Date.now(), quote }), 'EX', 5 * 60)
-      .catch(() => undefined);
+    if (quote.current > 0) {
+      await this.redis
+        .set(key, JSON.stringify({ updatedAt: Date.now(), quote }), 'EX', 5 * 60)
+        .catch(() => undefined);
+    }
     return quote;
   }
 
