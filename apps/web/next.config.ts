@@ -19,6 +19,10 @@ const nextConfig: NextConfig = {
         destination:
           process.env.DEV_API_PROXY_TARGET ?? "http://localhost:4000/api/:path*",
       },
+      {
+        source: "/uploads/community/:path*",
+        destination: "http://localhost:4000/uploads/community/:path*",
+      },
     ];
   },
 };

@@ -311,3 +311,7 @@ docker compose logs --tail=100 web
 npm --prefix apps/web exec tsc --noEmit
 npm --prefix apps/api run build
 ```
+
+## Community image backup
+
+Community images are stored in the persistent `community_uploads` Docker volume. Back up and restore it together with PostgreSQL before replacing the server. Keep the named volume during container recreation and do not use `docker compose down -v` for routine deployments.

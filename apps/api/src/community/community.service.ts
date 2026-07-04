@@ -15,6 +15,7 @@ import { CommunityPost } from './community-post.entity';
 import { PostComment } from './post-comment.entity';
 import { PostLike } from './post-like.entity';
 import { UserSubscription } from './user-subscription.entity';
+import { COMMUNITY_IMAGE_URL_PREFIX, CommunityImagesService } from './community-images.service';
 
 type FeedScope = 'all' | 'subscribed' | 'mine' | 'user';
 
@@ -97,6 +98,7 @@ export class CommunityService {
     @InjectRepository(UserSubscription)
     private readonly subscriptionsRepository: Repository<UserSubscription>,
     private readonly notifications: NotificationsService,
+    private readonly communityImages: CommunityImagesService,
   ) {}
 
   async getFeed(
@@ -163,13 +165,14 @@ export class CommunityService {
     input: CreatePostInput,
   ): Promise<CommunityPostDto> {
     const content = input.content?.trim();
-    const title = input.title?.trim().slice(0, 160) || null;
+    const title = input.title?.trim().slice(0, 160) || '제목없음';
     const contentBlocks = this.normalizeContentBlocks(
       input.contentBlocks ?? [],
     );
-    const imageUrls = (input.imageUrls ?? [])
-      .filter((url) => typeof url === 'string' && url.startsWith('data:image/'))
-      .slice(0, 4);
+    const html = contentBlocks.map((block) => block.text ?? '').join('');
+    this.assertAllowedImageSources(html, []);
+    const imageUrls = [...new Set([...(input.imageUrls ?? []).filter((url) => url.startsWith(COMMUNITY_IMAGE_URL_PREFIX)), ...this.communityImages.extractLocalUrls(html)])];
+    const uploadedImages = await this.communityImages.validateOwnedUrls(currentUserId, imageUrls);
     const caption = input.caption?.trim().slice(0, 2000) ?? '';
     const stockTags = this.normalizeStockTags(input.stockTags ?? []);
 
@@ -195,6 +198,7 @@ export class CommunityService {
         stockTags,
       }),
     );
+    await this.communityImages.attach(post, uploadedImages);
     void this.notifySubscribers(post).catch((error) =>
       this.logNotificationFailure('new post', error),
     );
@@ -217,19 +221,22 @@ export class CommunityService {
   ): Promise<CommunityPostDto> {
     const post = await this.findPost(postId);
     this.assertOwner(post.author.id, currentUserId);
-    const contentBlocks = this.normalizeContentBlocks(
-      input.contentBlocks ?? [],
-    );
-    post.title = input.title?.trim().slice(0, 160) || null;
+    const previousHtml = this.resolveContentBlocks(post).map((block) => block.text ?? '').join('');
+    const contentBlocks = this.normalizeContentBlocks(input.contentBlocks ?? []);
+    const html = contentBlocks.map((block) => block.text ?? '').join('');
+    this.assertAllowedImageSources(html, this.communityImages.extractAllImageUrls(previousHtml).filter((url) => url.startsWith('data:image/')));
+    const imageUrls = [...new Set([...(input.imageUrls ?? []).filter((url) => url.startsWith(COMMUNITY_IMAGE_URL_PREFIX)), ...this.communityImages.extractLocalUrls(html)])];
+    const uploadedImages = await this.communityImages.validateOwnedUrls(currentUserId, imageUrls);
+    post.title = input.title?.trim().slice(0, 160) || '제목없음';
     post.content =
       input.content?.trim() || this.blocksToPlainText(contentBlocks);
     post.contentBlocks = contentBlocks;
-    post.imageUrls = (input.imageUrls ?? [])
-      .filter((url) => typeof url === 'string' && url.startsWith('data:image/'))
-      .slice(0, 4);
+    post.imageUrls = imageUrls;
     post.caption = input.caption?.trim().slice(0, 2000) ?? '';
     post.stockTags = this.normalizeStockTags(input.stockTags ?? []);
     await this.postsRepository.save(post);
+    await this.communityImages.attach(post, uploadedImages);
+    await this.communityImages.removeDetached(post.id, imageUrls);
     return (await this.toPostDtos([post], currentUserId))[0];
   }
 
@@ -239,6 +246,7 @@ export class CommunityService {
   ): Promise<{ ok: true }> {
     const post = await this.findPost(postId);
     await this.assertOwnerOrAdmin(post.author.id, currentUserId);
+    await this.communityImages.removeForPost(post.id);
     await this.postsRepository.remove(post);
     return { ok: true };
   }
@@ -634,7 +642,7 @@ export class CommunityService {
         return;
       }
 
-      if (block.type === 'image' && block.url?.startsWith('data:image/')) {
+      if (block.type === 'image' && block.url?.startsWith(COMMUNITY_IMAGE_URL_PREFIX)) {
         normalized.push({
           id: block.id || `image-${index}`,
           type: 'image' as const,
@@ -654,6 +662,12 @@ export class CommunityService {
     });
 
     return normalized;
+  }
+
+  private assertAllowedImageSources(html: string, legacyUrls: string[]): void {
+    const legacy = new Set(legacyUrls);
+    const invalid = this.communityImages.extractAllImageUrls(html).find((url) => !url.startsWith(COMMUNITY_IMAGE_URL_PREFIX) && !legacy.has(url));
+    if (invalid) throw new BadRequestException('Post images must use an uploaded community image URL.');
   }
 
   private resolveContentBlocks(post: CommunityPost): CommunityContentBlock[] {

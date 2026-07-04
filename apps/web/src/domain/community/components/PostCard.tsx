@@ -110,7 +110,7 @@ export function PostCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="line-clamp-2 text-xl font-semibold leading-snug text-foreground sm:truncate sm:text-2xl">
-            {post.title || post.content || (ko ? "제목 없음" : "Untitled")}
+            {post.title || (ko ? "제목없음" : "Untitled")}
           </h3>
           {forceExpanded ? (
             <>

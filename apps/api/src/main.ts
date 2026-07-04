@@ -4,7 +4,8 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import compression from 'compression';
 import { ValidationPipe } from '@nestjs/common';
-import { json, urlencoded } from 'express';
+import { json, static as serveStatic, urlencoded } from 'express';
+import { join } from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -13,6 +14,13 @@ async function bootstrap() {
   app.use(helmet());
   app.use(json({ limit: '12mb' }));
   app.use(urlencoded({ extended: true, limit: '12mb' }));
+  app.use(
+    '/uploads/community',
+    serveStatic(
+      process.env.COMMUNITY_UPLOAD_DIR ?? join(process.cwd(), 'uploads', 'community'),
+      { fallthrough: false, index: false },
+    ),
+  );
   app.use(cookieParser());
   app.use(compression());
   app.enableCors({
