@@ -1,6 +1,6 @@
 "use client";
 
-import { MouseEvent } from "react";
+import { MouseEvent, useMemo } from "react";
 
 /** TipTap이 생성한 HTML을 렌더한다. 이미지 클릭 시 onImageClick 호출(확대용). */
 export function RichContent({
@@ -10,6 +10,12 @@ export function RichContent({
   html: string;
   onImageClick?: (url: string) => void;
 }) {
+  const renderHtml = useMemo(
+    () =>
+      html.replace(/<img\b(?![^>]*\bloading=)/gi, '<img loading="lazy" decoding="async" '),
+    [html],
+  );
+
   function handleClick(event: MouseEvent<HTMLDivElement>) {
     if (!onImageClick) {
       return;
@@ -26,7 +32,7 @@ export function RichContent({
         onImageClick ? "[&_img]:cursor-zoom-in" : ""
       }`}
       onClick={handleClick}
-      dangerouslySetInnerHTML={{ __html: html }}
+      dangerouslySetInnerHTML={{ __html: renderHtml }}
     />
   );
 }

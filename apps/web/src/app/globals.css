@@ -216,6 +216,8 @@ select {
 /* TipTap 리치 콘텐츠 (에디터 + 렌더러 공유) */
 .tiptap-content {
   white-space: break-spaces;
+  overflow-wrap: anywhere;
+  contain: layout paint;
 }
 .tiptap-content :where(h1) {
   font-size: 1.5rem;
@@ -291,8 +293,12 @@ select {
   margin: 1em 0;
 }
 .tiptap-content :where(img) {
+  display: block;
+  width: auto;
+  height: auto;
   max-width: 100%;
   max-height: 720px;
+  object-fit: contain;
   border-radius: 8px;
   margin: 0.5em 0;
 }

@@ -103,7 +103,7 @@ export function PostCard({
       onClick={openPostFromCard}
       className={`-mx-4 rounded-none border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border ${
         onOpenPost
-          ? "cursor-pointer transition-all duration-150 ease-out hover:scale-[1.01] hover:shadow-md hover:will-change-transform"
+          ? "cursor-pointer transition-shadow duration-150 ease-out hover:shadow-md"
           : ""
       }`}
     >
