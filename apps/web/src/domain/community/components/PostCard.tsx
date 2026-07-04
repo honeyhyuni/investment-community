@@ -207,6 +207,7 @@ export function PostCard({
       <div className={`mt-4 ${showFull ? "" : "max-h-64 overflow-hidden sm:max-h-72"}`}>
         <RichContent
           html={html}
+          maxImages={onOpenPost ? 1 : undefined}
           onImageClick={
             enableImagePreview ? (url) => setImagePreview(url) : undefined
           }

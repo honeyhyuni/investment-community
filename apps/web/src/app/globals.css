@@ -217,7 +217,6 @@ select {
 .tiptap-content {
   white-space: break-spaces;
   overflow-wrap: anywhere;
-  contain: layout paint;
 }
 .tiptap-content :where(h1) {
   font-size: 1.5rem;
