@@ -1103,7 +1103,7 @@ export class MarketsService {
       });
     }
 
-    return this.downsamplePerformancePoints(points);
+    return this.downsamplePerformancePoints(this.compactPerformancePointsByDate(points));
   }
 
   private normalizePortfolioPerformancePeriod(period: string): PortfolioPerformancePeriod {
@@ -1161,6 +1161,10 @@ export class MarketsService {
 
   private formatUnixDate(timestamp: number): string {
     return new Date(timestamp * 1000).toISOString().slice(0, 10);
+  }
+
+  private compactPerformancePointsByDate(points: PortfolioPerformancePoint[]): PortfolioPerformancePoint[] {
+    return [...new Map(points.map((point) => [point.date, point])).values()];
   }
 
   private downsamplePerformancePoints(points: PortfolioPerformancePoint[]): PortfolioPerformancePoint[] {
