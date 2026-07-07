@@ -540,6 +540,7 @@ function PortfolioSection({
   const totalProfitAmount = totalValue - totalCost;
   const totalProfitRate =
     totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : null;
+  const comparisonPortfolio = portfolios[0] ?? null;
   const emptyPortfolioTitle =
     selectedPortfolios.length === 0
       ? language === 'ko'
@@ -596,8 +597,7 @@ function PortfolioSection({
   }, [sortedRows.length, updateAllocationScrollHint]);
 
   useEffect(() => {
-    const portfolio = selectedPortfolios[0];
-    if (!accessToken || !portfolio) {
+    if (!accessToken || !comparisonPortfolio) {
       setPerformance([]);
       return;
     }
@@ -610,7 +610,7 @@ function PortfolioSection({
     let cancelled = false;
     setPerformanceLoading(true);
     apiRequest<PortfolioPerformancePoint[]>(
-      `/markets/portfolios/${portfolio.id}/performance?${params.toString()}`,
+      `/markets/portfolios/${comparisonPortfolio.id}/performance?${params.toString()}`,
       'GET',
       { accessToken },
     )
@@ -627,7 +627,7 @@ function PortfolioSection({
     return () => {
       cancelled = true;
     };
-  }, [accessToken, customCompareSymbols, performancePeriod, selectedPortfolios]);
+  }, [accessToken, comparisonPortfolio, customCompareSymbols, performancePeriod]);
 
   function addCompareSymbol(symbol: StockSymbol) {
     const key = compareKeyForSymbol(symbol);
@@ -1015,7 +1015,7 @@ function PortfolioSection({
             loading={performanceLoading}
             period={performancePeriod}
             onPeriodChange={setPerformancePeriod}
-            portfolioName={selectedPortfolios[0]?.name ?? ''}
+            portfolioName={''}
             language={language}
             customSymbols={customCompareSymbols}
             hiddenKeys={hiddenCompareKeys}
@@ -1060,6 +1060,22 @@ function PortfolioSection({
         </>
       ) : portfolios.length ? (
         <>
+          <PortfolioPerformanceChart
+            points={performance}
+            loading={performanceLoading}
+            period={performancePeriod}
+            onPeriodChange={setPerformancePeriod}
+            portfolioName={''}
+            language={language}
+            customSymbols={customCompareSymbols}
+            hiddenKeys={hiddenCompareKeys}
+            compareQuery={compareQuery}
+            compareSuggestions={compareSuggestions}
+            onCompareQueryChange={setCompareQuery}
+            onAddCompareSymbol={addCompareSymbol}
+            onToggleSeries={toggleCompareSeries}
+            onRemoveCustomSymbol={removeCompareSymbol}
+          />
           <div className="mt-4 flex flex-wrap gap-2">
             {portfolios.map((portfolio) => {
               const selected = selectedIds.includes(portfolio.id);
@@ -1124,22 +1140,7 @@ function PortfolioSection({
             </button>
           </div>
 
-          <PortfolioPerformanceChart
-            points={performance}
-            loading={performanceLoading}
-            period={performancePeriod}
-            onPeriodChange={setPerformancePeriod}
-            portfolioName={selectedPortfolios[0]?.name ?? ''}
-            language={language}
-            customSymbols={customCompareSymbols}
-            hiddenKeys={hiddenCompareKeys}
-            compareQuery={compareQuery}
-            compareSuggestions={compareSuggestions}
-            onCompareQueryChange={setCompareQuery}
-            onAddCompareSymbol={addCompareSymbol}
-            onToggleSeries={toggleCompareSeries}
-            onRemoveCustomSymbol={removeCompareSymbol}
-          />
+
           <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
             <div className="rounded-lg border border-border bg-surface-muted p-4">
               <div className="flex items-center justify-between gap-3">
@@ -1402,14 +1403,23 @@ function PortfolioPerformanceChart({
   const min = Math.min(0, ...values);
   const max = Math.max(0, ...values);
   const range = Math.max(max - min, 1);
-  const zeroY = 92 - ((0 - min) / range) * 84;
+  const mid = (max + min) / 2;
+  const yFor = (value: number) => 92 - ((value - min) / range) * 84;
+  const yTicks = [max, mid, min];
+  const xLabels = points.length
+    ? [
+        { key: 'start', label: points[0]?.date.slice(5) ?? '', className: 'text-left' },
+        { key: 'middle', label: points[Math.floor((points.length - 1) / 2)]?.date.slice(5) ?? '', className: 'text-center' },
+        { key: 'end', label: points.at(-1)?.date.slice(5) ?? '', className: 'text-right' },
+      ]
+    : [];
   const pathFor = (key: string) =>
     points
       .map((point, index) => {
         const value = point.series?.[key] ?? null;
         if (value === null) return null;
         const x = points.length <= 1 ? 0 : (index / (points.length - 1)) * 100;
-        return (index === 0 ? 'M' : 'L') + ' ' + x + ' ' + (92 - ((value - min) / range) * 84);
+        return (index === 0 ? 'M' : 'L') + ' ' + x + ' ' + yFor(value);
       })
       .filter(Boolean)
       .join(' ');
@@ -1420,10 +1430,10 @@ function PortfolioPerformanceChart({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="font-semibold">
-            {language === 'ko' ? '?? ? ?? ??' : 'Index & ticker comparison'}
+            {language === 'ko' ? '\uC131\uACFC \uC9C0\uD45C' : 'Performance indicators'}
           </h3>
           <p className="mt-1 text-xs text-muted">
-            {portfolioName || (language === 'ko' ? '??? ??? ??? ? ????.' : 'Add tickers to compare.')}
+            {portfolioName || (language === 'ko' ? '\uAE30\uBCF8 \uC9C0\uC218\uC640 \uC120\uD0DD\uD55C \uD2F0\uCEE4\uB97C \uBE44\uAD50\uD569\uB2C8\uB2E4.' : 'Compare default indices with selected tickers.')}
           </p>
         </div>
         <SegmentedControl<string>
@@ -1441,8 +1451,8 @@ function PortfolioPerformanceChart({
         <input
           value={compareQuery}
           onChange={(event) => onCompareQueryChange(event.target.value)}
-          placeholder={language === 'ko' ? '??? ??? ?? ?? ??' : 'Search ticker to compare'}
-          className={cn(INPUT_BASE, 'h-11 bg-surface-muted pl-9 pr-3')}
+          placeholder={language === 'ko' ? '\uBE44\uAD50\uD560 \uC885\uBAA9\uBA85 \uB610\uB294 \uD2F0\uCEE4 \uAC80\uC0C9' : 'Search ticker to compare'}
+          className={cn(INPUT_BASE, 'h-11 bg-surface-muted pl-9 pr-3 transition-colors hover:border-primary/50 hover:bg-surface focus:border-primary')}
         />
         {compareSuggestions.length ? (
           <div className="absolute left-0 right-0 top-full z-20 mt-1.5 overflow-hidden rounded-lg border border-border bg-surface shadow-lg">
@@ -1472,32 +1482,55 @@ function PortfolioPerformanceChart({
       </div>
 
       {loading ? (
-        <Skeleton className="mt-4 h-64" />
+        <Skeleton className="mt-4 h-72" />
       ) : points.length && values.length ? (
         <>
-          <div className="mt-4 h-64 rounded-md bg-surface-muted p-3">
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img">
-              <line
-                x1="0"
-                x2="100"
-                y1={zeroY}
-                y2={zeroY}
-                stroke="currentColor"
-                className="text-border"
-                strokeDasharray="2 2"
-                vectorEffect="non-scaling-stroke"
-              />
-              {visibleSeries.map((item) => (
-                <path
-                  key={item.key}
-                  d={pathFor(item.key)}
-                  fill="none"
-                  stroke={item.color}
-                  strokeWidth="2"
-                  vectorEffect="non-scaling-stroke"
-                />
+          <div className="mt-4 grid grid-cols-[3rem_1fr] gap-2">
+            <div className="relative h-64 text-[11px] font-medium text-muted">
+              {yTicks.map((tick, index) => (
+                <span
+                  key={index}
+                  className="absolute right-0 -translate-y-1/2 tabular-nums"
+                  style={{ top: `${yFor(tick)}%` }}
+                >
+                  {tick >= 0 ? '+' : ''}{tick.toFixed(1)}%
+                </span>
               ))}
-            </svg>
+            </div>
+            <div>
+              <div className="h-64 rounded-md bg-surface-muted p-3">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img">
+                  {yTicks.map((tick, index) => (
+                    <line
+                      key={index}
+                      x1="0"
+                      x2="100"
+                      y1={yFor(tick)}
+                      y2={yFor(tick)}
+                      stroke="currentColor"
+                      className="text-border"
+                      strokeDasharray={Math.abs(tick) < 0.0001 ? '2 2' : undefined}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ))}
+                  {visibleSeries.map((item) => (
+                    <path
+                      key={item.key}
+                      d={pathFor(item.key)}
+                      fill="none"
+                      stroke={item.color}
+                      strokeWidth="2"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ))}
+                </svg>
+              </div>
+              <div className="mt-1 grid grid-cols-3 text-[11px] font-medium text-muted">
+                {xLabels.map((item) => (
+                  <span key={item.key} className={item.className}>{item.label}</span>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
             {series.map((item) => {
@@ -1516,7 +1549,7 @@ function PortfolioPerformanceChart({
                     onClick={() => onToggleSeries(item.key)}
                     className="inline-flex cursor-pointer items-center gap-1.5 px-2.5 py-1.5 hover:text-primary"
                     aria-pressed={!hidden}
-                    title={language === 'ko' ? '???? ??? ??? ??' : 'Click to toggle line'}
+                    title={language === 'ko' ? '\uD074\uB9AD\uD574\uC11C \uADF8\uB798\uD504 \uD45C\uC2DC\uB97C \uC804\uD658' : 'Click to toggle line'}
                   >
                     <i className="size-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                     <span className={cn(hidden && 'line-through decoration-2')}>{item.label}</span>
@@ -1532,8 +1565,8 @@ function PortfolioPerformanceChart({
                         onRemoveCustomSymbol(item.key);
                       }}
                       className="grid size-7 cursor-pointer place-items-center border-l border-border text-muted transition-colors hover:bg-negative/10 hover:text-negative"
-                      aria-label={language === 'ko' ? item.label + ' ??' : 'Remove ' + item.label}
-                      title={language === 'ko' ? '??' : 'Remove'}
+                      aria-label={language === 'ko' ? item.label + ' \uC0AD\uC81C' : 'Remove ' + item.label}
+                      title={language === 'ko' ? '\uC0AD\uC81C' : 'Remove'}
                     >
                       <X size={13} />
                     </button>
@@ -1545,7 +1578,7 @@ function PortfolioPerformanceChart({
         </>
       ) : (
         <div className="mt-4 rounded-md border border-dashed border-border px-4 py-12 text-center text-sm text-muted">
-          {language === 'ko' ? '??? ??? ?? ???? ????.' : 'No comparison data for this period yet.'}
+          {language === 'ko' ? '\uC120\uD0DD\uD55C \uAE30\uAC04\uC758 \uBE44\uAD50 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.' : 'No comparison data for this period yet.'}
         </div>
       )}
     </section>
