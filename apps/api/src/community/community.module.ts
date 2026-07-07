@@ -10,6 +10,7 @@ import { PostLike } from './post-like.entity';
 import { UserSubscription } from './user-subscription.entity';
 import { CommunityImage } from './community-image.entity';
 import { CommunityImagesService } from './community-images.service';
+import { PostBookmark } from './post-bookmark.entity';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { CommunityImagesService } from './community-images.service';
       User,
       CommunityPost,
       PostLike,
+      PostBookmark,
       PostComment,
       UserSubscription,
       CommunityImage,

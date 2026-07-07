@@ -20,6 +20,7 @@ import {
   Portfolio,
   PortfolioInput,
   PortfolioPosition,
+  PortfolioPerformancePoint,
   MarketQuote,
   StockDetail,
   StockSymbol,
@@ -34,6 +35,7 @@ import { StockFinancialEntity } from './stock-financial.entity';
 import { FavoriteStockEntity } from './favorite-stock.entity';
 import { PortfolioEntity } from './portfolio.entity';
 import { PortfolioPositionEntity } from './portfolio-position.entity';
+import { PortfolioDailySnapshotEntity } from './portfolio-daily-snapshot.entity';
 import { UsEarningsCalendarEntity } from './us-earnings-calendar.entity';
 import { User } from '../users/user.entity';
 import { UserStatus } from '../users/user-status.enum';
@@ -232,6 +234,8 @@ export class MarketsService {
     private readonly portfoliosRepository: Repository<PortfolioEntity>,
     @InjectRepository(PortfolioPositionEntity)
     private readonly portfolioPositionsRepository: Repository<PortfolioPositionEntity>,
+    @InjectRepository(PortfolioDailySnapshotEntity)
+    private readonly portfolioSnapshotsRepository: Repository<PortfolioDailySnapshotEntity>,
     @InjectRepository(UsEarningsCalendarEntity)
     private readonly usEarningsRepository: Repository<UsEarningsCalendarEntity>,
     @InjectRepository(User)
@@ -845,6 +849,31 @@ export class MarketsService {
   }
 
   // 사용자별 포트폴리오 목록을 읽고 각 포지션에 현재가 스냅샷을 붙인다.
+  async getMyUsEarningsCalendar(
+    userId: string,
+    from: string,
+    to: string,
+  ): Promise<UsEarningsCalendarEntity[]> {
+    const [favorites, positions] = await Promise.all([
+      this.favoriteStocksRepository.find({ where: { userId, market: 'US' }, select: { symbol: true } }),
+      this.portfolioPositionsRepository
+        .createQueryBuilder('position')
+        .innerJoin('position.portfolio', 'portfolio')
+        .select('position.symbol', 'symbol')
+        .where('portfolio.user_id = :userId', { userId })
+        .andWhere('position.market = :market', { market: 'US' })
+        .getRawMany<{ symbol: string }>(),
+    ]);
+    const symbols = [...new Set([...favorites, ...positions].map((row) => row.symbol.toUpperCase()))];
+    if (!symbols.length) return [];
+    return this.usEarningsRepository
+      .createQueryBuilder('earnings')
+      .where('earnings.report_date between :from and :to', { from, to })
+      .andWhere('earnings.symbol in (:...symbols)', { symbols })
+      .orderBy('earnings.report_date', 'ASC')
+      .addOrderBy('earnings.symbol', 'ASC')
+      .getMany();
+  }
   async getPortfolios(userId: string): Promise<Portfolio[]> {
     const rows = await this.portfoliosRepository.find({
       where: { userId },
@@ -882,6 +911,7 @@ export class MarketsService {
                 portfolioId: portfolio.id,
                 quantity: String(position.quantity),
                 averagePrice: String(position.averagePrice),
+                startedAt: position.startedAt,
               }),
             ),
           );
@@ -937,6 +967,7 @@ export class MarketsService {
                 portfolioId: id,
                 quantity: String(position.quantity),
                 averagePrice: String(position.averagePrice),
+                startedAt: position.startedAt,
               }),
             ),
           );
@@ -963,6 +994,91 @@ export class MarketsService {
     }
   }
 
+  async getPortfolioPerformance(
+    userId: string,
+    portfolioId: string,
+    period = '1M',
+  ): Promise<PortfolioPerformancePoint[]> {
+    const portfolio = await this.portfoliosRepository.findOne({
+      where: { id: portfolioId, userId },
+      select: { id: true },
+    });
+    if (!portfolio) throw new NotFoundException('Portfolio not found.');
+    const days: Record<string, number> = { '1W': 7, '1M': 31, '3M': 93, '6M': 186, '1Y': 366, '3Y': 1096, '5Y': 1827 };
+    const from = new Date();
+    from.setUTCDate(from.getUTCDate() - (days[period.toUpperCase()] ?? 31));
+    const rows = await this.portfolioSnapshotsRepository
+      .createQueryBuilder('snapshot')
+      .where('snapshot.portfolio_id = :portfolioId', { portfolioId })
+      .andWhere('snapshot.snapshot_date >= :from', { from: from.toISOString().slice(0, 10) })
+      .orderBy('snapshot.snapshot_date', 'ASC')
+      .getMany();
+    const firstSpy = Number(rows.find((row) => Number(row.spyClose) > 0)?.spyClose);
+    const firstKospi = Number(rows.find((row) => Number(row.kospiClose) > 0)?.kospiClose);
+    const firstQqq = Number(rows.find((row) => Number(row.qqqClose) > 0)?.qqqClose);
+    return rows.map((row) => {
+      const value = Number(row.valueKrw);
+      const cost = Number(row.costKrw);
+      const spy = Number(row.spyClose);
+      const kospi = Number(row.kospiClose);
+      return {
+        date: row.snapshotDate,
+        valueKrw: value,
+        costKrw: cost,
+        profitRate: cost > 0 ? ((value - cost) / cost) * 100 : null,
+        spyReturn: spy > 0 && firstSpy > 0 ? (spy / firstSpy - 1) * 100 : null,
+        kospiReturn: kospi > 0 && firstKospi > 0 ? (kospi / firstKospi - 1) * 100 : null,
+        nasdaq100Return: Number(row.qqqClose) > 0 && firstQqq > 0
+          ? (Number(row.qqqClose) / firstQqq - 1) * 100
+          : null,
+        estimated: row.estimated,
+      };
+    });
+  }
+
+  @Cron('0 30 8 * * *', { timeZone: 'Asia/Seoul' })
+  async capturePortfolioDailySnapshots(): Promise<void> {
+    if (!this.isScheduledJobsEnabled()) return;
+    const portfolios = await this.portfoliosRepository.find({ relations: { positions: true } });
+    const pulse = await this.getMarketPulse().catch(() => [] as MarketQuote[]);
+    const usdKrw = pulse.find((quote) => quote.symbol === 'KIS_FX:USDKRW')?.current;
+    const kospi = pulse.find((quote) => quote.symbol === 'KIS_INDEX:0001')?.current;
+    const [spy, qqq] = await Promise.all([
+      this.getStockQuote('SPY', 'US').catch(() => null),
+      this.getStockQuote('QQQ', 'US').catch(() => null),
+    ]);
+    const snapshotDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(new Date());
+    for (const portfolio of portfolios) {
+      if (!(portfolio.positions?.length > 0)) continue;
+      let valueKrw = 0;
+      let costKrw = 0;
+      let valid = true;
+      for (const position of portfolio.positions) {
+        const quote = await this.getStockQuote(position.symbol, position.market).catch(() => null);
+        const fx = position.market === 'US' ? Number(usdKrw) : 1;
+        if (!quote || quote.current <= 0 || !Number.isFinite(fx) || fx <= 0) {
+          valid = false;
+          break;
+        }
+        valueKrw += Number(position.quantity) * quote.current * fx;
+        costKrw += Number(position.quantity) * Number(position.averagePrice) * fx;
+      }
+      if (!valid) continue;
+      await this.portfolioSnapshotsRepository.upsert({
+        portfolioId: portfolio.id,
+        snapshotDate,
+        valueKrw: String(valueKrw),
+        costKrw: String(costKrw),
+        usdKrw: Number(usdKrw) > 0 ? String(usdKrw) : null,
+        spyClose: Number(spy?.current) > 0 ? String(spy?.current) : null,
+        qqqClose: Number(qqq?.current) > 0 ? String(qqq?.current) : null,
+        kospiClose: Number(kospi) > 0 ? String(kospi) : null,
+        estimated: false,
+      }, ['portfolioId', 'snapshotDate']);
+    }
+  }
   private normalizePortfolioName(name?: string): string {
     const normalized = name?.trim();
     if (!normalized) {
@@ -980,6 +1096,7 @@ export class MarketsService {
       name: string | null;
       quantity: number;
       averagePrice: number;
+      startedAt: string;
     }>
   > {
     const byKey = new Map<
@@ -990,6 +1107,7 @@ export class MarketsService {
         name: string | null;
         quantity: number;
         averagePrice: number;
+        startedAt: string;
       }
     >();
 
@@ -998,6 +1116,7 @@ export class MarketsService {
       const market = item.market?.toUpperCase() === 'KR' ? 'KR' : 'US';
       const quantity = Number(item.quantity);
       const averagePrice = Math.max(0, Number(item.averagePrice) || 0);
+      const startedAt = this.normalizePortfolioStartedAt(item.startedAt);
       if (!symbol || !Number.isFinite(quantity) || quantity <= 0) {
         continue;
       }
@@ -1018,10 +1137,26 @@ export class MarketsService {
         name: item.name?.trim() || master?.name || symbol,
         quantity: nextQuantity,
         averagePrice: nextAveragePrice,
+        startedAt:
+          current?.startedAt && current.startedAt < startedAt
+            ? current.startedAt
+            : startedAt,
       });
     }
 
     return [...byKey.values()];
+  }
+
+  private normalizePortfolioStartedAt(value?: string): string {
+    const today = new Date().toISOString().slice(0, 10);
+    if (!value) return today;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+      throw new NotFoundException('Position start date must use YYYY-MM-DD.');
+    }
+    if (value > today) {
+      throw new NotFoundException('Position start date cannot be in the future.');
+    }
+    return value;
   }
 
   private async toPortfolioDto(row: PortfolioEntity): Promise<Portfolio> {
@@ -1076,6 +1211,7 @@ export class MarketsService {
       cost: quantity * averagePrice,
       value: quantity * (quote.current || 0),
       addedAt: position.createdAt.toISOString(),
+      startedAt: position.startedAt ?? position.createdAt.toISOString().slice(0, 10),
     };
   }
 

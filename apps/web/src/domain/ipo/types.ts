@@ -1,3 +1,17 @@
+export type EconomicIndicator = {
+  id: string;
+  seriesId: string;
+  name: string;
+  country: string;
+  observationDate: string;
+  actual: string | null;
+  previous: string | null;
+  expected: string | null;
+  unit: string;
+  importance: string;
+  sourceUrl: string;
+  updatedAt: string;
+};
 export type IpoCalendarItem = {
   id: string;
   corpCode: string | null;

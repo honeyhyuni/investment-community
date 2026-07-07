@@ -1,4 +1,4 @@
-import {
+﻿import {
   Injectable,
   Logger,
   NotFoundException,
@@ -153,6 +153,33 @@ export type GuruHoldingResponse = {
   sector: string;
 };
 
+export type GuruConsensusInstitutionResponse = {
+  slug: string;
+  personName: string;
+  firmName: string;
+  valueChange: number;
+  currentValue: number;
+  previousValue: number;
+  shareChange: number;
+};
+
+export type GuruConsensusSort = 'managerCount' | 'totalValue' | 'buyValue' | 'sellValue';
+
+export type GuruConsensusResponse = {
+  ticker: string;
+  issuerName: string;
+  managerCount: number;
+  managerPercent: number;
+  totalValue: number;
+  averageWeight: number;
+  increasedCount: number;
+  reducedCount: number;
+  buyValue: number;
+  sellValue: number;
+  netValueChange: number;
+  topBuyManager: GuruConsensusInstitutionResponse | null;
+  topSellManager: GuruConsensusInstitutionResponse | null;
+};
 export type GuruSummaryResponse = {
   slug: string;
   personName: string;
@@ -427,6 +454,133 @@ export class GuruPortfoliosService implements OnModuleInit {
     };
   }
 
+  async getConsensus(
+    limit = 30,
+    sort: GuruConsensusSort = 'managerCount',
+  ): Promise<GuruConsensusResponse[]> {
+    const managerCount = await this.managerRepository.count({ where: { enabled: true } });
+    if (!managerCount) return [];
+
+    const holdings = await this.holdingRepository
+      .createQueryBuilder('holding')
+      .innerJoinAndSelect('holding.manager', 'manager', 'manager.enabled = true')
+      .where('holding.ticker IS NOT NULL')
+      .andWhere("holding.ticker <> ''")
+      .andWhere('holding.put_call IS NULL')
+      .getMany();
+
+    type ManagerTrade = {
+      slug: string;
+      personName: string;
+      firmName: string;
+      currentValue: number;
+      previousValue: number;
+      valueChange: number;
+      shareChange: number;
+      weight: number;
+    };
+    type ConsensusAccumulator = {
+      ticker: string;
+      issuerName: string;
+      totalValue: number;
+      totalWeight: number;
+      buyValue: number;
+      sellValue: number;
+      managers: Map<string, ManagerTrade>;
+    };
+
+    const byTicker = new Map<string, ConsensusAccumulator>();
+    for (const holding of holdings) {
+      const ticker = holding.ticker?.trim().toUpperCase();
+      if (!ticker) continue;
+      const entry = byTicker.get(ticker) ?? {
+        ticker,
+        issuerName: holding.issuerName,
+        totalValue: 0,
+        totalWeight: 0,
+        buyValue: 0,
+        sellValue: 0,
+        managers: new Map<string, ManagerTrade>(),
+      };
+      const currentValue = holding.value || 0;
+      const previousValue = holding.previousValue || 0;
+      const valueChange = currentValue - previousValue;
+      entry.issuerName = entry.issuerName || holding.issuerName;
+      entry.totalValue += currentValue;
+      entry.totalWeight += holding.weight || 0;
+      entry.buyValue += Math.max(valueChange, 0);
+      entry.sellValue += Math.max(-valueChange, 0);
+
+      const managerTrade = entry.managers.get(holding.managerId) ?? {
+        slug: holding.manager.slug,
+        personName: holding.manager.personName,
+        firmName: holding.manager.firmName,
+        currentValue: 0,
+        previousValue: 0,
+        valueChange: 0,
+        shareChange: 0,
+        weight: 0,
+      };
+      managerTrade.currentValue += currentValue;
+      managerTrade.previousValue += previousValue;
+      managerTrade.valueChange += valueChange;
+      managerTrade.shareChange += holding.shareChange || 0;
+      managerTrade.weight += holding.weight || 0;
+      entry.managers.set(holding.managerId, managerTrade);
+      byTicker.set(ticker, entry);
+    }
+
+    const results = [...byTicker.values()].map((entry) => {
+      const managerRows = [...entry.managers.values()];
+      const topBuy = managerRows
+        .filter((manager) => manager.valueChange > 0)
+        .sort((a, b) => b.valueChange - a.valueChange)[0] ?? null;
+      const topSell = managerRows
+        .filter((manager) => manager.valueChange < 0)
+        .sort((a, b) => a.valueChange - b.valueChange)[0] ?? null;
+      const toInstitution = (manager: ManagerTrade | null): GuruConsensusInstitutionResponse | null =>
+        manager
+          ? {
+              slug: manager.slug,
+              personName: manager.personName,
+              firmName: manager.firmName,
+              valueChange: manager.valueChange,
+              currentValue: manager.currentValue,
+              previousValue: manager.previousValue,
+              shareChange: manager.shareChange,
+            }
+          : null;
+
+      return {
+        ticker: entry.ticker,
+        issuerName: entry.issuerName,
+        managerCount: managerRows.length,
+        managerPercent: Number(((managerRows.length / managerCount) * 100).toFixed(1)),
+        totalValue: entry.totalValue,
+        averageWeight: managerRows.length ? entry.totalWeight / managerRows.length : 0,
+        increasedCount: managerRows.filter((manager) => manager.valueChange > 0).length,
+        reducedCount: managerRows.filter((manager) => manager.valueChange < 0).length,
+        buyValue: entry.buyValue,
+        sellValue: entry.sellValue,
+        netValueChange: entry.buyValue - entry.sellValue,
+        topBuyManager: toInstitution(topBuy),
+        topSellManager: toInstitution(topSell),
+      };
+    });
+
+    const sortKey: GuruConsensusSort = ['managerCount', 'totalValue', 'buyValue', 'sellValue'].includes(sort)
+      ? sort
+      : 'managerCount';
+    results.sort((a, b) => {
+      const primary = b[sortKey] - a[sortKey];
+      if (primary !== 0) return primary;
+      const count = b.managerCount - a.managerCount;
+      if (count !== 0) return count;
+      return b.totalValue - a.totalValue;
+    });
+
+    return results.slice(0, Math.min(Math.max(limit, 1), 200));
+  }
   async getManagers(): Promise<GuruSummaryResponse[]> {
     const managers = await this.managerRepository.find({
       where: { enabled: true },

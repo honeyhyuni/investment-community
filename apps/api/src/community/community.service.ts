@@ -14,10 +14,11 @@ import { UserRole } from '../users/user-role.enum';
 import { CommunityPost } from './community-post.entity';
 import { PostComment } from './post-comment.entity';
 import { PostLike } from './post-like.entity';
+import { PostBookmark } from './post-bookmark.entity';
 import { UserSubscription } from './user-subscription.entity';
 import { COMMUNITY_IMAGE_URL_PREFIX, CommunityImagesService } from './community-images.service';
 
-type FeedScope = 'all' | 'subscribed' | 'mine' | 'user';
+type FeedScope = 'all' | 'subscribed' | 'mine' | 'bookmarks' | 'user';
 
 type CreatePostInput = {
   content: string;
@@ -66,6 +67,7 @@ export type CommunityPostDto = {
   likeCount: number;
   commentCount: number;
   likedByMe: boolean;
+  bookmarkedByMe: boolean;
   comments: CommunityCommentDto[];
 };
 
@@ -93,6 +95,8 @@ export class CommunityService {
     private readonly postsRepository: Repository<CommunityPost>,
     @InjectRepository(PostLike)
     private readonly likesRepository: Repository<PostLike>,
+    @InjectRepository(PostBookmark)
+    private readonly bookmarksRepository: Repository<PostBookmark>,
     @InjectRepository(PostComment)
     private readonly commentsRepository: Repository<PostComment>,
     @InjectRepository(UserSubscription)
@@ -113,6 +117,12 @@ export class CommunityService {
       scope,
       userId,
     );
+    const bookmarkedPostIds = scope === 'bookmarks'
+      ? (await this.bookmarksRepository.find({
+          where: { user: { id: currentUserId } },
+          relations: { post: true },
+        })).map((bookmark) => bookmark.post.id)
+      : undefined;
     if (authorIds.length === 0) {
       return [];
     }
@@ -132,6 +142,7 @@ export class CommunityService {
       const posts = await this.postsRepository.find({
         where: {
           author: { id: In(authorIds) },
+          ...(bookmarkedPostIds ? { id: In(bookmarkedPostIds) } : {}),
           createdAt: MoreThanOrEqual(new Date(cutoff)),
         },
         order: { createdAt: 'DESC' },
@@ -153,7 +164,10 @@ export class CommunityService {
 
     // 최신순은 DB 레벨에서 skip/take로 페이지네이션한다.
     const posts = await this.postsRepository.find({
-      where: { author: { id: In(authorIds) } },
+      where: {
+        author: { id: In(authorIds) },
+        ...(bookmarkedPostIds ? { id: In(bookmarkedPostIds) } : {}),
+      },
       order: { createdAt: 'DESC' },
       ...(limit !== undefined ? { skip: offset, take: limit } : { take: 100 }),
     });
@@ -299,6 +313,21 @@ export class CommunityService {
     };
   }
 
+  async toggleBookmark(
+    currentUserId: string,
+    postId: string,
+  ): Promise<{ bookmarked: boolean }> {
+    const [user, post] = await Promise.all([
+      this.findApprovedUser(currentUserId),
+      this.findPost(postId),
+    ]);
+    const existing = await this.bookmarksRepository.findOne({
+      where: { post: { id: post.id }, user: { id: user.id } },
+    });
+    if (existing) await this.bookmarksRepository.remove(existing);
+    else await this.bookmarksRepository.save(this.bookmarksRepository.create({ post, user }));
+    return { bookmarked: !existing };
+  }
   async createComment(
     currentUserId: string,
     postId: string,
@@ -551,9 +580,13 @@ export class CommunityService {
     }
 
     const postIds = posts.map((post) => post.id);
-    const [likes, comments] = await Promise.all([
+    const [likes, bookmarks, comments] = await Promise.all([
       this.likesRepository.find({
         where: { post: { id: In(postIds) } },
+        relations: { post: true },
+      }),
+      this.bookmarksRepository.find({
+        where: { post: { id: In(postIds) }, user: { id: currentUserId } },
         relations: { post: true },
       }),
       this.commentsRepository.find({
@@ -595,6 +628,7 @@ export class CommunityService {
         likeCount: postLikes.length,
         commentCount: postComments.length,
         likedByMe: postLikes.some((like) => like.user.id === currentUserId),
+        bookmarkedByMe: bookmarks.some((bookmark) => bookmark.post.id === post.id),
         comments: this.toCommentTree(postComments),
       };
     });

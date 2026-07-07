@@ -1,3 +1,28 @@
+﻿export type GuruConsensusInstitution = {
+  slug: string;
+  personName: string;
+  firmName: string;
+  valueChange: number;
+  currentValue: number;
+  previousValue: number;
+  shareChange: number;
+};
+
+export type GuruConsensus = {
+  ticker: string;
+  issuerName: string;
+  managerCount: number;
+  managerPercent: number;
+  totalValue: number;
+  averageWeight: number;
+  increasedCount: number;
+  reducedCount: number;
+  buyValue: number;
+  sellValue: number;
+  netValueChange: number;
+  topBuyManager: GuruConsensusInstitution | null;
+  topSellManager: GuruConsensusInstitution | null;
+};
 export type GuruHolding = {
   id: string;
   ticker: string | null;

@@ -97,8 +97,7 @@ export function IpoCalendarPage({
                     </span>
                   </span>
                 ),
-              },
-            ]}
+              },            ]}
             value={activeTab}
             onChange={switchTab}
           />
@@ -265,6 +264,7 @@ function UsEarningsSection({
   const [view, setView] = useState<EarningsView>('daily');
   const [anchorDate, setAnchorDate] = useState(() => startOfDay(new Date()));
   const [query, setQuery] = useState('');
+  const [myCalendarOnly, setMyCalendarOnly] = useState(false);
   const [selectedEarningsSymbol, setSelectedEarningsSymbol] = useState('');
   const [items, setItems] = useState<UsEarningsCalendarItem[]>([]);
   const [bounds, setBounds] = useState<UsEarningsCalendarBounds>({
@@ -342,7 +342,7 @@ function UsEarningsSection({
     }
 
     apiRequest<UsEarningsCalendarItem[]>(
-      `/markets/calendar/earnings/us?${params.toString()}`,
+      `${myCalendarOnly ? "/markets/calendar/earnings/us/mine" : "/markets/calendar/earnings/us"}?${params.toString()}`,
       'GET',
       { accessToken },
     )
@@ -371,7 +371,7 @@ function UsEarningsSection({
     return () => {
       active = false;
     };
-  }, [accessToken, effectiveQuery, language, range.from, range.to]);
+  }, [accessToken, effectiveQuery, language, myCalendarOnly, range.from, range.to]);
 
   const searchLimited = !!effectiveQuery && items.length > 30;
   const visibleItems = searchLimited ? [] : items;
@@ -503,6 +503,21 @@ function UsEarningsSection({
         </div>
       </div>
 
+      <label className="mt-4 inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-foreground">
+        <input
+          type="checkbox"
+          checked={myCalendarOnly}
+          onChange={(event) => {
+            setMyCalendarOnly(event.target.checked);
+            if (event.target.checked) {
+              setQuery('');
+              setSelectedEarningsSymbol('');
+            }
+          }}
+          className="size-4 accent-primary"
+        />
+        {language === 'ko' ? '내 관심종목·포트폴리오만' : 'My favorites and portfolio only'}
+      </label>
       {
         <div className="mt-4 flex flex-col gap-2 sm:max-w-md">
           <label

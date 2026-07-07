@@ -43,6 +43,9 @@ export class PortfolioPositionEntity {
   @Column({ name: 'average_price', type: 'numeric', precision: 20, scale: 6, default: 0 })
   averagePrice: string;
 
+  @Column({ name: 'started_at', type: 'date', nullable: true })
+  startedAt: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

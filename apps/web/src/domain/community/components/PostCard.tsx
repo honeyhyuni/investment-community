@@ -1,7 +1,7 @@
 "use client";
 
 import { Dispatch, MouseEvent, SetStateAction, useState } from "react";
-import { ChevronRight, Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
+import { Bookmark, ChevronRight, Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { RichContent } from "@/common/components/RichContent";
 import { Button } from "@/common/components/Button";
 import { cn } from "@/common/utils/cn";
@@ -20,6 +20,7 @@ export function PostCard({
   replyDrafts,
   setReplyDrafts,
   onLike,
+  onBookmark,
   onComment,
   onEditPost,
   onDeletePost,
@@ -44,6 +45,7 @@ export function PostCard({
   replyDrafts: Record<string, string>;
   setReplyDrafts: Dispatch<SetStateAction<Record<string, string>>>;
   onLike: (postId: string) => void;
+  onBookmark?: (postId: string) => void;
   onComment: (postId: string, parentId?: string) => void;
   onEditPost: (post: CommunityPost) => void;
   onDeletePost: (postId: string) => void;
@@ -273,7 +275,20 @@ export function PostCard({
             {post.likeCount}
           </span>
         )}
-        <span className="inline-flex h-9 items-center gap-1.5 text-sm font-semibold text-muted [&_svg]:size-[1.15em]">
+        {onBookmark ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={(event) => {
+              event.stopPropagation();
+              onBookmark(post.id);
+            }}
+            leftIcon={<Bookmark fill={post.bookmarkedByMe ? "currentColor" : "none"} />}
+            className={cn("ml-auto text-sm", post.bookmarkedByMe && "text-primary")}
+          >
+            {ko ? "저장" : "Save"}
+          </Button>
+        ) : null}        <span className="inline-flex h-9 items-center gap-1.5 text-sm font-semibold text-muted [&_svg]:size-[1.15em]">
           <MessageCircle />
           {post.commentCount}
         </span>

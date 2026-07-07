@@ -55,6 +55,7 @@ import {
   Portfolio,
   PortfolioPosition,
   PortfolioPositionInput,
+  PortfolioPerformancePoint,
   StockSymbol,
 } from '@/common/types';
 
@@ -69,6 +70,7 @@ type PositionDraft = {
   name: string;
   quantity: string;
   averagePrice: string;
+  startedAt: string;
 };
 
 const PIE_COLORS = [
@@ -471,6 +473,9 @@ function PortfolioSection({
   const [drafts, setDrafts] = useState<PositionDraft[]>([makeDraft()]);
   const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'KRW'>('KRW');
   const [portfolioSort, setPortfolioSort] = useState<PortfolioSort>('weight');
+  const [performancePeriod, setPerformancePeriod] = useState('1M');
+  const [performance, setPerformance] = useState<PortfolioPerformancePoint[]>([]);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
   const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
   const allocationScrollRef = useRef<HTMLDivElement>(null);
   const [canScrollAllocationUp, setCanScrollAllocationUp] = useState(false);
@@ -629,6 +634,7 @@ function PortfolioSection({
             quantity: String(position.quantity || ''),
             averagePrice:
               position.averagePrice > 0 ? String(position.averagePrice) : '',
+            startedAt: position.startedAt ?? position.addedAt.slice(0, 10),
           }))
         : [makeDraft()],
     );
@@ -923,6 +929,14 @@ function PortfolioSection({
             <Skeleton className="h-9 w-36 rounded-md" />
             <Skeleton className="h-9 w-24 rounded-md" />
           </div>
+          <PortfolioPerformanceChart
+            points={performance}
+            loading={performanceLoading}
+            period={performancePeriod}
+            onPeriodChange={setPerformancePeriod}
+            portfolioName={selectedPortfolios[0]?.name ?? ''}
+            language={language}
+          />
           <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
             <div className="rounded-lg border border-border bg-surface-muted p-4">
               <div className="flex items-center justify-between gap-3">
@@ -1021,6 +1035,14 @@ function PortfolioSection({
             </button>
           </div>
 
+          <PortfolioPerformanceChart
+            points={performance}
+            loading={performanceLoading}
+            period={performancePeriod}
+            onPeriodChange={setPerformancePeriod}
+            portfolioName={selectedPortfolios[0]?.name ?? ''}
+            language={language}
+          />
           <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
             <div className="rounded-lg border border-border bg-surface-muted p-4">
               <div className="flex items-center justify-between gap-3">
@@ -1230,6 +1252,36 @@ function PortfolioSection({
   );
 }
 
+function PortfolioPerformanceChart({ points, loading, period, onPeriodChange, portfolioName, language }: {
+  points: PortfolioPerformancePoint[]; loading: boolean; period: string;
+  onPeriodChange: (period: string) => void; portfolioName: string; language: 'en' | 'ko';
+}) {
+  const series = [
+    { key: 'profitRate' as const, label: language === 'ko' ? '내 포트폴리오' : 'Portfolio', color: '#2563eb' },
+    { key: 'spyReturn' as const, label: 'S&P 500', color: '#16a34a' },
+    { key: 'kospiReturn' as const, label: 'KOSPI', color: '#dc2626' },
+    { key: 'nasdaq100Return' as const, label: '나스닥 100 (QQQ)', color: '#9333ea' },
+  ];
+  const values = points.flatMap((point) => series.map((item) => point[item.key]).filter((value): value is number => value !== null));
+  const min = Math.min(0, ...values); const max = Math.max(0, ...values); const range = Math.max(max - min, 1);
+  const pathFor = (key: typeof series[number]['key']) => points.map((point, index) => {
+    const value = point[key]; if (value === null) return null;
+    const x = points.length <= 1 ? 0 : (index / (points.length - 1)) * 100;
+    return `${index === 0 ? 'M' : 'L'} ${x} ${92 - ((value - min) / range) * 84}`;
+  }).filter(Boolean).join(' ');
+  const latest = points.at(-1);
+  return <section className="mt-4 rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div><h3 className="font-semibold">{language === 'ko' ? '포트폴리오 성과' : 'Portfolio performance'}</h3><p className="mt-1 text-xs text-muted">{portfolioName}</p></div>
+      <SegmentedControl<string> value={period} onChange={onPeriodChange} options={['1W','1M','3M','6M','1Y','3Y','5Y'].map((value) => ({ value, label: value }))} />
+    </div>
+    {loading ? <Skeleton className="mt-4 h-64" /> : points.length ? <>
+      <div className="mt-4 flex flex-wrap gap-4 text-xs font-semibold">{series.map((item) => <span key={item.key} className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full" style={{ backgroundColor: item.color }} />{item.label} {latest?.[item.key] == null ? '-' : `${latest[item.key]! >= 0 ? '+' : ''}${latest[item.key]!.toFixed(2)}%`}</span>)}</div>
+      <div className="mt-4 h-64 rounded-md bg-surface-muted p-3"><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img"><line x1="0" x2="100" y1={92 - ((0 - min) / range) * 84} y2={92 - ((0 - min) / range) * 84} stroke="currentColor" className="text-border" strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />{series.map((item) => <path key={item.key} d={pathFor(item.key)} fill="none" stroke={item.color} strokeWidth="2" vectorEffect="non-scaling-stroke" />)}</svg></div>
+      {points.some((point) => point.estimated) ? <p className="mt-2 text-xs text-muted">{language === 'ko' ? '추정 데이터가 포함되어 있습니다.' : 'Includes estimated data.'}</p> : null}
+    </> : <div className="mt-4 rounded-md border border-dashed border-border px-4 py-12 text-center text-sm text-muted">{language === 'ko' ? '아직 성과 데이터가 없습니다. 오늘부터 일별 성과를 기록합니다.' : 'No performance data yet. Daily tracking starts today.'}</div>}
+  </section>;
+}
 function PositionDraftRow({
   draft,
   index,
@@ -1730,6 +1782,7 @@ function makeDraft(): PositionDraft {
     name: '',
     quantity: '',
     averagePrice: '',
+    startedAt: new Date().toISOString().slice(0, 10),
   };
 }
 

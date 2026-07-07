@@ -44,6 +44,7 @@ export type PortfolioPositionInput = {
   name?: string;
   quantity?: number;
   averagePrice?: number;
+  startedAt?: string;
 };
 
 export type PortfolioInput = {
@@ -60,6 +61,18 @@ export type PortfolioPosition = MarketQuote & {
   cost: number;
   value: number;
   addedAt: string;
+  startedAt: string;
+};
+
+export type PortfolioPerformancePoint = {
+  date: string;
+  valueKrw: number;
+  costKrw: number;
+  profitRate: number | null;
+  spyReturn: number | null;
+  nasdaq100Return: number | null;
+  kospiReturn: number | null;
+  estimated: boolean;
 };
 
 export type Portfolio = {

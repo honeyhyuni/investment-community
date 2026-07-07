@@ -109,7 +109,7 @@ export class CommunityController {
   @Get('feed')
   getFeed(
     @CurrentUser() currentUser: AuthUser,
-    @Query('scope') scope: 'all' | 'subscribed' | 'mine' | 'user' = 'all',
+    @Query('scope') scope: 'all' | 'subscribed' | 'mine' | 'bookmarks' | 'user' = 'all',
     @Query('userId') userId?: string,
     @Query('sort') sort: 'latest' | 'popular' = 'latest',
     @Query('limit') limit?: string,
@@ -170,6 +170,13 @@ export class CommunityController {
     return this.communityService.toggleLike(currentUser.sub, id);
   }
 
+  @Post('posts/:id/bookmark')
+  toggleBookmark(
+    @CurrentUser() currentUser: AuthUser,
+    @Param('id') id: string,
+  ): Promise<{ bookmarked: boolean }> {
+    return this.communityService.toggleBookmark(currentUser.sub, id);
+  }
   @Post('posts/:id/comments')
   createComment(
     @CurrentUser() currentUser: AuthUser,
