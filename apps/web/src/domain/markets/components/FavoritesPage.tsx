@@ -630,16 +630,15 @@ function PortfolioSection({
   }, [accessToken, comparisonPortfolio, customCompareSymbols, performancePeriod]);
 
   function addCompareSymbol(symbol: StockSymbol) {
-    const key = compareKeyForSymbol(symbol);
-    const market = symbol.currency === 'KRW' ? 'KR' : 'US';
-    const label = market === 'KR'
-      ? symbol.description || symbol.symbol
-      : symbol.symbol;
+    const normalized = normalizeCompareSymbol(symbol);
+    const label = normalized.market === 'KR'
+      ? symbol.description || normalized.symbol
+      : normalized.symbol;
     setCustomCompareSymbols((items) => {
-      if (items.some((item) => item.key === key)) return items;
-      return [...items, { key, symbol: symbol.symbol.toUpperCase(), market, label }];
+      if (items.some((item) => item.key === normalized.key)) return items;
+      return [...items, { key: normalized.key, symbol: normalized.symbol, market: normalized.market, label }];
     });
-    setHiddenCompareKeys((keys) => keys.filter((item) => item !== key));
+    setHiddenCompareKeys((keys) => keys.filter((item) => item !== normalized.key));
     setCompareQuery('');
   }
 
@@ -870,34 +869,6 @@ function PortfolioSection({
     <div className="pt-4">
       {error ? <Notice message="" error={error} /> : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <SectionHeader
-          eyebrow="Portfolio"
-          title={language === 'ko' ? '포트폴리오' : 'Portfolio'}
-        />
-        <div className="flex flex-wrap gap-2">
-          {portfolios.length ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadPortfolios}
-              loading={loading}
-              className="shrink-0"
-            >
-              {language === 'ko' ? '새로고침' : 'Refresh'}
-            </Button>
-          ) : null}
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Plus size={15} />}
-            onClick={startCreatePortfolio}
-          >
-            {language === 'ko' ? '포트폴리오 추가' : 'Add portfolio'}
-          </Button>
-        </div>
-      </div>
-
       <Modal
         open={portfolioModal.isOpen}
         onClose={resetPortfolioForm}
@@ -1005,11 +976,6 @@ function PortfolioSection({
 
       {loading ? (
         <>
-          <div className="mt-4 flex h-9 flex-wrap gap-2 overflow-hidden">
-            <Skeleton className="h-9 w-28 rounded-md" />
-            <Skeleton className="h-9 w-36 rounded-md" />
-            <Skeleton className="h-9 w-24 rounded-md" />
-          </div>
           <PortfolioPerformanceChart
             points={performance}
             loading={performanceLoading}
@@ -1026,6 +992,11 @@ function PortfolioSection({
             onToggleSeries={toggleCompareSeries}
             onRemoveCustomSymbol={removeCompareSymbol}
           />
+          <div className="mt-6 flex h-9 flex-wrap gap-2 overflow-hidden">
+            <Skeleton className="h-9 w-28 rounded-md" />
+            <Skeleton className="h-9 w-36 rounded-md" />
+            <Skeleton className="h-9 w-24 rounded-md" />
+          </div>
           <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
             <div className="rounded-lg border border-border bg-surface-muted p-4">
               <div className="flex items-center justify-between gap-3">
@@ -1076,6 +1047,31 @@ function PortfolioSection({
             onToggleSeries={toggleCompareSeries}
             onRemoveCustomSymbol={removeCompareSymbol}
           />
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <SectionHeader
+              eyebrow="Portfolio"
+              title={language === 'ko' ? '\uD3EC\uD2B8\uD3F4\uB9AC\uC624' : 'Portfolio'}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadPortfolios}
+                loading={loading}
+                className="shrink-0"
+              >
+                {language === 'ko' ? '\uC0C8\uB85C\uACE0\uCE68' : 'Refresh'}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Plus size={15} />}
+                onClick={startCreatePortfolio}
+              >
+                {language === 'ko' ? '\uD3EC\uD2B8\uD3F4\uB9AC\uC624 \uCD94\uAC00' : 'Add portfolio'}
+              </Button>
+            </div>
+          </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {portfolios.map((portfolio) => {
               const selected = selectedIds.includes(portfolio.id);
@@ -1344,6 +1340,15 @@ function PortfolioSection({
               ? '포트폴리오 추가를 눌러 종목과 보유 수량을 입력하세요.'
               : 'Add a portfolio, then enter stocks and quantities.'}
           </p>
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<Plus size={15} />}
+            onClick={startCreatePortfolio}
+            className="mt-5"
+          >
+            {language === 'ko' ? '\uD3EC\uD2B8\uD3F4\uB9AC\uC624 \uCD94\uAC00' : 'Add portfolio'}
+          </Button>
         </div>
       )}
     </div>
@@ -1400,8 +1405,14 @@ function PortfolioPerformanceChart({
       .map((item) => point.series?.[item.key] ?? null)
       .filter((value): value is number => value !== null),
   );
-  const min = Math.min(0, ...values);
-  const max = Math.max(0, ...values);
+  const allValues = points.flatMap((point) =>
+    series
+      .map((item) => point.series?.[item.key] ?? null)
+      .filter((value): value is number => value !== null),
+  );
+  const scaleValues = values.length ? values : allValues;
+  const min = Math.min(0, ...scaleValues);
+  const max = Math.max(0, ...scaleValues);
   const range = Math.max(max - min, 1);
   const mid = (max + min) / 2;
   const yFor = (value: number) => 92 - ((value - min) / range) * 84;
@@ -1483,7 +1494,7 @@ function PortfolioPerformanceChart({
 
       {loading ? (
         <Skeleton className="mt-4 h-72" />
-      ) : points.length && values.length ? (
+      ) : points.length ? (
         <>
           <div className="mt-4 grid grid-cols-[3rem_1fr] gap-2">
             <div className="relative h-64 text-[11px] font-medium text-muted">
@@ -1536,6 +1547,7 @@ function PortfolioPerformanceChart({
             {series.map((item) => {
               const hidden = hiddenKeys.includes(item.key);
               const latestValue = latest?.series?.[item.key] ?? null;
+              const hasData = points.some((point) => point.series?.[item.key] !== null && point.series?.[item.key] !== undefined);
               return (
                 <span
                   key={item.key}
@@ -1554,7 +1566,9 @@ function PortfolioPerformanceChart({
                     <i className="size-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                     <span className={cn(hidden && 'line-through decoration-2')}>{item.label}</span>
                     <span className="text-muted">
-                      {latestValue == null ? '-' : (latestValue >= 0 ? '+' : '') + latestValue.toFixed(2) + '%'}
+                      {!hasData
+                        ? language === 'ko' ? '\uB370\uC774\uD130 \uC5C6\uC74C' : 'No data'
+                        : latestValue == null ? '-' : (latestValue >= 0 ? '+' : '') + latestValue.toFixed(2) + '%'}
                     </span>
                   </button>
                   {item.removable ? (
@@ -2089,9 +2103,16 @@ function makeDraft(): PositionDraft {
   };
 }
 
+function normalizeCompareSymbol(symbol: StockSymbol): { key: string; symbol: string; market: 'US' | 'KR' } {
+  const raw = (symbol.symbol || symbol.displaySymbol || '').trim().toUpperCase();
+  const [prefix, value] = raw.includes(':') ? raw.split(':', 2) : ['', raw];
+  const market = prefix === 'KR' || symbol.currency === 'KRW' ? 'KR' : 'US';
+  const normalizedSymbol = (value || raw).replace(/^KR:/, '').replace(/^US:/, '').trim().toUpperCase();
+  return { key: market + ':' + normalizedSymbol, symbol: normalizedSymbol, market };
+}
+
 function compareKeyForSymbol(symbol: StockSymbol): string {
-  const market = symbol.currency === 'KRW' ? 'KR' : 'US';
-  return market + ':' + symbol.symbol.toUpperCase();
+  return normalizeCompareSymbol(symbol).key;
 }
 
 function portfolioSearchScore(item: StockSymbol, rawQuery: string): number {

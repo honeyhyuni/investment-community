@@ -2497,7 +2497,7 @@ export class MarketsService {
     warmup = false,
   ): Promise<CandlePoint[]> {
     const normalizedSymbol = symbol.toUpperCase().trim();
-    const cacheKey = `market:candles:v4:${normalizedSymbol}:${period}:${warmup ? 'warmup' : 'display'}`;
+    const cacheKey = `market:candles:v5:${normalizedSymbol}:${period}:${warmup ? 'warmup' : 'display'}`;
     const cached = await this.redis
       .get(cacheKey)
       .then((value) => (value ? (JSON.parse(value) as CandlePoint[]) : null))
@@ -2693,12 +2693,12 @@ export class MarketsService {
       case '3Y':
         start.setFullYear(start.getFullYear() - 3);
         periodDivCode = 'W';
-        maxPages = 3;
+        maxPages = 12;
         break;
       case '5Y':
         start.setFullYear(start.getFullYear() - 5);
         periodDivCode = 'W';
-        maxPages = 4;
+        maxPages = 20;
         break;
       case 'ALL':
         start.setFullYear(1970, 0, 1);
@@ -2722,7 +2722,7 @@ export class MarketsService {
         maxPages = Math.max(maxPages, 5);
       } else if (period === '3Y' || period === '5Y') {
         start.setFullYear(start.getFullYear() - 3);
-        maxPages = Math.max(maxPages, 7);
+        maxPages = Math.max(maxPages, period === '5Y' ? 28 : 18);
       }
     }
 
