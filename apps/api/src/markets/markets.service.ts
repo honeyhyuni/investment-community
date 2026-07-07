@@ -35,7 +35,6 @@ import { StockFinancialEntity } from './stock-financial.entity';
 import { FavoriteStockEntity } from './favorite-stock.entity';
 import { PortfolioEntity } from './portfolio.entity';
 import { PortfolioPositionEntity } from './portfolio-position.entity';
-import { PortfolioDailySnapshotEntity } from './portfolio-daily-snapshot.entity';
 import { UsEarningsCalendarEntity } from './us-earnings-calendar.entity';
 import { User } from '../users/user.entity';
 import { UserStatus } from '../users/user-status.enum';
@@ -155,6 +154,13 @@ const DART_CORP_CODES: Record<string, string> = {
 
 type KisMarketDiv = 'J' | 'Q';
 
+type PortfolioPerformancePeriod = '1W' | '1M' | '3M' | '6M' | '1Y' | '3Y' | '5Y';
+
+type PriceSeries = {
+  symbol: string;
+  candles: CandlePoint[];
+};
+
 type KisStock = {
   symbol: string;
   name: string;
@@ -234,8 +240,6 @@ export class MarketsService {
     private readonly portfoliosRepository: Repository<PortfolioEntity>,
     @InjectRepository(PortfolioPositionEntity)
     private readonly portfolioPositionsRepository: Repository<PortfolioPositionEntity>,
-    @InjectRepository(PortfolioDailySnapshotEntity)
-    private readonly portfolioSnapshotsRepository: Repository<PortfolioDailySnapshotEntity>,
     @InjectRepository(UsEarningsCalendarEntity)
     private readonly usEarningsRepository: Repository<UsEarningsCalendarEntity>,
     @InjectRepository(User)
@@ -1001,84 +1005,171 @@ export class MarketsService {
   ): Promise<PortfolioPerformancePoint[]> {
     const portfolio = await this.portfoliosRepository.findOne({
       where: { id: portfolioId, userId },
-      select: { id: true },
+      relations: { positions: true },
     });
     if (!portfolio) throw new NotFoundException('Portfolio not found.');
-    const days: Record<string, number> = { '1W': 7, '1M': 31, '3M': 93, '6M': 186, '1Y': 366, '3Y': 1096, '5Y': 1827 };
-    const from = new Date();
-    from.setUTCDate(from.getUTCDate() - (days[period.toUpperCase()] ?? 31));
-    const rows = await this.portfolioSnapshotsRepository
-      .createQueryBuilder('snapshot')
-      .where('snapshot.portfolio_id = :portfolioId', { portfolioId })
-      .andWhere('snapshot.snapshot_date >= :from', { from: from.toISOString().slice(0, 10) })
-      .orderBy('snapshot.snapshot_date', 'ASC')
-      .getMany();
-    const firstSpy = Number(rows.find((row) => Number(row.spyClose) > 0)?.spyClose);
-    const firstKospi = Number(rows.find((row) => Number(row.kospiClose) > 0)?.kospiClose);
-    const firstQqq = Number(rows.find((row) => Number(row.qqqClose) > 0)?.qqqClose);
-    return rows.map((row) => {
-      const value = Number(row.valueKrw);
-      const cost = Number(row.costKrw);
-      const spy = Number(row.spyClose);
-      const kospi = Number(row.kospiClose);
-      return {
-        date: row.snapshotDate,
-        valueKrw: value,
-        costKrw: cost,
-        profitRate: cost > 0 ? ((value - cost) / cost) * 100 : null,
-        spyReturn: spy > 0 && firstSpy > 0 ? (spy / firstSpy - 1) * 100 : null,
-        kospiReturn: kospi > 0 && firstKospi > 0 ? (kospi / firstKospi - 1) * 100 : null,
-        nasdaq100Return: Number(row.qqqClose) > 0 && firstQqq > 0
-          ? (Number(row.qqqClose) / firstQqq - 1) * 100
-          : null,
-        estimated: row.estimated,
-      };
-    });
-  }
 
-  @Cron('0 30 8 * * *', { timeZone: 'Asia/Seoul' })
-  async capturePortfolioDailySnapshots(): Promise<void> {
-    if (!this.isScheduledJobsEnabled()) return;
-    const portfolios = await this.portfoliosRepository.find({ relations: { positions: true } });
-    const pulse = await this.getMarketPulse().catch(() => [] as MarketQuote[]);
-    const usdKrw = pulse.find((quote) => quote.symbol === 'KIS_FX:USDKRW')?.current;
-    const kospi = pulse.find((quote) => quote.symbol === 'KIS_INDEX:0001')?.current;
-    const [spy, qqq] = await Promise.all([
-      this.getStockQuote('SPY', 'US').catch(() => null),
-      this.getStockQuote('QQQ', 'US').catch(() => null),
+    const positions = portfolio.positions ?? [];
+    if (!positions.length) return [];
+
+    const periodKey = this.normalizePortfolioPerformancePeriod(period);
+    const chartPeriod = this.toPortfolioPerformanceChartPeriod(periodKey);
+    const cutoff = this.getPortfolioPerformanceCutoff(periodKey);
+    const usdKrw = await this.getUsdKrwExchangeRate()
+      .then((quote) => quote.current)
+      .catch(() => 1);
+    const safeUsdKrw = Number.isFinite(usdKrw) && usdKrw > 0 ? usdKrw : 1;
+
+    const [positionSeries, spySeries, nasdaqSeries, nasdaq100Series, kospiSeries] = await Promise.all([
+      Promise.all(positions.map(async (position) => ({
+        position,
+        candles: this.filterPerformanceCandles(
+          await this.getCandles(position.symbol, chartPeriod).catch(() => []),
+          cutoff,
+        ),
+      }))),
+      this.loadPerformanceSeries('^GSPC', chartPeriod, cutoff),
+      this.loadPerformanceSeries('^IXIC', chartPeriod, cutoff),
+      this.loadPerformanceSeries('QQQ', chartPeriod, cutoff),
+      this.loadPerformanceSeries('^KS11', chartPeriod, cutoff),
     ]);
-    const snapshotDate = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
-    }).format(new Date());
-    for (const portfolio of portfolios) {
-      if (!(portfolio.positions?.length > 0)) continue;
+
+    const usablePositions = positionSeries.filter((item) => item.candles.length > 0);
+    if (!usablePositions.length) return [];
+
+    const timestamps = [...new Set(
+      usablePositions.flatMap((item) => item.candles.map((candle) => candle.time)),
+    )].sort((a, b) => a - b);
+
+    const costKrw = usablePositions.reduce((sum, item) => {
+      const quantity = Number(item.position.quantity);
+      const averagePrice = Number(item.position.averagePrice);
+      const fx = item.position.market === 'US' ? safeUsdKrw : 1;
+      return sum + (Number.isFinite(quantity) ? quantity : 0) * (Number.isFinite(averagePrice) ? averagePrice : 0) * fx;
+    }, 0);
+
+    const benchmarkSeries = {
+      spy: spySeries,
+      nasdaq: nasdaqSeries,
+      nasdaq100: nasdaq100Series,
+      kospi: kospiSeries,
+    };
+
+    let baseValue: number | null = null;
+    let baseSpy: number | null = null;
+    let baseNasdaq: number | null = null;
+    let baseNasdaq100: number | null = null;
+    let baseKospi: number | null = null;
+    const points: PortfolioPerformancePoint[] = [];
+
+    for (const timestamp of timestamps) {
       let valueKrw = 0;
-      let costKrw = 0;
-      let valid = true;
-      for (const position of portfolio.positions) {
-        const quote = await this.getStockQuote(position.symbol, position.market).catch(() => null);
-        const fx = position.market === 'US' ? Number(usdKrw) : 1;
-        if (!quote || quote.current <= 0 || !Number.isFinite(fx) || fx <= 0) {
-          valid = false;
+      let complete = true;
+      for (const item of usablePositions) {
+        const close = this.findCloseAtOrBefore(item.candles, timestamp);
+        if (!(close && close > 0)) {
+          complete = false;
           break;
         }
-        valueKrw += Number(position.quantity) * quote.current * fx;
-        costKrw += Number(position.quantity) * Number(position.averagePrice) * fx;
+        const quantity = Number(item.position.quantity);
+        const fx = item.position.market === 'US' ? safeUsdKrw : 1;
+        valueKrw += (Number.isFinite(quantity) ? quantity : 0) * close * fx;
       }
-      if (!valid) continue;
-      await this.portfolioSnapshotsRepository.upsert({
-        portfolioId: portfolio.id,
-        snapshotDate,
-        valueKrw: String(valueKrw),
-        costKrw: String(costKrw),
-        usdKrw: Number(usdKrw) > 0 ? String(usdKrw) : null,
-        spyClose: Number(spy?.current) > 0 ? String(spy?.current) : null,
-        qqqClose: Number(qqq?.current) > 0 ? String(qqq?.current) : null,
-        kospiClose: Number(kospi) > 0 ? String(kospi) : null,
+      if (!complete || valueKrw <= 0) continue;
+
+      if (baseValue === null) {
+        baseValue = valueKrw;
+        baseSpy = this.findCloseAtOrBefore(benchmarkSeries.spy.candles, timestamp);
+        baseNasdaq = this.findCloseAtOrBefore(benchmarkSeries.nasdaq.candles, timestamp);
+        baseNasdaq100 = this.findCloseAtOrBefore(benchmarkSeries.nasdaq100.candles, timestamp);
+        baseKospi = this.findCloseAtOrBefore(benchmarkSeries.kospi.candles, timestamp);
+      }
+
+      const spy = this.findCloseAtOrBefore(benchmarkSeries.spy.candles, timestamp);
+      const nasdaq = this.findCloseAtOrBefore(benchmarkSeries.nasdaq.candles, timestamp);
+      const nasdaq100 = this.findCloseAtOrBefore(benchmarkSeries.nasdaq100.candles, timestamp);
+      const kospi = this.findCloseAtOrBefore(benchmarkSeries.kospi.candles, timestamp);
+
+      points.push({
+        date: this.formatUnixDate(timestamp),
+        valueKrw,
+        costKrw,
+        profitRate: baseValue > 0 ? (valueKrw / baseValue - 1) * 100 : null,
+        spyReturn: spy && baseSpy && baseSpy > 0 ? (spy / baseSpy - 1) * 100 : null,
+        nasdaqReturn: nasdaq && baseNasdaq && baseNasdaq > 0 ? (nasdaq / baseNasdaq - 1) * 100 : null,
+        nasdaq100Return: nasdaq100 && baseNasdaq100 && baseNasdaq100 > 0 ? (nasdaq100 / baseNasdaq100 - 1) * 100 : null,
+        kospiReturn: kospi && baseKospi && baseKospi > 0 ? (kospi / baseKospi - 1) * 100 : null,
         estimated: false,
-      }, ['portfolioId', 'snapshotDate']);
+      });
     }
+
+    return this.downsamplePerformancePoints(points);
   }
+
+  private normalizePortfolioPerformancePeriod(period: string): PortfolioPerformancePeriod {
+    const normalized = period.toUpperCase();
+    return ['1W', '1M', '3M', '6M', '1Y', '3Y', '5Y'].includes(normalized)
+      ? normalized as PortfolioPerformancePeriod
+      : '1M';
+  }
+
+  private toPortfolioPerformanceChartPeriod(period: PortfolioPerformancePeriod): ChartPeriod {
+    return period === '1W' ? '1M' : period;
+  }
+
+  private getPortfolioPerformanceCutoff(period: PortfolioPerformancePeriod): number {
+    const days: Record<PortfolioPerformancePeriod, number> = {
+      '1W': 7,
+      '1M': 31,
+      '3M': 93,
+      '6M': 186,
+      '1Y': 366,
+      '3Y': 1096,
+      '5Y': 1827,
+    };
+    return Math.floor(Date.now() / 1000) - days[period] * 24 * 60 * 60;
+  }
+
+  private async loadPerformanceSeries(
+    symbol: string,
+    period: ChartPeriod,
+    cutoff: number,
+  ): Promise<PriceSeries> {
+    return {
+      symbol,
+      candles: this.filterPerformanceCandles(
+        await this.getCandles(symbol, period).catch(() => []),
+        cutoff,
+      ),
+    };
+  }
+
+  private filterPerformanceCandles(candles: CandlePoint[], cutoff: number): CandlePoint[] {
+    return candles
+      .filter((candle) => candle.time >= cutoff && candle.close > 0)
+      .sort((a, b) => a.time - b.time);
+  }
+
+  private findCloseAtOrBefore(candles: CandlePoint[], timestamp: number): number | null {
+    let close: number | null = null;
+    for (const candle of candles) {
+      if (candle.time > timestamp) break;
+      if (candle.close > 0) close = candle.close;
+    }
+    return close;
+  }
+
+  private formatUnixDate(timestamp: number): string {
+    return new Date(timestamp * 1000).toISOString().slice(0, 10);
+  }
+
+  private downsamplePerformancePoints(points: PortfolioPerformancePoint[]): PortfolioPerformancePoint[] {
+    const maxPoints = 260;
+    if (points.length <= maxPoints) return points;
+    const step = Math.ceil(points.length / maxPoints);
+    return points.filter((_, index) => index % step === 0 || index === points.length - 1);
+  }
+
   private normalizePortfolioName(name?: string): string {
     const normalized = name?.trim();
     if (!normalized) {

@@ -573,6 +573,35 @@ function PortfolioSection({
       window.removeEventListener('resize', updateAllocationScrollHint);
   }, [sortedRows.length, updateAllocationScrollHint]);
 
+  useEffect(() => {
+    const portfolio = selectedPortfolios[0];
+    if (!accessToken || !portfolio) {
+      setPerformance([]);
+      return;
+    }
+
+    let cancelled = false;
+    setPerformanceLoading(true);
+    apiRequest<PortfolioPerformancePoint[]>(
+      `/markets/portfolios/${portfolio.id}/performance?period=${encodeURIComponent(performancePeriod)}`,
+      'GET',
+      { accessToken },
+    )
+      .then((items) => {
+        if (!cancelled) setPerformance(items);
+      })
+      .catch(() => {
+        if (!cancelled) setPerformance([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPerformanceLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, performancePeriod, selectedPortfolios]);
+
   async function loadPortfolios() {
     if (!accessToken) {
       return;
@@ -1259,8 +1288,9 @@ function PortfolioPerformanceChart({ points, loading, period, onPeriodChange, po
   const series = [
     { key: 'profitRate' as const, label: language === 'ko' ? '내 포트폴리오' : 'Portfolio', color: '#2563eb' },
     { key: 'spyReturn' as const, label: 'S&P 500', color: '#16a34a' },
+    { key: 'nasdaqReturn' as const, label: 'Nasdaq', color: '#f59e0b' },
+    { key: 'nasdaq100Return' as const, label: 'Nasdaq 100', color: '#9333ea' },
     { key: 'kospiReturn' as const, label: 'KOSPI', color: '#dc2626' },
-    { key: 'nasdaq100Return' as const, label: '나스닥 100 (QQQ)', color: '#9333ea' },
   ];
   const values = points.flatMap((point) => series.map((item) => point[item.key]).filter((value): value is number => value !== null));
   const min = Math.min(0, ...values); const max = Math.max(0, ...values); const range = Math.max(max - min, 1);
@@ -1279,7 +1309,7 @@ function PortfolioPerformanceChart({ points, loading, period, onPeriodChange, po
       <div className="mt-4 flex flex-wrap gap-4 text-xs font-semibold">{series.map((item) => <span key={item.key} className="inline-flex items-center gap-1.5"><i className="size-2.5 rounded-full" style={{ backgroundColor: item.color }} />{item.label} {latest?.[item.key] == null ? '-' : `${latest[item.key]! >= 0 ? '+' : ''}${latest[item.key]!.toFixed(2)}%`}</span>)}</div>
       <div className="mt-4 h-64 rounded-md bg-surface-muted p-3"><svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img"><line x1="0" x2="100" y1={92 - ((0 - min) / range) * 84} y2={92 - ((0 - min) / range) * 84} stroke="currentColor" className="text-border" strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />{series.map((item) => <path key={item.key} d={pathFor(item.key)} fill="none" stroke={item.color} strokeWidth="2" vectorEffect="non-scaling-stroke" />)}</svg></div>
       {points.some((point) => point.estimated) ? <p className="mt-2 text-xs text-muted">{language === 'ko' ? '추정 데이터가 포함되어 있습니다.' : 'Includes estimated data.'}</p> : null}
-    </> : <div className="mt-4 rounded-md border border-dashed border-border px-4 py-12 text-center text-sm text-muted">{language === 'ko' ? '아직 성과 데이터가 없습니다. 오늘부터 일별 성과를 기록합니다.' : 'No performance data yet. Daily tracking starts today.'}</div>}
+    </> : <div className="mt-4 rounded-md border border-dashed border-border px-4 py-12 text-center text-sm text-muted">{language === 'ko' ? '선택한 기간의 성과 데이터가 없습니다.' : 'No performance data for this period yet.'}</div>}
   </section>;
 }
 function PositionDraftRow({

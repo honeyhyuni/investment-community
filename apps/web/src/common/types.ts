@@ -60,6 +60,7 @@ export type PortfolioPerformancePoint = {
   costKrw: number;
   profitRate: number | null;
   spyReturn: number | null;
+  nasdaqReturn: number | null;
   kospiReturn: number | null;
   nasdaq100Return: number | null;
   estimated: boolean;
