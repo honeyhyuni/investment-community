@@ -73,6 +73,7 @@ export type PortfolioPerformancePoint = {
   nasdaqReturn: number | null;
   nasdaq100Return: number | null;
   kospiReturn: number | null;
+  series: Record<string, number | null>;
   estimated: boolean;
 };
 

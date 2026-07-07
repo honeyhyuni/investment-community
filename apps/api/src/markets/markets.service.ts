@@ -157,8 +157,14 @@ type KisMarketDiv = 'J' | 'Q';
 type PortfolioPerformancePeriod = '1W' | '1M' | '3M' | '6M' | '1Y' | '3Y' | '5Y';
 
 type PriceSeries = {
+  key: string;
   symbol: string;
   candles: CandlePoint[];
+};
+
+type PerformanceCompareSymbol = {
+  key: string;
+  symbol: string;
 };
 
 type KisStock = {
@@ -1002,103 +1008,53 @@ export class MarketsService {
     userId: string,
     portfolioId: string,
     period = '1M',
+    symbols = '',
   ): Promise<PortfolioPerformancePoint[]> {
     const portfolio = await this.portfoliosRepository.findOne({
       where: { id: portfolioId, userId },
-      relations: { positions: true },
+      select: { id: true },
     });
     if (!portfolio) throw new NotFoundException('Portfolio not found.');
-
-    const positions = portfolio.positions ?? [];
-    if (!positions.length) return [];
 
     const periodKey = this.normalizePortfolioPerformancePeriod(period);
     const chartPeriod = this.toPortfolioPerformanceChartPeriod(periodKey);
     const cutoff = this.getPortfolioPerformanceCutoff(periodKey);
-    const usdKrw = await this.getUsdKrwExchangeRate()
-      .then((quote) => quote.current)
-      .catch(() => 1);
-    const safeUsdKrw = Number.isFinite(usdKrw) && usdKrw > 0 ? usdKrw : 1;
-
-    const [positionSeries, spySeries, nasdaqSeries, nasdaq100Series, kospiSeries] = await Promise.all([
-      Promise.all(positions.map(async (position) => ({
-        position,
-        candles: this.filterPerformanceCandles(
-          await this.getCandles(position.symbol, chartPeriod).catch(() => []),
-          cutoff,
-        ),
-      }))),
-      this.loadPerformanceSeries('^GSPC', chartPeriod, cutoff),
-      this.loadPerformanceSeries('^IXIC', chartPeriod, cutoff),
-      this.loadPerformanceSeries('QQQ', chartPeriod, cutoff),
-      this.loadPerformanceSeries('^KS11', chartPeriod, cutoff),
-    ]);
-
-    const usablePositions = positionSeries.filter((item) => item.candles.length > 0);
-    if (!usablePositions.length) return [];
+    const compareSymbols = this.getPortfolioPerformanceCompareSymbols(symbols);
+    const seriesList = await Promise.all(
+      compareSymbols.map((item) => this.loadPerformanceSeries(item.key, item.symbol, chartPeriod, cutoff)),
+    );
+    const availableSeries = seriesList.filter((series) => series.candles.length > 0);
+    if (!availableSeries.length) return [];
 
     const timestamps = [...new Set(
-      usablePositions.flatMap((item) => item.candles.map((candle) => candle.time)),
+      availableSeries.flatMap((series) => series.candles.map((candle) => candle.time)),
     )].sort((a, b) => a - b);
 
-    const costKrw = usablePositions.reduce((sum, item) => {
-      const quantity = Number(item.position.quantity);
-      const averagePrice = Number(item.position.averagePrice);
-      const fx = item.position.market === 'US' ? safeUsdKrw : 1;
-      return sum + (Number.isFinite(quantity) ? quantity : 0) * (Number.isFinite(averagePrice) ? averagePrice : 0) * fx;
-    }, 0);
-
-    const benchmarkSeries = {
-      spy: spySeries,
-      nasdaq: nasdaqSeries,
-      nasdaq100: nasdaq100Series,
-      kospi: kospiSeries,
-    };
-
-    let baseValue: number | null = null;
-    let baseSpy: number | null = null;
-    let baseNasdaq: number | null = null;
-    let baseNasdaq100: number | null = null;
-    let baseKospi: number | null = null;
+    const baseByKey = new Map<string, number>();
     const points: PortfolioPerformancePoint[] = [];
 
     for (const timestamp of timestamps) {
-      let valueKrw = 0;
-      let complete = true;
-      for (const item of usablePositions) {
-        const close = this.findCloseAtOrBefore(item.candles, timestamp);
-        if (!(close && close > 0)) {
-          complete = false;
-          break;
+      const series: Record<string, number | null> = {};
+      for (const item of compareSymbols) {
+        const candles = availableSeries.find((entry) => entry.key === item.key)?.candles ?? [];
+        const close = this.findCloseAtOrBefore(candles, timestamp);
+        if (close && close > 0 && !baseByKey.has(item.key)) {
+          baseByKey.set(item.key, close);
         }
-        const quantity = Number(item.position.quantity);
-        const fx = item.position.market === 'US' ? safeUsdKrw : 1;
-        valueKrw += (Number.isFinite(quantity) ? quantity : 0) * close * fx;
+        const base = baseByKey.get(item.key);
+        series[item.key] = close && base && base > 0 ? (close / base - 1) * 100 : null;
       }
-      if (!complete || valueKrw <= 0) continue;
-
-      if (baseValue === null) {
-        baseValue = valueKrw;
-        baseSpy = this.findCloseAtOrBefore(benchmarkSeries.spy.candles, timestamp);
-        baseNasdaq = this.findCloseAtOrBefore(benchmarkSeries.nasdaq.candles, timestamp);
-        baseNasdaq100 = this.findCloseAtOrBefore(benchmarkSeries.nasdaq100.candles, timestamp);
-        baseKospi = this.findCloseAtOrBefore(benchmarkSeries.kospi.candles, timestamp);
-      }
-
-      const spy = this.findCloseAtOrBefore(benchmarkSeries.spy.candles, timestamp);
-      const nasdaq = this.findCloseAtOrBefore(benchmarkSeries.nasdaq.candles, timestamp);
-      const nasdaq100 = this.findCloseAtOrBefore(benchmarkSeries.nasdaq100.candles, timestamp);
-      const kospi = this.findCloseAtOrBefore(benchmarkSeries.kospi.candles, timestamp);
 
       points.push({
         date: this.formatUnixDate(timestamp),
-        valueKrw,
-        costKrw,
-        profitRate: baseValue > 0 ? (valueKrw / baseValue - 1) * 100 : null,
-        spyReturn: spy && baseSpy && baseSpy > 0 ? (spy / baseSpy - 1) * 100 : null,
-        nasdaqReturn: nasdaq && baseNasdaq && baseNasdaq > 0 ? (nasdaq / baseNasdaq - 1) * 100 : null,
-        nasdaq100Return: nasdaq100 && baseNasdaq100 && baseNasdaq100 > 0 ? (nasdaq100 / baseNasdaq100 - 1) * 100 : null,
-        kospiReturn: kospi && baseKospi && baseKospi > 0 ? (kospi / baseKospi - 1) * 100 : null,
+        valueKrw: 0,
+        costKrw: 0,
+        profitRate: null,
+        spyReturn: series.sp500 ?? null,
+        nasdaqReturn: series.nasdaq ?? null,
+        nasdaq100Return: series.nasdaq100 ?? null,
+        kospiReturn: series.kospi ?? null,
+        series,
         estimated: false,
       });
     }
@@ -1106,6 +1062,33 @@ export class MarketsService {
     return this.downsamplePerformancePoints(this.compactPerformancePointsByDate(points));
   }
 
+  private getPortfolioPerformanceCompareSymbols(symbols: string): PerformanceCompareSymbol[] {
+    const defaults: PerformanceCompareSymbol[] = [
+      { key: 'sp500', symbol: '^GSPC' },
+      { key: 'nasdaq', symbol: '^IXIC' },
+      { key: 'nasdaq100', symbol: 'QQQ' },
+      { key: 'kospi', symbol: '^KS11' },
+    ];
+    const custom = symbols
+      .split(',')
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean)
+      .slice(0, 12)
+      .map((value) => {
+        const [market, rawSymbol] = value.includes(':') ? value.split(':', 2) : ['US', value];
+        const normalizedMarket = market === 'KR' ? 'KR' : 'US';
+        const symbol = rawSymbol?.trim().toUpperCase();
+        if (!symbol) return null;
+        return { key: `${normalizedMarket}:${symbol}`, symbol };
+      })
+      .filter((value): value is PerformanceCompareSymbol => value !== null);
+    const seen = new Set<string>();
+    return [...defaults, ...custom].filter((item) => {
+      if (seen.has(item.key)) return false;
+      seen.add(item.key);
+      return true;
+    });
+  }
   private normalizePortfolioPerformancePeriod(period: string): PortfolioPerformancePeriod {
     const normalized = period.toUpperCase();
     return ['1W', '1M', '3M', '6M', '1Y', '3Y', '5Y'].includes(normalized)
@@ -1131,11 +1114,13 @@ export class MarketsService {
   }
 
   private async loadPerformanceSeries(
+    key: string,
     symbol: string,
     period: ChartPeriod,
     cutoff: number,
   ): Promise<PriceSeries> {
     return {
+      key,
       symbol,
       candles: this.filterPerformanceCandles(
         await this.getCandles(symbol, period).catch(() => []),

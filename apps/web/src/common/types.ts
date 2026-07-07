@@ -63,6 +63,7 @@ export type PortfolioPerformancePoint = {
   nasdaqReturn: number | null;
   kospiReturn: number | null;
   nasdaq100Return: number | null;
+  series: Record<string, number | null>;
   estimated: boolean;
 };
 export type StockSymbol = {
