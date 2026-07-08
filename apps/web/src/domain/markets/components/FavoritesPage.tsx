@@ -1424,16 +1424,20 @@ function PortfolioPerformanceChart({
         { key: 'end', label: points.at(-1)?.date.slice(5) ?? '', className: 'text-right' },
       ]
     : [];
-  const pathFor = (key: string) =>
-    points
+  const pathFor = (key: string) => {
+    let hasStarted = false;
+    return points
       .map((point, index) => {
         const value = point.series?.[key] ?? null;
         if (value === null) return null;
         const x = points.length <= 1 ? 0 : (index / (points.length - 1)) * 100;
-        return (index === 0 ? 'M' : 'L') + ' ' + x + ' ' + yFor(value);
+        const command = hasStarted ? 'L' : 'M';
+        hasStarted = true;
+        return command + ' ' + x + ' ' + yFor(value);
       })
       .filter(Boolean)
       .join(' ');
+  };
   const latest = points.at(-1);
 
   return (
