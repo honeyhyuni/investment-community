@@ -1443,9 +1443,33 @@ export class MarketsService {
     const epsTtm = quarterlyEpsTtm ?? latestAnnual?.eps ?? null;
     const equity = latestQuarter?.equity ?? latestAnnual?.equity ?? null;
     const marketCap = this.getUsMarketCap(profile, currentPrice);
+    const peFromQuarterlyEps = this.safeDivide(currentPrice, quarterlyEpsTtm);
+    const peFromNetIncome = this.safeDivide(marketCap, netIncomeTtm);
+    const peFromProvider = this.pickFallbackMetric(fallback, [
+      'peTTM',
+      'peAnnual',
+      'peRatioTTM',
+      'peRatio',
+    ]);
+    const peFromAnnualEps = this.safeDivide(currentPrice, latestAnnual?.eps);
+    const peTTM =
+      peFromQuarterlyEps ??
+      peFromNetIncome ??
+      peFromProvider ??
+      peFromAnnualEps;
 
     return {
-      peTTM: this.safeDivide(currentPrice, epsTtm),
+      peTTM,
+      peTTMSource:
+        peFromQuarterlyEps !== null
+          ? 'eps_ttm'
+          : peFromNetIncome !== null
+            ? 'net_income_ttm'
+            : peFromProvider !== null
+              ? 'provider'
+              : peFromAnnualEps !== null
+                ? 'annual_eps'
+                : null,
       pbAnnual: this.safeDivide(marketCap, equity),
       epsTTM: epsTtm,
       psTTM: this.safeDivide(marketCap, revenueTtm),

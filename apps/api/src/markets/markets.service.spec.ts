@@ -229,3 +229,69 @@ describe('MarketsService OpenAI service tiers', () => {
     });
   });
 });
+
+describe('MarketsService S&P 500 metrics', () => {
+  function makeService() {
+    return Object.create(MarketsService.prototype) as any;
+  }
+
+  function quarter(
+    fiscalYear: number,
+    fiscalQuarter: number,
+    eps: number | null,
+    netIncome = 2_500_000,
+  ) {
+    return {
+      fiscalYear,
+      fiscalQuarter,
+      revenue: 10_000_000,
+      netIncome,
+      eps,
+      equity: 50_000_000,
+    };
+  }
+
+  it('uses net income TTM for PER when one quarterly EPS is missing', () => {
+    const service = makeService();
+    const metrics = service.buildUsSp500Metrics(
+      {
+        annual: [{ fiscalYear: 2025, eps: 1, equity: 50_000_000 }],
+        quarterly: [
+          quarter(2025, 4, null),
+          quarter(2026, 1, 1),
+          quarter(2026, 2, 1),
+          quarter(2026, 3, 1),
+        ],
+      },
+      100,
+      { shareOutstanding: 1 },
+      { peTTM: 50 },
+    );
+
+    expect(metrics.peTTM).toBe(10);
+    expect(metrics.peTTMSource).toBe('net_income_ttm');
+    expect(metrics.epsTTM).toBe(1);
+  });
+
+  it('prefers complete quarterly EPS TTM for PER', () => {
+    const service = makeService();
+    const metrics = service.buildUsSp500Metrics(
+      {
+        annual: [{ fiscalYear: 2025, eps: 1, equity: 50_000_000 }],
+        quarterly: [
+          quarter(2025, 4, 1),
+          quarter(2026, 1, 1),
+          quarter(2026, 2, 1),
+          quarter(2026, 3, 2),
+        ],
+      },
+      100,
+      { shareOutstanding: 1 },
+      { peTTM: 50 },
+    );
+
+    expect(metrics.peTTM).toBe(20);
+    expect(metrics.peTTMSource).toBe('eps_ttm');
+    expect(metrics.epsTTM).toBe(5);
+  });
+});
