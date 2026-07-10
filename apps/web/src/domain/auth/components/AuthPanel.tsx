@@ -1,4 +1,6 @@
 import { FormEvent } from "react";
+import Image from "next/image";
+import { Clock, ShieldCheck, Sparkles, TrendingUp } from "lucide-react";
 import { User } from "@/common/lib/api";
 import { Notice } from "@/common/components/Notice";
 import { StatusBadge } from "@/common/components/StatusBadge";
@@ -23,23 +25,91 @@ export function AuthPanel(props: {
   loading: boolean;
   submitAuth: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
+  const pending = props.user?.status === "PENDING";
+
   return (
-    <section className="rounded-lg border border-border bg-surface p-5 shadow-sm sm:p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
-            15F Access
-          </p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
-            {props.heading}
-          </h2>
+    <section className="w-full max-w-md overflow-hidden rounded-lg border border-border bg-surface shadow-xl shadow-slate-900/5">
+      <div className="h-1 bg-[image:var(--brand-gradient)]" aria-hidden />
+      <div className="p-4 sm:p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <Image
+            src="/icons/icon.svg"
+            width={40}
+            height={40}
+            alt="15F"
+            className="size-10 shrink-0 rounded-lg shadow-sm"
+            priority
+          />
+          <div className="min-w-0 leading-tight">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
+              Private
+            </p>
+            <h1 className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">
+              Investment Community
+            </h1>
+          </div>
         </div>
-        {props.user?.status ? (
-          <StatusBadge status={props.user.status} />
-        ) : null}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">
+              15F Access
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+              {props.heading}
+            </h2>
+            <p className="mt-1.5 text-sm leading-5 text-muted">
+              {pending
+                ? "Your account is waiting for admin approval."
+                : "Sign in to enter the private investment community."}
+            </p>
+          </div>
+          <div className="shrink-0">
+            {props.user?.status ? (
+              <StatusBadge status={props.user.status} />
+            ) : (
+              <span className="grid size-10 place-items-center rounded-md bg-primary/10 text-primary">
+                <ShieldCheck size={20} />
+              </span>
+            )}
+          </div>
+        </div>
+
+        <AuthForm {...props} />
+        <Notice message={props.message} error={props.error} />
+
+        <div className="mt-4 border-t border-border pt-4">
+          <div className="flex items-start gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-md bg-surface-muted text-primary">
+              {pending ? <Clock size={18} /> : <Sparkles size={18} />}
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                {pending ? "Approval pending" : "Private access"}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                {pending
+                  ? "An admin needs to approve your account before you can enter."
+                  : "Only approved accounts can enter. Access is reviewed to keep the community focused."}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-surface-muted px-2.5 py-2">
+              <TrendingUp size={16} className="shrink-0 text-positive" />
+              <p className="truncate text-xs font-semibold text-foreground">
+                Market-focused
+              </p>
+            </div>
+            <div className="flex min-w-0 items-center gap-2 rounded-md border border-border bg-surface-muted px-2.5 py-2">
+              <ShieldCheck size={16} className="shrink-0 text-primary" />
+              <p className="truncate text-xs font-semibold text-foreground">
+                Member-only
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
-      <AuthForm {...props} />
-      <Notice message={props.message} error={props.error} />
     </section>
   );
 }
