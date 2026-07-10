@@ -1,4 +1,4 @@
-# Web Agent Guide
+﻿# Web Agent Guide
 
 This file describes the current frontend architecture and behavior contracts. Read it before changing `apps/web`.
 
@@ -79,7 +79,7 @@ Canonical tag storage:
 
 ```ts
 // Korean
-{ symbol: '000660', name: 'SK하이닉스', market: 'KR' }
+{ symbol: '000660', name: 'SK?섏씠?됱뒪', market: 'KR' }
 
 // US
 { symbol: 'NVDA', name: 'NVIDIA Corp', market: 'US' }
@@ -87,7 +87,7 @@ Canonical tag storage:
 
 Display rules:
 
-- Korean tags display company names: `#SK하이닉스`, `#기아`, `#삼성전자`.
+- Korean tags display company names: `#SK?섏씠?됱뒪`, `#湲곗븘`, `#?쇱꽦?꾩옄`.
 - US tags display tickers: `#NVDA`, `#AAPL`.
 - Tag click routes with canonical symbol and correct market.
 
@@ -101,8 +101,8 @@ Critical invariants:
 
 When editing tag behavior, verify:
 
-- Searching `SK하이닉스` suggests `#SK하이닉스` with code `000660`.
-- Existing legacy `#000660` posts display as `#SK하이닉스` after symbols load.
+- Searching `SK?섏씠?됱뒪` suggests `#SK?섏씠?됱뒪` with code `000660`.
+- Existing legacy `#000660` posts display as `#SK?섏씠?됱뒪` after symbols load.
 - Clicking the tag routes to `/?symbol=000660&market=KR`.
 - Related posts still load under stock `000660`.
 
@@ -154,10 +154,10 @@ Do not replace TipTap with ad hoc paragraph/image block controls.
 
 ## Calendar And Earnings UI
 
-- The main navigation label is `캘린더` / `Calendar`.
+- The main navigation label is `罹섎┛?? / `Calendar`.
 - Calendar tabs use the same segmented-control style as portfolio dashboard tabs.
-- `공모주` shows IPO subscription/listing events.
-- `미국실적` shows US earnings events from the API, not from direct browser calls to Alpha Vantage.
+- `怨듬え二? shows IPO subscription/listing events.
+- `誘멸뎅?ㅼ쟻` shows US earnings events from the API, not from direct browser calls to Alpha Vantage.
 - Earnings routes must remain shareable: `/calendar/ipo` and `/calendar/earnings`.
 - Earnings views:
   - Daily and weekly views exclude Saturday/Sunday.
@@ -167,9 +167,9 @@ Do not replace TipTap with ad hoc paragraph/image block controls.
 - US stock detail displays `nextEarnings` near the stock title action area, beside the watchlist/currency controls, not inside the company overview box.
 - Hide `nextEarnings` if the report date is before today, even if stale data is accidentally returned.
 - Translate earnings time labels in the UI:
-  - `pre-market` -> `프리마켓`
-  - `post-market` / after-market variants -> `애프터마켓`
-  - unknown/missing -> `시간 미정`
+  - `pre-market` -> `?꾨━留덉폆`
+  - `post-market` / after-market variants -> `?좏봽?곕쭏耳?
+  - unknown/missing -> `?쒓컙 誘몄젙`
 - Keep the next-earnings badge responsive; do not truncate the text to `...` when Korean/English labels are longer.
 
 ## S&P 500 Financial And Earnings UI
@@ -194,7 +194,7 @@ Do not replace TipTap with ad hoc paragraph/image block controls.
 ## Guru Portfolio UI
 
 - Guru cards, detail headers, and portfolio maps display the report quarter and last collection time in KST. Freshness badges are green through 3 days, blue through 14 days, amber when older, and explicit when no collection history exists.
-- Guru detail holdings support text search, sector filtering, activity filtering, and sorting. The full-exit filter uses `activityHoldings`; zero-weight positions display a red `전량매도` badge but are excluded from the current portfolio map.
+- Guru detail holdings support text search, sector filtering, activity filtering, and sorting. The full-exit filter uses `activityHoldings`; zero-weight positions display a red `?꾨웾留ㅻ룄` badge but are excluded from the current portfolio map.
 - Guru detail is touch-first below the `sm`/`md` breakpoints: the primary tabs stay visible while scrolling, holdings sorting uses a compact select, the wide holdings table becomes mobile cards, and the treemap becomes a readable holding list. Desktop keeps the full table and treemap. No guru control may force page-level horizontal overflow.
 
 ## Verification
@@ -217,7 +217,7 @@ Before finishing market/community changes, manually verify:
 
 ## Deployment
 
-- Working branch for requested changes: `LSH7` unless the user explicitly creates a newer branch.
+- Working branch for requested changes: `LSH8` unless the user explicitly creates a newer branch.
 - Docker image: `honeyhyuni12/investment-community-web:latest`
 - Current operating VM: `172.16.11.137` (Ubuntu). The previous Rocky VM `172.16.11.126` was replaced after storage/VM corruption.
 - Deployment directory: `/home/ncloud/investment-community`
@@ -226,3 +226,33 @@ Before finishing market/community changes, manually verify:
 - Production VM `.env` should use `WEB_ORIGIN=https://15f.kro.kr`, `NEXT_PUBLIC_API_BASE_URL=/api`, and `REFRESH_COOKIE_SECURE=true`.
 
 Never commit `.env`, credentials, tokens, passwords, generated logs, or local `.next` output.
+
+## 2026-07-07 UI Contracts
+
+Market/economic indicators:
+
+- Economic indicators are a Market sub-tab, not a top-level/bottom navigation item. The Market tabs are Daily Report, News, Calendar, and Economic Indicators.
+- `/economic-indicators` must remain shareable and render inside the Market route group. `/calendar/economic` redirects there for legacy links.
+- The economic indicator chart supports `1M`, `3M`, `6M`, `1Y`, `5Y`, `10Y`, and `MAX`; `MAX` must fetch the selected series history from the API instead of relying on a global limited list.
+- Display Korean labels/units for the FRED series: CPI, PCE, Core PCE, PPI, unemployment, nonfarm payrolls, GDP, Fed funds, 10-year Treasury, 10Y-2Y spread, M1, M2, monetary base/M0 proxy, Fed assets, and TGA balance.
+
+PWA navigation:
+
+- Authenticated mobile bottom navigation intentionally has five items: Market, Stocks, My, Feed, Gurus.
+- Keep the mobile bottom nav as a five-column fixed grid (`grid-cols-5`) with no horizontal scrolling. Labels should truncate within their fifth of the screen rather than forcing overflow.
+
+Guru UI:
+
+- The second root tab is labeled `嫄곗옣 留ㅻℓ` / `Guru trading`; do not revert it to `?⑹쓽 醫낅ぉ`.
+- `/gurus/trading` is the shareable route for the Guru trading tab. Refreshing that URL must keep the Guru trading tab selected. Switching between `嫄곗옣 紐⑸줉` and `嫄곗옣 留ㅻℓ` should push `/gurus` and `/gurus/trading` respectively.
+- Guru trading supports table sorting by total value, current-quarter buy value, and current-quarter sell value. Desktop rows show total value, bought, sold, top buyer, top seller, and raised/reduced counts.
+- Keep the Guru trading desktop table wide enough for buy/sell and top-institution columns; use horizontal overflow inside the table wrapper rather than page-level overflow.
+
+Portfolio UI:
+
+- Portfolio performance should compare the portfolio against S&P 500, KOSPI, and Nasdaq 100 when snapshot data exists.
+
+Community UI:
+
+- New community post images should upload immediately and store server URLs. Feed previews and app/PWA rendering must avoid broken layouts when posts contain many images.
+- Bookmarked posts are available through the saved/bookmarks feed scope, and post cards should reflect `bookmarkedByMe`.

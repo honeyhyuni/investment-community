@@ -26,6 +26,14 @@ type TestMarketsService = {
     interval: string;
   };
   kisGet: jest.MockedFunction<KisGet>;
+  fetchOpenAiWithRetry: (
+    url: string,
+    init: RequestInit,
+    firstTimeoutMs: number,
+    retryTimeoutMs: number,
+    fallbackToDefaultTier?: boolean,
+  ) => Promise<Response>;
+  logger: { warn: jest.Mock };
 };
 
 function toKisDate(date: Date): string {
@@ -177,5 +185,113 @@ describe('MarketsService Korean candles', () => {
       { time: 5, value: 4 },
       { time: 6, value: 5 },
     ]);
+  });
+});
+
+describe('MarketsService OpenAI service tiers', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('falls back from flex to default after a 429 for briefing requests', async () => {
+    const service = Object.create(
+      MarketsService.prototype,
+    ) as TestMarketsService;
+    service.logger = { warn: jest.fn() };
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: { code: 'rate_limit_exceeded' } }),
+          { status: 429 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response('{}', { status: 200 }));
+
+    const response = await service.fetchOpenAiWithRetry(
+      'https://api.openai.com/v1/responses',
+      {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-5.5', service_tier: 'flex' }),
+      },
+      1_000,
+      1_000,
+      true,
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
+      service_tier: 'flex',
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({
+      service_tier: 'default',
+    });
+  });
+});
+
+describe('MarketsService S&P 500 metrics', () => {
+  function makeService() {
+    return Object.create(MarketsService.prototype) as any;
+  }
+
+  function quarter(
+    fiscalYear: number,
+    fiscalQuarter: number,
+    eps: number | null,
+    netIncome = 2_500_000,
+  ) {
+    return {
+      fiscalYear,
+      fiscalQuarter,
+      revenue: 10_000_000,
+      netIncome,
+      eps,
+      equity: 50_000_000,
+    };
+  }
+
+  it('uses net income TTM for PER when one quarterly EPS is missing', () => {
+    const service = makeService();
+    const metrics = service.buildUsSp500Metrics(
+      {
+        annual: [{ fiscalYear: 2025, eps: 1, equity: 50_000_000 }],
+        quarterly: [
+          quarter(2025, 4, null),
+          quarter(2026, 1, 1),
+          quarter(2026, 2, 1),
+          quarter(2026, 3, 1),
+        ],
+      },
+      100,
+      { shareOutstanding: 1 },
+      { peTTM: 50 },
+    );
+
+    expect(metrics.peTTM).toBe(10);
+    expect(metrics.peTTMSource).toBe('net_income_ttm');
+    expect(metrics.epsTTM).toBe(1);
+  });
+
+  it('prefers complete quarterly EPS TTM for PER', () => {
+    const service = makeService();
+    const metrics = service.buildUsSp500Metrics(
+      {
+        annual: [{ fiscalYear: 2025, eps: 1, equity: 50_000_000 }],
+        quarterly: [
+          quarter(2025, 4, 1),
+          quarter(2026, 1, 1),
+          quarter(2026, 2, 1),
+          quarter(2026, 3, 2),
+        ],
+      },
+      100,
+      { shareOutstanding: 1 },
+      { peTTM: 50 },
+    );
+
+    expect(metrics.peTTM).toBe(20);
+    expect(metrics.peTTMSource).toBe('eps_ttm');
+    expect(metrics.epsTTM).toBe(5);
   });
 });

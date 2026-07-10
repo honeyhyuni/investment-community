@@ -1,4 +1,4 @@
-export type CommunityScope = "all" | "subscribed" | "mine";
+export type CommunityScope = "all" | "subscribed" | "mine" | "bookmarks";
 
 export type FeedSort = "latest" | "popular";
 
@@ -54,5 +54,6 @@ export type CommunityPost = {
   likeCount: number;
   commentCount: number;
   likedByMe: boolean;
+  bookmarkedByMe: boolean;
   comments: CommunityComment[];
 };

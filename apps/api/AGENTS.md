@@ -1,4 +1,4 @@
-# API Agent Guide
+﻿# API Agent Guide
 
 This file describes the current backend contracts and operational decisions. Read it before changing `apps/api`.
 
@@ -37,7 +37,7 @@ Never query `stock_master.market = 'KR'`; use:
 In(['KR:KOSPI', 'KR:KOSDAQ']);
 ```
 
-`stock_master` is the source of truth for stock names and market classification. Prefer its Korean trading name, such as `SK하이닉스`, over DART legal names, such as `에스케이하이닉스`, for user-facing search and news queries.
+`stock_master` is the source of truth for stock names and market classification. Prefer its Korean trading name, such as `SK?섏씠?됱뒪`, over DART legal names, such as `?먯뒪耳?댄븯?대땳??, for user-facing search and news queries.
 
 Production sets TypeORM `synchronize: false`. Entity changes require an explicit production migration/manual schema update.
 
@@ -79,7 +79,7 @@ The mobile stock-code fallback is important because Naver Search keys may be abs
 Community tags are stored as:
 
 ```ts
-{ symbol: '000660', name: 'SK하이닉스', market: 'KR' }
+{ symbol: '000660', name: 'SK?섏씠?됱뒪', market: 'KR' }
 ```
 
 - Always store the canonical symbol internally.
@@ -124,6 +124,7 @@ Manual admin endpoints:
 - `POST /api/markets/calendar/earnings/us/batch`
 
 Market briefing OpenAI calls use `OPENAI_MODEL` and `service_tier: "flex"`. The text request retries once for timeout/429/resource-unavailable. A failed scheduled generation must skip publishing instead of creating partial data.
+For market briefing text only, a Flex 429 retry switches to `service_tier: "default"`; a successful Flex request never incurs the default-tier call. Other OpenAI requests keep their existing retry tier.
 Every scheduled attempt checks PostgreSQL before collecting news or calling OpenAI. Once that market has a briefing for the current KST date, later retry cron executions return immediately and must not incur another OpenAI call or send another notification.
 
 ## IPO Calendar Batch
@@ -150,8 +151,8 @@ US earnings automation is limited to S&P 500 symbols for Finnhub estimates/actua
 - Preliminary actual checks are scheduled every 15 minutes but only perform provider calls in KST windows relevant to US releases: 06:00-09:59 for the prior US report date after-market/unknown events, and 20:00-23:30 for same-date pre-market/unknown events.
 - SEC confirmation runs daily at 04:00 Asia/Seoul for unconfirmed events from the previous 30 days that already have a preliminary actual. Once a matching SEC quarterly row is confirmed, it is not checked again by the confirmation batch.
 - Opening an S&P 500 financial or earnings page also uses SEC cache-aside refresh, so actively viewed symbols may confirm earlier.
-- When Finnhub first supplies an actual, send an EARNINGS notification only to users who favorited that US ticker and enabled earnings notifications. Title format is `MU 실적 보기`; the URL is `/stocks/US/MU/earnings`. Notification failure must not fail the batch.
-- The stock-detail header shows the next event while no recent actual exists. For up to 15 days after an actual, it shows a link such as `2026 Q2 실적 보기`; a newer Alpha event naturally switches it back to the next scheduled earnings label.
+- When Finnhub first supplies an actual, send an EARNINGS notification only to users who favorited that US ticker and enabled earnings notifications. Title format is `MU ?ㅼ쟻 蹂닿린`; the URL is `/stocks/US/MU/earnings`. Notification failure must not fail the batch.
+- The stock-detail header shows the next event while no recent actual exists. For up to 15 days after an actual, it shows a link such as `2026 Q2 ?ㅼ쟻 蹂닿린`; a newer Alpha event naturally switches it back to the next scheduled earnings label.
 - Public/read routes:
   - `GET /api/markets/calendar/earnings/us?from=YYYY-MM-DD&to=YYYY-MM-DD&query=...`
   - `GET /api/markets/calendar/earnings/us/bounds`
@@ -235,7 +236,7 @@ Local dev uses `docker-compose.yml`. The current operating VM deploy directory a
 
 ## Deployment
 
-- Working branch for requested changes: `LSH7` unless the user explicitly creates a newer branch.
+- Working branch for requested changes: `LSH8` unless the user explicitly creates a newer branch.
 - Docker Hub images:
   - `honeyhyuni12/investment-community-api:latest`
   - `honeyhyuni12/investment-community-web:latest`
@@ -251,3 +252,35 @@ Never place SSH passwords or environment secrets in this file. Build, push, pull
 ## Markets Service Maintenance
 
 `src/markets/markets.service.ts` is still intentionally broad and contains provider calls, Redis caching, briefings, and quote normalization. Prefer extracting low-risk pure helpers or new provider-specific services gradually, with an API build after each small step. Avoid large mechanical rewrites in this file unless tests/builds are run immediately afterward.
+
+## 2026-07-07 Feature Contracts
+
+Community images and bookmarks:
+
+- New community images must be uploaded as authenticated multipart files through `POST /api/community/images`; posts should store `/uploads/community/...` URLs, not new Base64 payloads. Legacy Base64 posts remain display-compatible.
+- Uploaded community images are validated by MIME/extension/decoding, stored under the community uploads volume, and exposed by the web/nginx static uploads path in production.
+- `DELETE /api/community/images/:id` may delete only the requesting user's unused upload.
+- Community bookmarks use `PostBookmark`; include the repository in `CommunityModule` TypeORM imports whenever `CommunityService` injects it.
+- Bookmark list access uses `scope=bookmarks`; post responses expose `bookmarkedByMe` for the current user.
+- Production schema requires `sql/20260707_community_bookmarks.sql` and upload-volume/static-serving configuration before deploying image/bookmark features.
+
+Portfolio performance snapshots:
+
+- Portfolio positions include `startedAt`; snapshots are stored in `portfolio_daily_snapshots` and exposed through `GET /api/markets/portfolios/:id/performance?period=...`.
+- Performance responses include portfolio return plus S&P 500/SPY, KOSPI, and Nasdaq 100/QQQ comparison returns.
+- Production schema requires `sql/20260707_portfolio_snapshots.sql`; keep snapshot rows in PostgreSQL, not Redis.
+
+Economic indicators:
+
+- FRED indicators are stored in `economic_indicators` and served through `GET /api/markets/calendar/economic/us` with `latest=true`, `seriesId`, `start`, `end`, and `limit` support.
+- Admin manual refresh route: `POST /api/markets/calendar/economic/us/batch`. The scheduled refresh runs Mon-Fri `07:15` Asia/Seoul.
+- Tracked FRED series: `CPIAUCSL`, `PCEPI`, `PCEPILFE`, `PPIACO`, `UNRATE`, `PAYEMS`, `GDPC1`, `FEDFUNDS`, `DGS10`, `T10Y2Y`, `M1SL`, `M2SL`, `BOGMBASE`, `WALCL`, and `D2WLTGAL`.
+- `BOGMBASE` is the M0/monetary-base proxy. `D2WLTGAL` is the Treasury General Account balance; FRED history starts in 2002.
+- Production schema requires `sql/20260707_economic_indicators.sql`; `FRED_API_KEY` must be configured in the API environment and never committed.
+
+Guru 13F trading:
+
+- `GET /api/markets/gurus/consensus` now powers the Web "嫄곗옣 留ㅻℓ" view. It accepts `sort=managerCount|totalValue|buyValue|sellValue` and `limit`.
+- Consensus responses include `buyValue`, `sellValue`, `netValueChange`, `topBuyManager`, and `topSellManager` in addition to holding count/value fields.
+- Buy/sell value is calculated from current versus previous 13F value: buy is positive value change, sell is absolute negative value change. New buys and full exits are naturally included.
+- Keep the existing guru detail routes and manager routes shareable; `/gurus/trading` is a Web route only and still calls the consensus API.

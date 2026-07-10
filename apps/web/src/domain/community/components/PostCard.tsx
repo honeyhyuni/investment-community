@@ -1,7 +1,7 @@
 "use client";
 
 import { Dispatch, MouseEvent, SetStateAction, useState } from "react";
-import { ChevronRight, Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
+import { Bookmark, ChevronRight, Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { RichContent } from "@/common/components/RichContent";
 import { Button } from "@/common/components/Button";
 import { cn } from "@/common/utils/cn";
@@ -20,6 +20,7 @@ export function PostCard({
   replyDrafts,
   setReplyDrafts,
   onLike,
+  onBookmark,
   onComment,
   onEditPost,
   onDeletePost,
@@ -44,6 +45,7 @@ export function PostCard({
   replyDrafts: Record<string, string>;
   setReplyDrafts: Dispatch<SetStateAction<Record<string, string>>>;
   onLike: (postId: string) => void;
+  onBookmark?: (postId: string) => void;
   onComment: (postId: string, parentId?: string) => void;
   onEditPost: (post: CommunityPost) => void;
   onDeletePost: (postId: string) => void;
@@ -103,14 +105,14 @@ export function PostCard({
       onClick={openPostFromCard}
       className={`-mx-4 rounded-none border-y border-[#d9dee8] bg-white p-4 shadow-sm sm:mx-0 sm:rounded-lg sm:border ${
         onOpenPost
-          ? "cursor-pointer transition-all duration-150 ease-out hover:scale-[1.01] hover:shadow-md hover:will-change-transform"
+          ? "cursor-pointer transition-shadow duration-150 ease-out hover:shadow-md"
           : ""
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="line-clamp-2 text-xl font-semibold leading-snug text-foreground sm:truncate sm:text-2xl">
-            {post.title || post.content || (ko ? "제목 없음" : "Untitled")}
+            {post.title || (ko ? "제목없음" : "Untitled")}
           </h3>
           {forceExpanded ? (
             <>
@@ -207,6 +209,7 @@ export function PostCard({
       <div className={`mt-4 ${showFull ? "" : "max-h-64 overflow-hidden sm:max-h-72"}`}>
         <RichContent
           html={html}
+          maxImages={onOpenPost ? 1 : undefined}
           onImageClick={
             enableImagePreview ? (url) => setImagePreview(url) : undefined
           }
@@ -272,7 +275,20 @@ export function PostCard({
             {post.likeCount}
           </span>
         )}
-        <span className="inline-flex h-9 items-center gap-1.5 text-sm font-semibold text-muted [&_svg]:size-[1.15em]">
+        {onBookmark ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={(event) => {
+              event.stopPropagation();
+              onBookmark(post.id);
+            }}
+            leftIcon={<Bookmark fill={post.bookmarkedByMe ? "currentColor" : "none"} />}
+            className={cn("ml-auto text-sm", post.bookmarkedByMe && "text-primary")}
+          >
+            {ko ? "저장" : "Save"}
+          </Button>
+        ) : null}        <span className="inline-flex h-9 items-center gap-1.5 text-sm font-semibold text-muted [&_svg]:size-[1.15em]">
           <MessageCircle />
           {post.commentCount}
         </span>

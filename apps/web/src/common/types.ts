@@ -22,6 +22,7 @@ export type FavoriteStock = MarketQuote & {
   market: "US" | "KR";
   favoriteId: string;
   addedAt: string;
+  startedAt: string;
 };
 
 export type PortfolioPositionInput = {
@@ -30,6 +31,7 @@ export type PortfolioPositionInput = {
   name?: string;
   quantity: number;
   averagePrice?: number;
+  startedAt?: string;
 };
 
 export type PortfolioPosition = MarketQuote & {
@@ -41,6 +43,7 @@ export type PortfolioPosition = MarketQuote & {
   cost: number;
   value: number;
   addedAt: string;
+  startedAt: string;
 };
 
 export type Portfolio = {
@@ -51,6 +54,18 @@ export type Portfolio = {
   updatedAt: string;
 };
 
+export type PortfolioPerformancePoint = {
+  date: string;
+  valueKrw: number;
+  costKrw: number;
+  profitRate: number | null;
+  spyReturn: number | null;
+  nasdaqReturn: number | null;
+  kospiReturn: number | null;
+  nasdaq100Return: number | null;
+  series: Record<string, number | null>;
+  estimated: boolean;
+};
 export type StockSymbol = {
   symbol: string;
   displaySymbol: string;

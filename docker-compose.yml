@@ -38,6 +38,7 @@ services:
       NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET:-}
       DART_API_KEY: ${DART_API_KEY:-}
       ALPHA_VANTAGE_API_KEY: ${ALPHA_VANTAGE_API_KEY:-}
+      FRED_API_KEY: ${FRED_API_KEY:-}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
@@ -46,11 +47,13 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.5}
       OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-gpt-image-1}
+      COMMUNITY_UPLOAD_DIR: /uploads/community
     ports:
       - "${API_PORT:-4000}:4000"
     volumes:
       - ./apps/api:/app
       - api_node_modules:/app/node_modules
+      - community_uploads:/uploads/community
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,3 +91,4 @@ volumes:
   api_node_modules:
   postgres_data:
   redis_data:
+  community_uploads:

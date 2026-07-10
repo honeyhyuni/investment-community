@@ -28,6 +28,8 @@ COPY --from=builder --chown=nestjs:nestjs /app/apps/api/dist ./dist
 COPY --from=builder --chown=nestjs:nestjs /app/apps/api/src/markets/data ./dist/markets/data
 COPY --from=builder --chown=nestjs:nestjs /app/apps/api/package*.json ./
 
+RUN mkdir -p /uploads/community && chown -R nestjs:nestjs /uploads
+
 USER nestjs
 
 EXPOSE 4000

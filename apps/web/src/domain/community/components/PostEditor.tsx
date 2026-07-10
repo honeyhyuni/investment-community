@@ -1,13 +1,14 @@
 "use client";
 
-import { Dispatch, SetStateAction, useEffect, useMemo, useRef } from "react";
+import { Dispatch, SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { Image as ImageIcon, Save, X } from "lucide-react";
 import { useEditor, EditorContent, useEditorState } from "@tiptap/react";
 import { Mark, mergeAttributes } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
-import { encodeImageForPost, makeEditorBlockId } from "@/domain/community/utils";
+import { compressImageForUpload, makeEditorBlockId } from "@/domain/community/utils";
+import { CommunityImageUpload, uploadCommunityImage } from "@/common/lib/api";
 import { stockSearchScore } from "@/common/utils/stock-search";
 import { CommunityContentBlock, StockTag } from "@/domain/community/types";
 import { MarketQuote, StockSymbol, TradeTick } from "@/common/types";
@@ -67,6 +68,8 @@ export function PostEditor({
   onSaveDraft,
   onSubmit,
   onCancel,
+  accessToken,
+  onUploadedImage,
 }: {
   title: string;
   setTitle: (value: string) => void;
@@ -90,10 +93,13 @@ export function PostEditor({
   onSaveDraft: () => void;
   onSubmit: () => Promise<void>;
   onCancel: () => void;
+  accessToken: string | null;
+  onUploadedImage: (image: CommunityImageUpload) => void;
 }) {
   const ko = usePreferencesStore((s) => s.language) === "ko";
   const blockIdRef = useRef(blocks[0]?.id ?? makeEditorBlockId());
   const editorContent = blocks[0]?.text ?? "";
+  const [imageStatus, setImageStatus] = useState("");
 
   const editor = useEditor({
     extensions: [
@@ -110,6 +116,47 @@ export function PostEditor({
     editorProps: {
       attributes: {
         class: "tiptap-content min-h-[420px] px-3 py-4 outline-none sm:min-h-[620px] sm:px-6 sm:py-5",
+      },
+      handlePaste: (_view, event) => {
+        const items = Array.from(event.clipboardData?.items ?? []);
+        const imageFiles = items
+          .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+          .map((item) => item.getAsFile())
+          .filter((file): file is File => file !== null);
+
+        if (imageFiles.length > 0) {
+          event.preventDefault();
+          void insertImages(imageFiles);
+          return true;
+        }
+
+        const html = event.clipboardData?.getData("text/html");
+        if (!html || !/<img\b/i.test(html)) {
+          return false;
+        }
+
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        let removedExternalImage = false;
+        doc.querySelectorAll("img").forEach((image) => {
+          const src = image.getAttribute("src") ?? "";
+          if (!src.startsWith("/uploads/community/")) {
+            image.remove();
+            removedExternalImage = true;
+          }
+        });
+
+        if (!removedExternalImage) {
+          return false;
+        }
+
+        event.preventDefault();
+        editor?.commands.insertContent(doc.body.innerHTML);
+        setImageStatus(
+          ko
+            ? "외부 이미지는 제거됐습니다. 캡처하거나 이미지 자체를 복사해서 붙여넣어 주세요."
+            : "External images were removed. Paste a copied image or screenshot to upload it.",
+        );
+        return true;
       },
     },
     onUpdate: ({ editor }) => {
@@ -154,17 +201,24 @@ export function PostEditor({
     );
   }
 
-  async function insertImages(files: FileList | null) {
-    if (!editor || !files) {
-      return;
+  async function insertImages(files: FileList | File[] | null) {
+    if (!editor || !files || !accessToken) return;
+    const count = (editor.getHTML().match(/<img\b/gi) ?? []).length;
+    const selected = Array.from(files).slice(0, Math.max(0, 20 - count));
+    for (const [index, file] of selected.entries()) {
+      try {
+        setImageStatus(`${index + 1}/${selected.length} ${ko ? "압축 중" : "compressing"}`);
+        const compressed = await compressImageForUpload(file);
+        setImageStatus(`${index + 1}/${selected.length} ${ko ? "업로드 중" : "uploading"}`);
+        const uploaded = await uploadCommunityImage(compressed, accessToken);
+        editor.chain().focus().setImage({ src: uploaded.url }).run();
+        onUploadedImage(uploaded);
+      } catch (error) {
+        setImageStatus(error instanceof Error ? error.message : "Image upload failed. Select the file to retry.");
+        return;
+      }
     }
-    const selected = Array.from(files)
-      .filter((file) => file.type.startsWith("image/"))
-      .slice(0, 8);
-    const urls = await Promise.all(selected.map((file) => encodeImageForPost(file)));
-    const chain = editor.chain().focus();
-    urls.forEach((url) => chain.setImage({ src: url }));
-    chain.run();
+    setImageStatus(selected.length ? (ko ? "이미지 업로드 완료" : "Images uploaded") : (ko ? "최대 20장까지 첨부할 수 있습니다." : "Up to 20 images are allowed."));
   }
 
   function promptLink() {
@@ -334,6 +388,7 @@ export function PostEditor({
           <EditorContent editor={editor} />
         </div>
       </div>
+      {imageStatus ? <p className="mt-2 text-xs text-muted" aria-live="polite">{imageStatus}</p> : null}
       <div className="mt-4">
         <input
           value={tagQuery}

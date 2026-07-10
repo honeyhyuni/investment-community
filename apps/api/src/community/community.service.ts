@@ -14,9 +14,11 @@ import { UserRole } from '../users/user-role.enum';
 import { CommunityPost } from './community-post.entity';
 import { PostComment } from './post-comment.entity';
 import { PostLike } from './post-like.entity';
+import { PostBookmark } from './post-bookmark.entity';
 import { UserSubscription } from './user-subscription.entity';
+import { COMMUNITY_IMAGE_URL_PREFIX, CommunityImagesService } from './community-images.service';
 
-type FeedScope = 'all' | 'subscribed' | 'mine' | 'user';
+type FeedScope = 'all' | 'subscribed' | 'mine' | 'bookmarks' | 'user';
 
 type CreatePostInput = {
   content: string;
@@ -65,6 +67,7 @@ export type CommunityPostDto = {
   likeCount: number;
   commentCount: number;
   likedByMe: boolean;
+  bookmarkedByMe: boolean;
   comments: CommunityCommentDto[];
 };
 
@@ -92,11 +95,14 @@ export class CommunityService {
     private readonly postsRepository: Repository<CommunityPost>,
     @InjectRepository(PostLike)
     private readonly likesRepository: Repository<PostLike>,
+    @InjectRepository(PostBookmark)
+    private readonly bookmarksRepository: Repository<PostBookmark>,
     @InjectRepository(PostComment)
     private readonly commentsRepository: Repository<PostComment>,
     @InjectRepository(UserSubscription)
     private readonly subscriptionsRepository: Repository<UserSubscription>,
     private readonly notifications: NotificationsService,
+    private readonly communityImages: CommunityImagesService,
   ) {}
 
   async getFeed(
@@ -111,6 +117,12 @@ export class CommunityService {
       scope,
       userId,
     );
+    const bookmarkedPostIds = scope === 'bookmarks'
+      ? (await this.bookmarksRepository.find({
+          where: { user: { id: currentUserId } },
+          relations: { post: true },
+        })).map((bookmark) => bookmark.post.id)
+      : undefined;
     if (authorIds.length === 0) {
       return [];
     }
@@ -130,6 +142,7 @@ export class CommunityService {
       const posts = await this.postsRepository.find({
         where: {
           author: { id: In(authorIds) },
+          ...(bookmarkedPostIds ? { id: In(bookmarkedPostIds) } : {}),
           createdAt: MoreThanOrEqual(new Date(cutoff)),
         },
         order: { createdAt: 'DESC' },
@@ -151,7 +164,10 @@ export class CommunityService {
 
     // 최신순은 DB 레벨에서 skip/take로 페이지네이션한다.
     const posts = await this.postsRepository.find({
-      where: { author: { id: In(authorIds) } },
+      where: {
+        author: { id: In(authorIds) },
+        ...(bookmarkedPostIds ? { id: In(bookmarkedPostIds) } : {}),
+      },
       order: { createdAt: 'DESC' },
       ...(limit !== undefined ? { skip: offset, take: limit } : { take: 100 }),
     });
@@ -163,13 +179,14 @@ export class CommunityService {
     input: CreatePostInput,
   ): Promise<CommunityPostDto> {
     const content = input.content?.trim();
-    const title = input.title?.trim().slice(0, 160) || null;
+    const title = input.title?.trim().slice(0, 160) || '제목없음';
     const contentBlocks = this.normalizeContentBlocks(
       input.contentBlocks ?? [],
     );
-    const imageUrls = (input.imageUrls ?? [])
-      .filter((url) => typeof url === 'string' && url.startsWith('data:image/'))
-      .slice(0, 4);
+    const html = contentBlocks.map((block) => block.text ?? '').join('');
+    this.assertAllowedImageSources(html, []);
+    const imageUrls = [...new Set([...(input.imageUrls ?? []).filter((url) => url.startsWith(COMMUNITY_IMAGE_URL_PREFIX)), ...this.communityImages.extractLocalUrls(html)])];
+    const uploadedImages = await this.communityImages.validateOwnedUrls(currentUserId, imageUrls);
     const caption = input.caption?.trim().slice(0, 2000) ?? '';
     const stockTags = this.normalizeStockTags(input.stockTags ?? []);
 
@@ -195,6 +212,7 @@ export class CommunityService {
         stockTags,
       }),
     );
+    await this.communityImages.attach(post, uploadedImages);
     void this.notifySubscribers(post).catch((error) =>
       this.logNotificationFailure('new post', error),
     );
@@ -217,19 +235,22 @@ export class CommunityService {
   ): Promise<CommunityPostDto> {
     const post = await this.findPost(postId);
     this.assertOwner(post.author.id, currentUserId);
-    const contentBlocks = this.normalizeContentBlocks(
-      input.contentBlocks ?? [],
-    );
-    post.title = input.title?.trim().slice(0, 160) || null;
+    const previousHtml = this.resolveContentBlocks(post).map((block) => block.text ?? '').join('');
+    const contentBlocks = this.normalizeContentBlocks(input.contentBlocks ?? []);
+    const html = contentBlocks.map((block) => block.text ?? '').join('');
+    this.assertAllowedImageSources(html, this.communityImages.extractAllImageUrls(previousHtml).filter((url) => url.startsWith('data:image/')));
+    const imageUrls = [...new Set([...(input.imageUrls ?? []).filter((url) => url.startsWith(COMMUNITY_IMAGE_URL_PREFIX)), ...this.communityImages.extractLocalUrls(html)])];
+    const uploadedImages = await this.communityImages.validateOwnedUrls(currentUserId, imageUrls);
+    post.title = input.title?.trim().slice(0, 160) || '제목없음';
     post.content =
       input.content?.trim() || this.blocksToPlainText(contentBlocks);
     post.contentBlocks = contentBlocks;
-    post.imageUrls = (input.imageUrls ?? [])
-      .filter((url) => typeof url === 'string' && url.startsWith('data:image/'))
-      .slice(0, 4);
+    post.imageUrls = imageUrls;
     post.caption = input.caption?.trim().slice(0, 2000) ?? '';
     post.stockTags = this.normalizeStockTags(input.stockTags ?? []);
     await this.postsRepository.save(post);
+    await this.communityImages.attach(post, uploadedImages);
+    await this.communityImages.removeDetached(post.id, imageUrls);
     return (await this.toPostDtos([post], currentUserId))[0];
   }
 
@@ -239,6 +260,7 @@ export class CommunityService {
   ): Promise<{ ok: true }> {
     const post = await this.findPost(postId);
     await this.assertOwnerOrAdmin(post.author.id, currentUserId);
+    await this.communityImages.removeForPost(post.id);
     await this.postsRepository.remove(post);
     return { ok: true };
   }
@@ -291,6 +313,21 @@ export class CommunityService {
     };
   }
 
+  async toggleBookmark(
+    currentUserId: string,
+    postId: string,
+  ): Promise<{ bookmarked: boolean }> {
+    const [user, post] = await Promise.all([
+      this.findApprovedUser(currentUserId),
+      this.findPost(postId),
+    ]);
+    const existing = await this.bookmarksRepository.findOne({
+      where: { post: { id: post.id }, user: { id: user.id } },
+    });
+    if (existing) await this.bookmarksRepository.remove(existing);
+    else await this.bookmarksRepository.save(this.bookmarksRepository.create({ post, user }));
+    return { bookmarked: !existing };
+  }
   async createComment(
     currentUserId: string,
     postId: string,
@@ -543,9 +580,13 @@ export class CommunityService {
     }
 
     const postIds = posts.map((post) => post.id);
-    const [likes, comments] = await Promise.all([
+    const [likes, bookmarks, comments] = await Promise.all([
       this.likesRepository.find({
         where: { post: { id: In(postIds) } },
+        relations: { post: true },
+      }),
+      this.bookmarksRepository.find({
+        where: { post: { id: In(postIds) }, user: { id: currentUserId } },
         relations: { post: true },
       }),
       this.commentsRepository.find({
@@ -587,6 +628,7 @@ export class CommunityService {
         likeCount: postLikes.length,
         commentCount: postComments.length,
         likedByMe: postLikes.some((like) => like.user.id === currentUserId),
+        bookmarkedByMe: bookmarks.some((bookmark) => bookmark.post.id === post.id),
         comments: this.toCommentTree(postComments),
       };
     });
@@ -634,7 +676,7 @@ export class CommunityService {
         return;
       }
 
-      if (block.type === 'image' && block.url?.startsWith('data:image/')) {
+      if (block.type === 'image' && block.url?.startsWith(COMMUNITY_IMAGE_URL_PREFIX)) {
         normalized.push({
           id: block.id || `image-${index}`,
           type: 'image' as const,
@@ -654,6 +696,12 @@ export class CommunityService {
     });
 
     return normalized;
+  }
+
+  private assertAllowedImageSources(html: string, legacyUrls: string[]): void {
+    const legacy = new Set(legacyUrls);
+    const invalid = this.communityImages.extractAllImageUrls(html).find((url) => !url.startsWith(COMMUNITY_IMAGE_URL_PREFIX) && !legacy.has(url));
+    if (invalid) throw new BadRequestException('Post images must use an uploaded community image URL.');
   }
 
   private resolveContentBlocks(post: CommunityPost): CommunityContentBlock[] {

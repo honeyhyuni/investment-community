@@ -10,6 +10,7 @@ import { IpoCalendarEntity } from './ipo-calendar.entity';
 import { MarketBriefingEntity } from './market-briefing.entity';
 import { PortfolioEntity } from './portfolio.entity';
 import { PortfolioPositionEntity } from './portfolio-position.entity';
+import { PortfolioDailySnapshotEntity } from './portfolio-daily-snapshot.entity';
 import { StockFinancialBatchService } from './stock-financial-batch.service';
 import { StockFinancialEntity } from './stock-financial.entity';
 import { StockMasterBatchService } from './stock-master-batch.service';
@@ -28,6 +29,8 @@ import { GuruPortfoliosService } from './guru-portfolios.service';
 import { GuruSecurityMasterEntity } from './guru-security-master.entity';
 import { GuruSecDatasetEntity } from './guru-sec-dataset.entity';
 import { GuruEdgarFilingEntity } from './guru-edgar-filing.entity';
+import { EconomicIndicatorEntity } from './economic-indicator.entity';
+import { EconomicIndicatorsService } from './economic-indicators.service';
 
 @Module({
   imports: [
@@ -40,6 +43,7 @@ import { GuruEdgarFilingEntity } from './guru-edgar-filing.entity';
       FavoriteStockEntity,
       PortfolioEntity,
       PortfolioPositionEntity,
+      PortfolioDailySnapshotEntity,
       IpoCalendarEntity,
       UsEarningsCalendarEntity,
       User,
@@ -49,6 +53,7 @@ import { GuruEdgarFilingEntity } from './guru-edgar-filing.entity';
       GuruSecurityMasterEntity,
       GuruSecDatasetEntity,
       GuruEdgarFilingEntity,
+      EconomicIndicatorEntity,
     ]),
   ],
   controllers: [MarketsController],
@@ -63,6 +68,7 @@ import { GuruEdgarFilingEntity } from './guru-edgar-filing.entity';
     MarketNotificationJobsService,
     UsStockFinancialsService,
     GuruPortfoliosService,
+    EconomicIndicatorsService,
   ],
 })
 /** Wires market quotes, stock metadata, financial batches, briefings, and sockets. */

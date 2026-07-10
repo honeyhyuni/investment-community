@@ -47,6 +47,19 @@ export function useCommunityPosts({ resolveTags = false } = {}) {
     }
   }
 
+  async function toggleBookmark(postId: string) {
+    if (!accessToken) return;
+    try {
+      const result = await apiRequest<{ bookmarked: boolean }>(
+        `/community/posts/${postId}/bookmark`, "POST", { accessToken },
+      );
+      setPosts((current) => current.map((post) =>
+        post.id === postId ? { ...post, bookmarkedByMe: result.bookmarked } : post,
+      ));
+    } catch (bookmarkError) {
+      setError(bookmarkError instanceof Error ? bookmarkError.message : "Could not bookmark.");
+    }
+  }
   async function createComment(postId: string, parentId?: string) {
     if (!accessToken) {
       return;
@@ -127,6 +140,7 @@ export function useCommunityPosts({ resolveTags = false } = {}) {
     setError,
     stockSymbols,
     toggleLike,
+    toggleBookmark,
     createComment,
     editComment,
     deleteComment,

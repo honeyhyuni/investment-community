@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,6 +13,7 @@ import { usePreferencesStore } from "@/common/stores/preferences";
 import { useSessionStore } from "@/common/stores/session";
 import type {
   GuruDetail,
+  GuruConsensus,
   GuruHolding,
   GuruSummary,
 } from "@/domain/gurus/types";
@@ -24,6 +25,8 @@ type SortDirection = "desc" | "asc";
 type HoldingActivityFilter = "all" | "new" | "increased" | "reduced" | "soldOut";
 type HoldingReturnFilter = "all" | "positive" | "negative" | "none";
 type ManagerSort = "value" | "positions";
+type RootTab = "managers" | "consensus";
+type ConsensusSort = "totalValue" | "buyValue" | "sellValue" | "managerCount";
 type LayoutHolding = GuruHolding & { layoutValue?: number };
 type Rect = { item: LayoutHolding; x: number; y: number; width: number; height: number };
 type SectorBlock = { sector: string; items: LayoutHolding[]; x: number; y: number; width: number; height: number };
@@ -241,7 +244,7 @@ function HoldingRows({
       <div className="mt-3 divide-y divide-border">
         {items.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted">
-            {ko ? "비교할 제출 내역이 없습니다." : "No comparable filing data."}
+            {ko ? "鍮꾧탳???쒖텧 ?댁뿭???놁뒿?덈떎." : "No comparable filing data."}
           </p>
         ) : (
           items.map((item) => (
@@ -277,14 +280,19 @@ function HoldingRows({
 export function GuruPortfoliosPage({
   slug,
   initialTab = "summary",
+  initialRootTab = "managers",
 }: {
   slug?: string;
   initialTab?: DetailTab;
+  initialRootTab?: RootTab;
 }) {
   const router = useRouter();
   const accessToken = useSessionStore((state) => state.accessToken);
   const ko = usePreferencesStore((state) => state.language) === "ko";
   const [managers, setManagers] = useState<GuruSummary[]>([]);
+  const [rootTab, setRootTab] = useState<RootTab>(initialRootTab);
+  const [consensus, setConsensus] = useState<GuruConsensus[]>([]);
+  const [consensusSort, setConsensusSort] = useState<ConsensusSort>("totalValue");
   const [managerSort, setManagerSort] = useState<ManagerSort>("value");
   const [managerDirection, setManagerDirection] = useState<SortDirection>("desc");
   const [detail, setDetail] = useState<GuruDetail | null>(null);
@@ -301,8 +309,19 @@ export function GuruPortfoliosPage({
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!accessToken || slug) return;
+    const params = new URLSearchParams({ limit: '100', sort: consensusSort });
+    apiRequest<GuruConsensus[]>('/markets/gurus/consensus?' + params.toString(), 'GET', { accessToken })
+      .then(setConsensus)
+      .catch(() => setConsensus([]));
+  }, [accessToken, slug, consensusSort]);
+  useEffect(() => {
     setDetailTab(initialTab);
   }, [initialTab]);
+
+  useEffect(() => {
+    setRootTab(initialRootTab);
+  }, [initialRootTab]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -422,83 +441,130 @@ export function GuruPortfoliosPage({
 
   if (!slug) {
     return (
-      <div className="py-4 sm:py-6">
-        <section className="rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
-          <SectionHeader
-            eyebrow="13F Portfolio"
-            title={ko ? "거장" : "Gurus"}
-            action={<span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">{managers.length}</span>}
-          />
-          <p className="mt-2 text-sm text-muted">
-            {ko
-              ? "SEC 13F 공시를 기준으로 23개 주요 투자자와 기관의 최근 포트폴리오를 비교합니다."
-              : "Compare the latest SEC 13F portfolios from 23 notable investors and institutions."}
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <SegmentedControl<ManagerSort>
-              className="w-auto"
-              buttonClassName="flex-none px-3"
-              value={managerSort}
-              onChange={setManagerSort}
-              options={[
-                { value: "value", label: ko ? "13F \uADDC\uBAA8\uC21C" : "13F value" },
-                { value: "positions", label: ko ? "\uBCF4\uC720\uC885\uBAA9\uC21C" : "Positions" },
-              ]}
-            />
-            <button type="button" onClick={() => setManagerDirection((direction) => direction === "desc" ? "asc" : "desc")} className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-muted transition-colors hover:border-primary/40 hover:text-primary">
-              {managerDirection === "desc" ? <ArrowDown size={16} /> : <ArrowUp size={16} />}
-              {managerDirection === "desc" ? (ko ? "\uB0B4\uB9BC\uCC28\uC21C" : "Desc") : (ko ? "\uC624\uB984\uCC28\uC21C" : "Asc")}
-            </button>
-          </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {sortedManagers.map((manager) => (
-              <Link
-                key={manager.slug}
-                href={`/gurus/${manager.slug}`}
-                className="group rounded-lg border border-border bg-surface-muted p-4 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
-                    <Building2 size={19} />
+      <div className="grid gap-4 py-4 sm:py-6">
+        <SegmentedControl<RootTab>
+          className="w-full sm:w-fit"
+          value={rootTab}
+          onChange={(tab) => {
+            setRootTab(tab);
+            router.push(tab === "consensus" ? "/gurus/trading" : "/gurus");
+          }}
+          options={[
+            { value: "managers", label: ko ? "거장 목록" : "Gurus" },
+            { value: "consensus", label: ko ? "거장 매매" : "Guru trading" },
+          ]}
+        />
+        {rootTab === "managers" ? (
+          <section className="rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
+            <SectionHeader eyebrow="13F Portfolio" title={ko ? "거장" : "Gurus"} action={<span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">{managers.length}</span>} />
+            <p className="mt-2 text-sm text-muted">{ko ? `SEC 13F 기준 ${managers.length}명의 최근 포트폴리오입니다.` : `Latest SEC 13F portfolios from ${managers.length} managers.`}</p>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <SegmentedControl<ManagerSort>
+                value={managerSort}
+                onChange={setManagerSort}
+                options={[
+                  { value: "value", label: ko ? "13F 규모" : "13F value" },
+                  { value: "positions", label: ko ? "보유종목" : "Positions" },
+                ]}
+              />
+              <button type="button" onClick={() => setManagerDirection((value) => value === "desc" ? "asc" : "desc")} className="inline-flex h-10 items-center gap-1 rounded-md border border-border px-3 text-sm font-semibold">
+                {managerDirection === "desc" ? <ArrowDown size={16} /> : <ArrowUp size={16} />}
+                {managerDirection === "desc" ? (ko ? "내림차순" : "Desc") : (ko ? "오름차순" : "Asc")}
+              </button>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {sortedManagers.map((manager) => (
+                <Link key={manager.slug} href={`/gurus/${manager.slug}`} className="group rounded-lg border border-border bg-surface-muted p-4 transition hover:border-primary/40 hover:shadow-md">
+                  <div className="flex justify-between"><Building2 className="text-primary" /><ArrowUpRight className="text-muted" /></div>
+                  <h2 className="mt-4 text-lg font-semibold">{manager.personName}</h2>
+                  <p className="mt-1 truncate text-sm text-muted">{manager.firmName}</p>
+                  <p className="mt-3 text-sm font-semibold">{formatMoney(manager.totalValue)} · {manager.positionCount} {ko ? "종목" : "positions"}</p>
+                  <p className="mt-2 text-xs text-muted">{manager.reportDate ? quarterLabel(manager.reportDate) : '-'}</p>
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <section className="rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <SectionHeader eyebrow="13F Trading" title={ko ? "거장 매매" : "Guru trading"} action={<span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">{managers.length} {ko ? "명 기준" : "managers"}</span>} />
+                <p className="mt-2 text-sm text-muted">{ko ? "여러 거장이 보유·매수·매도한 종목을 13F 분기 변화 기준으로 집계했습니다." : "Stocks held, bought, and sold across guru 13F portfolios."}</p>
+              </div>
+              <SegmentedControl<ConsensusSort>
+                className="w-full sm:w-fit"
+                value={consensusSort}
+                onChange={setConsensusSort}
+                options={[
+                  { value: "totalValue", label: ko ? "총 보유액" : "Total value" },
+                  { value: "buyValue", label: ko ? "매수 많은순" : "Most bought" },
+                  { value: "sellValue", label: ko ? "매도 많은순" : "Most sold" },
+                ]}
+              />
+            </div>
+
+            <div className="mt-4 grid gap-2 md:hidden">
+              {consensus.map((item, index) => (
+                <button key={item.ticker} onClick={() => router.push(`/?symbol=${encodeURIComponent(item.ticker)}&market=US&currency=USD`)} className="rounded-lg border border-border bg-surface-muted p-4 text-left">
+                  <div className="flex justify-between gap-3">
+                    <div className="min-w-0"><span className="text-xs font-bold text-primary">#{index + 1}</span><h3 className="mt-1 text-lg font-bold">{item.ticker}</h3><p className="truncate text-xs text-muted">{item.issuerName}</p></div>
+                    <div className="text-right"><p className="text-xl font-bold">{item.managerCount}</p><p className="text-xs text-muted">{item.managerPercent.toFixed(1)}%</p></div>
                   </div>
-                  <ArrowUpRight size={18} className="text-muted transition group-hover:text-primary" />
-                </div>
-                <h2 className="mt-4 text-lg font-semibold">{manager.personName}</h2>
-                <p className="mt-1 truncate text-sm text-muted">{manager.firmName}</p>
-                <p className="mt-2 text-xs font-semibold text-primary">
-                  {manager.reportDate ? `${quarterLabel(manager.reportDate)} ${ko ? "기준" : "as of"}` : ko ? "최근 자료 없음" : "No recent filing"}
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <FreshnessBadge value={manager.lastCollectedAt} ko={ko} />
-                  <span className="text-xs font-semibold text-muted">
-                    {ko ? "\uB9C8\uC9C0\uB9C9 \uC218\uC9D1" : "Last collected"} {formatKstDateTime(manager.lastCollectedAt)} KST
-                  </span>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                  <div><p className="text-xs text-muted">{ko ? "13F 규모" : "13F value"}</p><p className="mt-1 font-semibold">{formatMoney(manager.totalValue)}</p></div>
-                  <div><p className="text-xs text-muted">{ko ? "보유 종목" : "Positions"}</p><p className="mt-1 font-semibold">{manager.positionCount}</p></div>
-                </div>
-                <p className="mt-3 truncate text-xs text-muted">
-                  {manager.topHolding
-                    ? `${ko ? "최대 비중" : "Top"} · ${manager.topHolding.ticker ?? manager.topHolding.issuerName} ${manager.topHolding.weight.toFixed(1)}%`
-                    : ko ? "최근 제출 자료 없음" : "No recent filing"}
-                </p>
-              </Link>
-            ))}
-          </div>
-        </section>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                    <span>{ko ? "총 보유액" : "Total"}<b className="block">{formatMoney(item.totalValue)}</b></span>
+                    <span>{ko ? "이번분기 순매매" : "Net trade"}<b className={item.netValueChange >= 0 ? "block text-positive" : "block text-negative"}>{formatMoney(item.netValueChange)}</b></span>
+                    <span>{ko ? "TOP 매수" : "Top buyer"}<b className="block truncate text-positive">{item.topBuyManager?.personName ?? '-'}</b></span>
+                    <span>{ko ? "TOP 매도" : "Top seller"}<b className="block truncate text-negative">{item.topSellManager?.personName ?? '-'}</b></span>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[1240px] border-separate border-spacing-x-4 border-spacing-y-0 text-sm">
+                <thead className="border-b border-border text-left text-xs text-muted">
+                  <tr>
+                    <th className="py-3">#</th>
+                    <th>{ko ? "종목" : "Stock"}</th>
+                    <th className="text-right">{ko ? "보유 거장" : "Managers"}</th>
+                    <th className="text-right">{ko ? "총 보유액" : "Total value"}</th>
+                    <th className="text-right">{ko ? "이번분기 매수" : "Bought"}</th>
+                    <th className="min-w-28 text-right">{ko ? "이번분기 매도" : "Sold"}</th>
+                    <th className="min-w-44 pl-4">{ko ? "TOP 매수 기관" : "Top buyer"}</th>
+                    <th className="min-w-44 pl-4">{ko ? "TOP 매도 기관" : "Top seller"}</th>
+                    <th className="text-right">{ko ? "확대 / 축소" : "Raised / Reduced"}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {consensus.map((item, index) => (
+                    <tr key={item.ticker} onClick={() => router.push(`/?symbol=${encodeURIComponent(item.ticker)}&market=US&currency=USD`)} className="cursor-pointer hover:bg-surface-muted">
+                      <td className="py-3 font-bold text-primary">{index + 1}</td>
+                      <td><b>{item.ticker}</b><span className="ml-2 text-xs text-muted">{item.issuerName}</span></td>
+                      <td className="text-right font-semibold">{item.managerCount}<span className="ml-1 text-xs text-muted">({item.managerPercent.toFixed(1)}%)</span></td>
+                      <td className="text-right">{formatMoney(item.totalValue)}</td>
+                      <td className="text-right text-positive">{formatMoney(item.buyValue)}</td>
+                      <td className="min-w-28 text-right text-negative">{formatMoney(item.sellValue)}</td>
+                      <td className="min-w-44 pl-4"><span className="font-semibold text-positive">{item.topBuyManager?.personName ?? '-'}</span><span className="ml-1 text-xs text-muted">{item.topBuyManager ? formatMoney(item.topBuyManager.valueChange) : ''}</span></td>
+                      <td className="min-w-44 pl-4"><span className="font-semibold text-negative">{item.topSellManager?.personName ?? '-'}</span><span className="ml-1 text-xs text-muted">{item.topSellManager ? formatMoney(Math.abs(item.topSellManager.valueChange)) : ''}</span></td>
+                      <td className="text-right"><span className="text-positive">{item.increasedCount}</span> / <span className="text-negative">{item.reducedCount}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!consensus.length ? <div className="py-12 text-center text-sm text-muted">{ko ? "집계할 13F 보유 데이터가 없습니다." : "No holdings available for guru trading."}</div> : null}
+          </section>
+        )}
       </div>
     );
-  }
-
-  if (!detail) return null;
+  }  if (!detail) return null;
 
   return (
     <div className="grid min-w-0 gap-4 overflow-x-hidden py-4 sm:gap-6 sm:py-6">
       <section className="rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
         <Link href="/gurus" className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-muted hover:text-primary">
           <ArrowLeft size={16} />
-          {ko ? "거장 목록" : "All gurus"}
+          {ko ? "嫄곗옣 紐⑸줉" : "All gurus"}
         </Link>
         <div className="mt-5 flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
@@ -510,9 +576,9 @@ export function GuruPortfoliosPage({
             <p className="mt-1 text-sm text-muted">{detail.firmName}</p>
           </div>
           <div className="min-w-0 text-left text-sm sm:text-right">
-            <p className="font-semibold">{formatMoney(detail.totalValue)} · {detail.positionCount} {ko ? "종목" : "positions"}</p>
+            <p className="font-semibold">{formatMoney(detail.totalValue)} 쨌 {detail.positionCount} {ko ? "醫낅ぉ" : "positions"}</p>
             <p className="mt-1 text-xs text-muted">
-              {detail.reportDate ? `${quarterLabel(detail.reportDate)} ${ko ? "기준" : "as of"}` : ko ? "최근 자료 없음" : "No recent filing"}
+              {detail.reportDate ? `${quarterLabel(detail.reportDate)} ${ko ? "湲곗?" : "as of"}` : ko ? "理쒓렐 ?먮즺 ?놁쓬" : "No recent filing"}
             </p>
             <p className="mt-1 text-xs text-muted">
               {ko ? "\uB9C8\uC9C0\uB9C9 \uC218\uC9D1" : "Last collected"} {formatKstDateTime(detail.lastCollectedAt)} KST
@@ -591,8 +657,8 @@ export function GuruPortfoliosPage({
           </section>
 
           <div className="grid gap-4 lg:grid-cols-2">
-        <HoldingRows title={ko ? "최근 상위 매수 Top 5" : "Top 5 recent buys"} items={detail.topBuys} positive ko={ko} />
-        <HoldingRows title={ko ? "최근 상위 매도 Top 5" : "Top 5 recent sells"} items={detail.topSells} positive={false} ko={ko} />
+        <HoldingRows title={ko ? "理쒓렐 ?곸쐞 留ㅼ닔 Top 5" : "Top 5 recent buys"} items={detail.topBuys} positive ko={ko} />
+        <HoldingRows title={ko ? "理쒓렐 ?곸쐞 留ㅻ룄 Top 5" : "Top 5 recent sells"} items={detail.topSells} positive={false} ko={ko} />
           </div>
 
           <section className="rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
@@ -633,10 +699,10 @@ export function GuruPortfoliosPage({
                     setHoldingPage(1);
                   }}
                   className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-semibold text-muted transition-colors hover:border-primary/40 hover:text-primary"
-                  aria-label={sortDirection === "desc" ? (ko ? "\uB0B4\uB9BC\uCC28\uC21C" : "Descending") : (ko ? "\uC624\uB984\uCC28\uC21C" : "Ascending")}
+                  aria-label={sortDirection === "desc" ? (ko ? "내림차순" : "Descending") : (ko ? "오름차순" : "Ascending")}
                 >
                   {sortDirection === "desc" ? <ArrowDown size={16} /> : <ArrowUp size={16} />}
-                  {sortDirection === "desc" ? (ko ? "\uB0B4\uB9BC\uCC28\uC21C" : "Desc") : (ko ? "\uC624\uB984\uCC28\uC21C" : "Asc")}
+                  {sortDirection === "desc" ? (ko ? "내림차순" : "Desc") : (ko ? "오름차순" : "Asc")}
                 </button>
               </div>
             </div>
@@ -674,7 +740,7 @@ export function GuruPortfoliosPage({
                 <option value="new">{ko ? "신규매수" : "New buys"}</option>
                 <option value="increased">{ko ? "비중확대" : "Increased"}</option>
                 <option value="reduced">{ko ? "비중축소" : "Reduced"}</option>
-                <option value="soldOut">{ko ? "\uC804\uB7C9\uB9E4\uB3C4" : "Sold out"}</option>
+                <option value="soldOut">{ko ? "전량매도" : "Sold out"}</option>
               </select>
               <select
                 value={holdingReturn}
@@ -733,7 +799,7 @@ export function GuruPortfoliosPage({
                     </tr>
                   ))}
                   {!visibleHoldings.length ? (
-                    <tr><td colSpan={7} className="px-2 py-8 text-center text-sm font-semibold text-muted">{ko ? "조건에 맞는 보유종목이 없습니다." : "No holdings match the current filters."}</td></tr>
+                    <tr><td colSpan={7} className="px-2 py-8 text-center text-sm font-semibold text-muted">{ko ? "議곌굔??留욌뒗 蹂댁쑀醫낅ぉ???놁뒿?덈떎." : "No holdings match the current filters."}</td></tr>
                   ) : null}
                 </tbody>
               </table>
@@ -781,9 +847,9 @@ export function GuruPortfoliosPage({
                 <span className="font-semibold">{metric === "weight" ? (ko ? "\uBE44\uC911 \uD07C" : "High weight") : (ko ? "\uC218\uC775\uB960 \uB192\uC74C" : "High return")}</span>
               </div>
               <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                <span className="font-semibold">{ko ? "손실이 큼" : "Large loss"}</span>
+                <span className="font-semibold">{ko ? "손실 큼" : "Large loss"}</span>
                 <span className="h-3 w-36 rounded-full bg-gradient-to-r from-red-700 via-slate-400 to-green-700" aria-hidden />
-                <span className="font-semibold">{ko ? "수익이 큼" : "Large gain"}</span>
+                <span className="font-semibold">{ko ? "수익 큼" : "Large gain"}</span>
               </div>
             </div>
             <div className="mt-3 grid gap-2 sm:hidden">
@@ -837,7 +903,7 @@ export function GuruPortfoliosPage({
         ) : (
           <div className="mt-4 grid h-64 place-items-center rounded-lg bg-surface-muted text-sm text-muted">
             <RefreshCw size={18} className="mb-2" />
-            {ko ? "최근 13F holdings 자료가 없습니다." : "No recent 13F holdings."}
+            {ko ? "理쒓렐 13F holdings ?먮즺媛 ?놁뒿?덈떎." : "No recent 13F holdings."}
           </div>
         )}
         <p className="mt-3 text-xs text-muted">

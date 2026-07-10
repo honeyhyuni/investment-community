@@ -8,6 +8,9 @@ import { CommunityNotificationJobsService } from './community-notification-jobs.
 import { PostComment } from './post-comment.entity';
 import { PostLike } from './post-like.entity';
 import { UserSubscription } from './user-subscription.entity';
+import { CommunityImage } from './community-image.entity';
+import { CommunityImagesService } from './community-images.service';
+import { PostBookmark } from './post-bookmark.entity';
 
 @Module({
   imports: [
@@ -15,11 +18,13 @@ import { UserSubscription } from './user-subscription.entity';
       User,
       CommunityPost,
       PostLike,
+      PostBookmark,
       PostComment,
       UserSubscription,
+      CommunityImage,
     ]),
   ],
   controllers: [CommunityController],
-  providers: [CommunityService, CommunityNotificationJobsService],
+  providers: [CommunityService, CommunityImagesService, CommunityNotificationJobsService],
 })
 export class CommunityModule {}

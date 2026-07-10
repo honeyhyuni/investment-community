@@ -18,6 +18,8 @@ import {
   IChartApi,
   ISeriesApi,
   LineSeries,
+  Logical,
+  LogicalRange,
   Time,
 } from "lightweight-charts";
 import Link from "next/link";
@@ -1674,6 +1676,10 @@ function RealtimeChart({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const movingAverageRefs = useRef(new Map<number, ISeriesApi<"Line">>());
+  const dataLogicalRangeRef = useRef<{ first: number; last: number } | null>(
+    null,
+  );
+  const clampingLogicalRangeRef = useRef(false);
 
   useEffect(() => {
     if (!containerRef.current || chartRef.current) {
@@ -1698,6 +1704,8 @@ function RealtimeChart({
         borderColor: "#d9dee8",
         timeVisible: period === "1D",
         secondsVisible: false,
+        fixLeftEdge: true,
+        fixRightEdge: true,
       },
     });
     const series = chart.addSeries(CandlestickSeries, {
@@ -1720,6 +1728,58 @@ function RealtimeChart({
       );
     });
 
+    const clampVisibleLogicalRange = (range: LogicalRange | null) => {
+      const bounds = dataLogicalRangeRef.current;
+      if (!bounds || !range || bounds.last <= bounds.first) {
+        return;
+      }
+      if (clampingLogicalRangeRef.current) {
+        return;
+      }
+
+      const maxWidth = bounds.last - bounds.first;
+      const currentWidth = range.to - range.from;
+      let from = Number(range.from);
+      let to = Number(range.to);
+
+      if (currentWidth >= maxWidth) {
+        from = bounds.first;
+        to = bounds.last;
+      } else {
+        if (from < bounds.first) {
+          to += bounds.first - from;
+          from = bounds.first;
+        }
+        if (to > bounds.last) {
+          from -= to - bounds.last;
+          to = bounds.last;
+        }
+        if (from < bounds.first) {
+          from = bounds.first;
+        }
+      }
+
+      if (
+        Math.abs(from - range.from) < 0.001 &&
+        Math.abs(to - range.to) < 0.001
+      ) {
+        return;
+      }
+
+      clampingLogicalRangeRef.current = true;
+      chart.timeScale().setVisibleLogicalRange({
+        from: from as Logical,
+        to: to as Logical,
+      });
+      window.requestAnimationFrame(() => {
+        clampingLogicalRangeRef.current = false;
+      });
+    };
+
+    chart
+      .timeScale()
+      .subscribeVisibleLogicalRangeChange(clampVisibleLogicalRange);
+
     chartRef.current = chart;
     seriesRef.current = series;
 
@@ -1734,6 +1794,9 @@ function RealtimeChart({
 
     return () => {
       resizeObserver.disconnect();
+      chart
+        .timeScale()
+        .unsubscribeVisibleLogicalRangeChange(clampVisibleLogicalRange);
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
@@ -1756,6 +1819,8 @@ function RealtimeChart({
         close: candle.close,
       }));
     seriesRef.current.setData(data);
+    dataLogicalRangeRef.current =
+      data.length > 0 ? { first: 0, last: data.length - 1 } : null;
     movingAverages.forEach((average) => {
       const data = movingAveragesEnabled
         ? movingAverageSeries[
@@ -1768,6 +1833,12 @@ function RealtimeChart({
       movingAverageRefs.current.get(average.period)?.setData(data);
     });
     chartRef.current?.timeScale().fitContent();
+    if (data.length > 1) {
+      chartRef.current?.timeScale().setVisibleLogicalRange({
+        from: 0 as Logical,
+        to: (data.length - 1) as Logical,
+      });
+    }
     chartRef.current?.applyOptions({
       timeScale: {
         timeVisible: period === "1D",

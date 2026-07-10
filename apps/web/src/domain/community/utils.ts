@@ -69,11 +69,22 @@ export function resolveCommunityStockTag(
   };
 }
 
-export async function encodeImageForPost(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
+export const MAX_COMMUNITY_IMAGE_BYTES = 3 * 1024 * 1024;
+export async function compressImageForUpload(file: File): Promise<File> {
+  if (!file.type.startsWith("image/")) throw new Error("Only image files can be uploaded.");
+  let bitmap: ImageBitmap;
+  try { bitmap = await createImageBitmap(file, { imageOrientation: "from-image" }); }
+  catch { throw new Error("The selected file is not a valid image."); }
+  const scale = Math.min(1, 1920 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Image compression is not supported.");
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.82));
+  if (!blob) throw new Error("Could not compress the image.");
+  if (blob.size > MAX_COMMUNITY_IMAGE_BYTES) throw new Error("The compressed image is larger than 3MB.");
+  return new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "image"}.webp`, { type: "image/webp" });
 }

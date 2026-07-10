@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
@@ -65,7 +65,7 @@ const NAV_ITEMS: Array<{
   },
 ];
 
-/** 승인 유저 전용 셸: 세션가드 + 헤더 + MarketPulse + nav. 라우트 간 유지된다. */
+/** ?뱀씤 ?좎? ?꾩슜 ?? ?몄뀡媛??+ ?ㅻ뜑 + MarketPulse + nav. ?쇱슦??媛??좎??쒕떎. */
 export default function AuthLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -347,7 +347,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         {children}
       </section>
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(21,25,35,0.08)] backdrop-blur sm:hidden">
-        <div className="mx-auto flex h-16 max-w-md gap-1 overflow-x-auto px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="mx-auto grid h-16 w-full max-w-md grid-cols-5 px-1">
           {NAV_ITEMS.map(
             (item) => {
               const active = isItemActive(item);
@@ -366,12 +366,12 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                       setNavigatingTo(item.href);
                     }
                   }}
-                  className={`flex min-w-[92px] shrink-0 flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors ${
+                  className={`flex min-w-0 flex-col items-center justify-center gap-1 px-1 text-[11px] font-semibold transition-colors ${
                     active ? 'text-primary' : 'text-muted hover:text-primary'
                   }`}
                 >
                   <Icon size={19} />
-                  <span>
+                  <span className="max-w-full truncate">
                     {language === 'ko' ? item.label.ko : item.label.en}
                   </span>
                 </Link>

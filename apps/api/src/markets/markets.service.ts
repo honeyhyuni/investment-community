@@ -20,6 +20,7 @@ import {
   Portfolio,
   PortfolioInput,
   PortfolioPosition,
+  PortfolioPerformancePoint,
   MarketQuote,
   StockDetail,
   StockSymbol,
@@ -152,6 +153,19 @@ const DART_CORP_CODES: Record<string, string> = {
 };
 
 type KisMarketDiv = 'J' | 'Q';
+
+type PortfolioPerformancePeriod = '1W' | '1M' | '3M' | '6M' | '1Y' | '3Y' | '5Y';
+
+type PriceSeries = {
+  key: string;
+  symbol: string;
+  candles: CandlePoint[];
+};
+
+type PerformanceCompareSymbol = {
+  key: string;
+  symbol: string;
+};
 
 type KisStock = {
   symbol: string;
@@ -362,7 +376,7 @@ export class MarketsService {
       )
       .catch(() => null);
 
-    if (cached?.quote) {
+    if (cached?.quote && cached.quote.current > 0) {
       if (Date.now() - cached.updatedAt > maxAgeMs) {
         void this.refreshUsStockQuoteCache(key, symbol).catch((error) => {
           this.logger.warn(
@@ -383,9 +397,11 @@ export class MarketsService {
     symbol: string,
   ): Promise<MarketQuote> {
     const quote = await this.getQuote(symbol);
-    await this.redis
-      .set(key, JSON.stringify({ updatedAt: Date.now(), quote }), 'EX', 5 * 60)
-      .catch(() => undefined);
+    if (quote.current > 0) {
+      await this.redis
+        .set(key, JSON.stringify({ updatedAt: Date.now(), quote }), 'EX', 5 * 60)
+        .catch(() => undefined);
+    }
     return quote;
   }
 
@@ -843,6 +859,31 @@ export class MarketsService {
   }
 
   // 사용자별 포트폴리오 목록을 읽고 각 포지션에 현재가 스냅샷을 붙인다.
+  async getMyUsEarningsCalendar(
+    userId: string,
+    from: string,
+    to: string,
+  ): Promise<UsEarningsCalendarEntity[]> {
+    const [favorites, positions] = await Promise.all([
+      this.favoriteStocksRepository.find({ where: { userId, market: 'US' }, select: { symbol: true } }),
+      this.portfolioPositionsRepository
+        .createQueryBuilder('position')
+        .innerJoin('position.portfolio', 'portfolio')
+        .select('position.symbol', 'symbol')
+        .where('portfolio.user_id = :userId', { userId })
+        .andWhere('position.market = :market', { market: 'US' })
+        .getRawMany<{ symbol: string }>(),
+    ]);
+    const symbols = [...new Set([...favorites, ...positions].map((row) => row.symbol.toUpperCase()))];
+    if (!symbols.length) return [];
+    return this.usEarningsRepository
+      .createQueryBuilder('earnings')
+      .where('earnings.report_date between :from and :to', { from, to })
+      .andWhere('earnings.symbol in (:...symbols)', { symbols })
+      .orderBy('earnings.report_date', 'ASC')
+      .addOrderBy('earnings.symbol', 'ASC')
+      .getMany();
+  }
   async getPortfolios(userId: string): Promise<Portfolio[]> {
     const rows = await this.portfoliosRepository.find({
       where: { userId },
@@ -880,6 +921,7 @@ export class MarketsService {
                 portfolioId: portfolio.id,
                 quantity: String(position.quantity),
                 averagePrice: String(position.averagePrice),
+                startedAt: position.startedAt,
               }),
             ),
           );
@@ -935,6 +977,7 @@ export class MarketsService {
                 portfolioId: id,
                 quantity: String(position.quantity),
                 averagePrice: String(position.averagePrice),
+                startedAt: position.startedAt,
               }),
             ),
           );
@@ -961,6 +1004,161 @@ export class MarketsService {
     }
   }
 
+  async getPortfolioPerformance(
+    userId: string,
+    portfolioId: string,
+    period = '1M',
+    symbols = '',
+  ): Promise<PortfolioPerformancePoint[]> {
+    const portfolio = await this.portfoliosRepository.findOne({
+      where: { id: portfolioId, userId },
+      select: { id: true },
+    });
+    if (!portfolio) throw new NotFoundException('Portfolio not found.');
+
+    const periodKey = this.normalizePortfolioPerformancePeriod(period);
+    const chartPeriod = this.toPortfolioPerformanceChartPeriod(periodKey);
+    const cutoff = this.getPortfolioPerformanceCutoff(periodKey);
+    const compareSymbols = this.getPortfolioPerformanceCompareSymbols(symbols);
+    const seriesList = await Promise.all(
+      compareSymbols.map((item) => this.loadPerformanceSeries(item.key, item.symbol, chartPeriod, cutoff)),
+    );
+    const availableSeries = seriesList.filter((series) => series.candles.length > 0);
+    if (!availableSeries.length) return [];
+
+    const timestamps = [...new Set(
+      availableSeries.flatMap((series) => series.candles.map((candle) => candle.time)),
+    )].sort((a, b) => a - b);
+
+    const baseByKey = new Map<string, number>();
+    const points: PortfolioPerformancePoint[] = [];
+
+    for (const timestamp of timestamps) {
+      const series: Record<string, number | null> = {};
+      for (const item of compareSymbols) {
+        const candles = availableSeries.find((entry) => entry.key === item.key)?.candles ?? [];
+        const close = this.findCloseAtOrBefore(candles, timestamp);
+        if (close && close > 0 && !baseByKey.has(item.key)) {
+          baseByKey.set(item.key, close);
+        }
+        const base = baseByKey.get(item.key);
+        series[item.key] = close && base && base > 0 ? (close / base - 1) * 100 : null;
+      }
+
+      points.push({
+        date: this.formatUnixDate(timestamp),
+        valueKrw: 0,
+        costKrw: 0,
+        profitRate: null,
+        spyReturn: series.sp500 ?? null,
+        nasdaqReturn: series.nasdaq ?? null,
+        nasdaq100Return: series.nasdaq100 ?? null,
+        kospiReturn: series.kospi ?? null,
+        series,
+        estimated: false,
+      });
+    }
+
+    return this.downsamplePerformancePoints(this.compactPerformancePointsByDate(points));
+  }
+
+  private getPortfolioPerformanceCompareSymbols(symbols: string): PerformanceCompareSymbol[] {
+    const defaults: PerformanceCompareSymbol[] = [
+      { key: 'sp500', symbol: '^GSPC' },
+      { key: 'nasdaq', symbol: '^IXIC' },
+      { key: 'nasdaq100', symbol: 'QQQ' },
+      { key: 'kospi', symbol: '^KS11' },
+    ];
+    const custom = symbols
+      .split(',')
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean)
+      .slice(0, 12)
+      .map((value) => {
+        const [market, rawSymbol] = value.includes(':') ? value.split(':', 2) : ['US', value];
+        const normalizedMarket = market === 'KR' ? 'KR' : 'US';
+        const symbol = rawSymbol?.trim().toUpperCase();
+        if (!symbol) return null;
+        return { key: `${normalizedMarket}:${symbol}`, symbol };
+      })
+      .filter((value): value is PerformanceCompareSymbol => value !== null);
+    const seen = new Set<string>();
+    return [...defaults, ...custom].filter((item) => {
+      if (seen.has(item.key)) return false;
+      seen.add(item.key);
+      return true;
+    });
+  }
+  private normalizePortfolioPerformancePeriod(period: string): PortfolioPerformancePeriod {
+    const normalized = period.toUpperCase();
+    return ['1W', '1M', '3M', '6M', '1Y', '3Y', '5Y'].includes(normalized)
+      ? normalized as PortfolioPerformancePeriod
+      : '1M';
+  }
+
+  private toPortfolioPerformanceChartPeriod(period: PortfolioPerformancePeriod): ChartPeriod {
+    return period === '1W' ? '1M' : period;
+  }
+
+  private getPortfolioPerformanceCutoff(period: PortfolioPerformancePeriod): number {
+    const days: Record<PortfolioPerformancePeriod, number> = {
+      '1W': 7,
+      '1M': 31,
+      '3M': 93,
+      '6M': 186,
+      '1Y': 366,
+      '3Y': 1096,
+      '5Y': 1827,
+    };
+    return Math.floor(Date.now() / 1000) - days[period] * 24 * 60 * 60;
+  }
+
+  private async loadPerformanceSeries(
+    key: string,
+    symbol: string,
+    period: ChartPeriod,
+    cutoff: number,
+  ): Promise<PriceSeries> {
+    return {
+      key,
+      symbol,
+      candles: this.filterPerformanceCandles(
+        await this.getCandles(symbol, period).catch(() => []),
+        cutoff,
+      ),
+    };
+  }
+
+  private filterPerformanceCandles(candles: CandlePoint[], cutoff: number): CandlePoint[] {
+    return candles
+      .filter((candle) => candle.time >= cutoff && candle.close > 0)
+      .sort((a, b) => a.time - b.time);
+  }
+
+  private findCloseAtOrBefore(candles: CandlePoint[], timestamp: number): number | null {
+    let close: number | null = null;
+    for (const candle of candles) {
+      if (candle.time > timestamp) break;
+      if (candle.close > 0) close = candle.close;
+    }
+    return close;
+  }
+
+  private formatUnixDate(timestamp: number): string {
+    return new Date(timestamp * 1000).toISOString().slice(0, 10);
+  }
+
+  private compactPerformancePointsByDate(points: PortfolioPerformancePoint[]): PortfolioPerformancePoint[] {
+    return [...new Map(points.map((point) => [point.date, point])).values()];
+  }
+
+  private downsamplePerformancePoints(points: PortfolioPerformancePoint[]): PortfolioPerformancePoint[] {
+    const maxPoints = 260;
+    if (points.length <= maxPoints) return points;
+    const step = Math.ceil(points.length / maxPoints);
+    return points.filter((_, index) => index % step === 0 || index === points.length - 1);
+  }
+
   private normalizePortfolioName(name?: string): string {
     const normalized = name?.trim();
     if (!normalized) {
@@ -978,6 +1176,7 @@ export class MarketsService {
       name: string | null;
       quantity: number;
       averagePrice: number;
+      startedAt: string;
     }>
   > {
     const byKey = new Map<
@@ -988,6 +1187,7 @@ export class MarketsService {
         name: string | null;
         quantity: number;
         averagePrice: number;
+        startedAt: string;
       }
     >();
 
@@ -996,6 +1196,7 @@ export class MarketsService {
       const market = item.market?.toUpperCase() === 'KR' ? 'KR' : 'US';
       const quantity = Number(item.quantity);
       const averagePrice = Math.max(0, Number(item.averagePrice) || 0);
+      const startedAt = this.normalizePortfolioStartedAt(item.startedAt);
       if (!symbol || !Number.isFinite(quantity) || quantity <= 0) {
         continue;
       }
@@ -1016,10 +1217,26 @@ export class MarketsService {
         name: item.name?.trim() || master?.name || symbol,
         quantity: nextQuantity,
         averagePrice: nextAveragePrice,
+        startedAt:
+          current?.startedAt && current.startedAt < startedAt
+            ? current.startedAt
+            : startedAt,
       });
     }
 
     return [...byKey.values()];
+  }
+
+  private normalizePortfolioStartedAt(value?: string): string {
+    const today = new Date().toISOString().slice(0, 10);
+    if (!value) return today;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
+      throw new NotFoundException('Position start date must use YYYY-MM-DD.');
+    }
+    if (value > today) {
+      throw new NotFoundException('Position start date cannot be in the future.');
+    }
+    return value;
   }
 
   private async toPortfolioDto(row: PortfolioEntity): Promise<Portfolio> {
@@ -1074,6 +1291,7 @@ export class MarketsService {
       cost: quantity * averagePrice,
       value: quantity * (quote.current || 0),
       addedAt: position.createdAt.toISOString(),
+      startedAt: position.startedAt ?? position.createdAt.toISOString().slice(0, 10),
     };
   }
 
@@ -1225,9 +1443,33 @@ export class MarketsService {
     const epsTtm = quarterlyEpsTtm ?? latestAnnual?.eps ?? null;
     const equity = latestQuarter?.equity ?? latestAnnual?.equity ?? null;
     const marketCap = this.getUsMarketCap(profile, currentPrice);
+    const peFromQuarterlyEps = this.safeDivide(currentPrice, quarterlyEpsTtm);
+    const peFromNetIncome = this.safeDivide(marketCap, netIncomeTtm);
+    const peFromProvider = this.pickFallbackMetric(fallback, [
+      'peTTM',
+      'peAnnual',
+      'peRatioTTM',
+      'peRatio',
+    ]);
+    const peFromAnnualEps = this.safeDivide(currentPrice, latestAnnual?.eps);
+    const peTTM =
+      peFromQuarterlyEps ??
+      peFromNetIncome ??
+      peFromProvider ??
+      peFromAnnualEps;
 
     return {
-      peTTM: this.safeDivide(currentPrice, epsTtm),
+      peTTM,
+      peTTMSource:
+        peFromQuarterlyEps !== null
+          ? 'eps_ttm'
+          : peFromNetIncome !== null
+            ? 'net_income_ttm'
+            : peFromProvider !== null
+              ? 'provider'
+              : peFromAnnualEps !== null
+                ? 'annual_eps'
+                : null,
       pbAnnual: this.safeDivide(marketCap, equity),
       epsTTM: epsTtm,
       psTTM: this.safeDivide(marketCap, revenueTtm),
@@ -2279,7 +2521,7 @@ export class MarketsService {
     warmup = false,
   ): Promise<CandlePoint[]> {
     const normalizedSymbol = symbol.toUpperCase().trim();
-    const cacheKey = `market:candles:v4:${normalizedSymbol}:${period}:${warmup ? 'warmup' : 'display'}`;
+    const cacheKey = `market:candles:v5:${normalizedSymbol}:${period}:${warmup ? 'warmup' : 'display'}`;
     const cached = await this.redis
       .get(cacheKey)
       .then((value) => (value ? (JSON.parse(value) as CandlePoint[]) : null))
@@ -2475,12 +2717,12 @@ export class MarketsService {
       case '3Y':
         start.setFullYear(start.getFullYear() - 3);
         periodDivCode = 'W';
-        maxPages = 3;
+        maxPages = 12;
         break;
       case '5Y':
         start.setFullYear(start.getFullYear() - 5);
         periodDivCode = 'W';
-        maxPages = 4;
+        maxPages = 20;
         break;
       case 'ALL':
         start.setFullYear(1970, 0, 1);
@@ -2504,7 +2746,7 @@ export class MarketsService {
         maxPages = Math.max(maxPages, 5);
       } else if (period === '3Y' || period === '5Y') {
         start.setFullYear(start.getFullYear() - 3);
-        maxPages = Math.max(maxPages, 7);
+        maxPages = Math.max(maxPages, period === '5Y' ? 28 : 18);
       }
     }
 
@@ -3331,6 +3573,7 @@ export class MarketsService {
       },
       120_000,
       300_000,
+      true,
     );
 
     if (!response.ok) {
@@ -3580,7 +3823,9 @@ export class MarketsService {
     init: RequestInit,
     firstTimeoutMs: number,
     retryTimeoutMs: number,
+    fallbackToDefaultTier = false,
   ): Promise<Response> {
+    let retryInit = init;
     try {
       const response = await fetch(url, {
         ...init,
@@ -3595,10 +3840,17 @@ export class MarketsService {
         .text()
         .catch(() => '');
       this.logger.warn(
-        `OpenAI request retrying after retryable response ${response.status}: ${
+        `OpenAI request retrying${
+          fallbackToDefaultTier && response.status === 429
+            ? ' with default service tier'
+            : ''
+        } after retryable response ${response.status}: ${
           message || response.statusText
         }`,
       );
+      if (fallbackToDefaultTier && response.status === 429) {
+        retryInit = this.withOpenAiServiceTier(init, 'default');
+      }
     } catch (error) {
       if (!this.isRetryableOpenAiError(error)) {
         throw error;
@@ -3611,9 +3863,27 @@ export class MarketsService {
     }
 
     return fetch(url, {
-      ...init,
+      ...retryInit,
       signal: AbortSignal.timeout(retryTimeoutMs),
     });
+  }
+
+  private withOpenAiServiceTier(
+    init: RequestInit,
+    serviceTier: 'flex' | 'default',
+  ): RequestInit {
+    if (typeof init.body !== 'string') {
+      return init;
+    }
+    try {
+      const body = JSON.parse(init.body) as Record<string, unknown>;
+      return {
+        ...init,
+        body: JSON.stringify({ ...body, service_tier: serviceTier }),
+      };
+    } catch {
+      return init;
+    }
   }
 
   private shouldRetryOpenAiResponse(response: Response): boolean {

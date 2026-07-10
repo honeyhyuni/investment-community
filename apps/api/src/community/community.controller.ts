@@ -8,11 +8,16 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { IsArray, IsOptional, IsString, MaxLength } from 'class-validator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthUser } from '../auth/auth-user.type';
+import { CommunityImagesService, MAX_COMMUNITY_IMAGE_BYTES } from './community-images.service';
 import {
   CommunityPostDto,
   CommunityService,
@@ -69,12 +74,42 @@ class CreateCommentDto {
 @Controller('community')
 @UseGuards(JwtAuthGuard)
 export class CommunityController {
-  constructor(private readonly communityService: CommunityService) {}
+  constructor(
+    private readonly communityService: CommunityService,
+    private readonly communityImagesService: CommunityImagesService,
+  ) {}
+
+  @Post('images')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { files: 1, fileSize: MAX_COMMUNITY_IMAGE_BYTES },
+    }),
+  )
+  uploadImage(
+    @CurrentUser() currentUser: AuthUser,
+    @UploadedFile() file?: {
+      buffer: Buffer;
+      mimetype: string;
+      originalname: string;
+      size: number;
+    },
+  ) {
+    return this.communityImagesService.upload(currentUser.sub, file);
+  }
+
+  @Delete('images/:id')
+  deleteImage(
+    @CurrentUser() currentUser: AuthUser,
+    @Param('id') id: string,
+  ): Promise<{ ok: true }> {
+    return this.communityImagesService.deleteUnused(currentUser.sub, id);
+  }
 
   @Get('feed')
   getFeed(
     @CurrentUser() currentUser: AuthUser,
-    @Query('scope') scope: 'all' | 'subscribed' | 'mine' | 'user' = 'all',
+    @Query('scope') scope: 'all' | 'subscribed' | 'mine' | 'bookmarks' | 'user' = 'all',
     @Query('userId') userId?: string,
     @Query('sort') sort: 'latest' | 'popular' = 'latest',
     @Query('limit') limit?: string,
@@ -135,6 +170,13 @@ export class CommunityController {
     return this.communityService.toggleLike(currentUser.sub, id);
   }
 
+  @Post('posts/:id/bookmark')
+  toggleBookmark(
+    @CurrentUser() currentUser: AuthUser,
+    @Param('id') id: string,
+  ): Promise<{ bookmarked: boolean }> {
+    return this.communityService.toggleBookmark(currentUser.sub, id);
+  }
   @Post('posts/:id/comments')
   createComment(
     @CurrentUser() currentUser: AuthUser,

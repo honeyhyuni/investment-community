@@ -70,3 +70,44 @@ async function readErrorMessage(response: Response): Promise<string> {
     return `Request failed with ${response.status}`;
   }
 }
+export type CommunityImageUpload = {
+  id: string;
+  url: string;
+  width: number;
+  height: number;
+  size: number;
+};
+
+export async function uploadCommunityImage(
+  file: File,
+  accessToken: string,
+): Promise<CommunityImageUpload> {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE_URL}/community/images`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+    credentials: "include",
+  });
+  if (!response.ok) throw new Error(await readErrorMessage(response));
+  return response.json() as Promise<CommunityImageUpload>;
+}
+
+export async function deleteCommunityImage(
+  id: string,
+  accessToken: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/community/images/${encodeURIComponent(id)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: "include",
+      keepalive: true,
+    },
+  );
+  if (!response.ok && response.status !== 404) {
+    throw new Error(await readErrorMessage(response));
+  }
+}

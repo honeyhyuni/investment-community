@@ -13,6 +13,7 @@ import {
   Trash2,
   TrendingDown,
   TrendingUp,
+  X,
 } from 'lucide-react';
 import {
   DndContext,
@@ -55,11 +56,19 @@ import {
   Portfolio,
   PortfolioPosition,
   PortfolioPositionInput,
+  PortfolioPerformancePoint,
   StockSymbol,
 } from '@/common/types';
 
 type PortfolioTab = 'watchlist' | 'portfolio';
 type PortfolioSort = 'weight' | 'profit';
+
+type CompareSymbol = {
+  key: string;
+  symbol: string;
+  market: 'US' | 'KR';
+  label: string;
+};
 
 type PositionDraft = {
   key: string;
@@ -69,6 +78,7 @@ type PositionDraft = {
   name: string;
   quantity: string;
   averagePrice: string;
+  startedAt: string;
 };
 
 const PIE_COLORS = [
@@ -471,6 +481,12 @@ function PortfolioSection({
   const [drafts, setDrafts] = useState<PositionDraft[]>([makeDraft()]);
   const [displayCurrency, setDisplayCurrency] = useState<'USD' | 'KRW'>('KRW');
   const [portfolioSort, setPortfolioSort] = useState<PortfolioSort>('weight');
+  const [performancePeriod, setPerformancePeriod] = useState('1M');
+  const [performance, setPerformance] = useState<PortfolioPerformancePoint[]>([]);
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [compareQuery, setCompareQuery] = useState('');
+  const [customCompareSymbols, setCustomCompareSymbols] = useState<CompareSymbol[]>([]);
+  const [hiddenCompareKeys, setHiddenCompareKeys] = useState<string[]>([]);
   const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
   const allocationScrollRef = useRef<HTMLDivElement>(null);
   const [canScrollAllocationUp, setCanScrollAllocationUp] = useState(false);
@@ -480,6 +496,17 @@ function PortfolioSection({
     () => [...krSymbols, ...usSymbols],
     [krSymbols, usSymbols],
   );
+  const compareSuggestions = useMemo(() => {
+    const query = compareQuery.trim();
+    if (!query) return [];
+    const selected = new Set(customCompareSymbols.map((item) => item.key));
+    return stockSymbols
+      .map((item) => ({ item, score: portfolioSearchScore(item, query) }))
+      .filter(({ item, score }) => score > 0 && !selected.has(compareKeyForSymbol(item)))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+      .map(({ item }) => item);
+  }, [compareQuery, customCompareSymbols, stockSymbols]);
   const selectedPortfolios = useMemo(
     () => portfolios.filter((portfolio) => selectedIds.includes(portfolio.id)),
     [portfolios, selectedIds],
@@ -513,6 +540,7 @@ function PortfolioSection({
   const totalProfitAmount = totalValue - totalCost;
   const totalProfitRate =
     totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : null;
+  const comparisonPortfolio = portfolios[0] ?? null;
   const emptyPortfolioTitle =
     selectedPortfolios.length === 0
       ? language === 'ko'
@@ -567,6 +595,63 @@ function PortfolioSection({
     return () =>
       window.removeEventListener('resize', updateAllocationScrollHint);
   }, [sortedRows.length, updateAllocationScrollHint]);
+
+  useEffect(() => {
+    if (!accessToken || !comparisonPortfolio) {
+      setPerformance([]);
+      return;
+    }
+
+    const params = new URLSearchParams({ period: performancePeriod });
+    if (customCompareSymbols.length) {
+      params.set('symbols', customCompareSymbols.map((item) => item.key).join(','));
+    }
+
+    let cancelled = false;
+    setPerformanceLoading(true);
+    apiRequest<PortfolioPerformancePoint[]>(
+      `/markets/portfolios/${comparisonPortfolio.id}/performance?${params.toString()}`,
+      'GET',
+      { accessToken },
+    )
+      .then((items) => {
+        if (!cancelled) setPerformance(items);
+      })
+      .catch(() => {
+        if (!cancelled) setPerformance([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPerformanceLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, comparisonPortfolio, customCompareSymbols, performancePeriod]);
+
+  function addCompareSymbol(symbol: StockSymbol) {
+    const normalized = normalizeCompareSymbol(symbol);
+    const label = normalized.market === 'KR'
+      ? symbol.description || normalized.symbol
+      : normalized.symbol;
+    setCustomCompareSymbols((items) => {
+      if (items.some((item) => item.key === normalized.key)) return items;
+      return [...items, { key: normalized.key, symbol: normalized.symbol, market: normalized.market, label }];
+    });
+    setHiddenCompareKeys((keys) => keys.filter((item) => item !== normalized.key));
+    setCompareQuery('');
+  }
+
+  function toggleCompareSeries(key: string) {
+    setHiddenCompareKeys((keys) =>
+      keys.includes(key) ? keys.filter((item) => item !== key) : [...keys, key],
+    );
+  }
+
+  function removeCompareSymbol(key: string) {
+    setCustomCompareSymbols((items) => items.filter((item) => item.key !== key));
+    setHiddenCompareKeys((keys) => keys.filter((item) => item !== key));
+  }
 
   async function loadPortfolios() {
     if (!accessToken) {
@@ -629,6 +714,7 @@ function PortfolioSection({
             quantity: String(position.quantity || ''),
             averagePrice:
               position.averagePrice > 0 ? String(position.averagePrice) : '',
+            startedAt: position.startedAt ?? position.addedAt.slice(0, 10),
           }))
         : [makeDraft()],
     );
@@ -783,34 +869,6 @@ function PortfolioSection({
     <div className="pt-4">
       {error ? <Notice message="" error={error} /> : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <SectionHeader
-          eyebrow="Portfolio"
-          title={language === 'ko' ? '포트폴리오' : 'Portfolio'}
-        />
-        <div className="flex flex-wrap gap-2">
-          {portfolios.length ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadPortfolios}
-              loading={loading}
-              className="shrink-0"
-            >
-              {language === 'ko' ? '새로고침' : 'Refresh'}
-            </Button>
-          ) : null}
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Plus size={15} />}
-            onClick={startCreatePortfolio}
-          >
-            {language === 'ko' ? '포트폴리오 추가' : 'Add portfolio'}
-          </Button>
-        </div>
-      </div>
-
       <Modal
         open={portfolioModal.isOpen}
         onClose={resetPortfolioForm}
@@ -918,7 +976,23 @@ function PortfolioSection({
 
       {loading ? (
         <>
-          <div className="mt-4 flex h-9 flex-wrap gap-2 overflow-hidden">
+          <PortfolioPerformanceChart
+            points={performance}
+            loading={performanceLoading}
+            period={performancePeriod}
+            onPeriodChange={setPerformancePeriod}
+            portfolioName={''}
+            language={language}
+            customSymbols={customCompareSymbols}
+            hiddenKeys={hiddenCompareKeys}
+            compareQuery={compareQuery}
+            compareSuggestions={compareSuggestions}
+            onCompareQueryChange={setCompareQuery}
+            onAddCompareSymbol={addCompareSymbol}
+            onToggleSeries={toggleCompareSeries}
+            onRemoveCustomSymbol={removeCompareSymbol}
+          />
+          <div className="mt-6 flex h-9 flex-wrap gap-2 overflow-hidden">
             <Skeleton className="h-9 w-28 rounded-md" />
             <Skeleton className="h-9 w-36 rounded-md" />
             <Skeleton className="h-9 w-24 rounded-md" />
@@ -957,6 +1031,47 @@ function PortfolioSection({
         </>
       ) : portfolios.length ? (
         <>
+          <PortfolioPerformanceChart
+            points={performance}
+            loading={performanceLoading}
+            period={performancePeriod}
+            onPeriodChange={setPerformancePeriod}
+            portfolioName={''}
+            language={language}
+            customSymbols={customCompareSymbols}
+            hiddenKeys={hiddenCompareKeys}
+            compareQuery={compareQuery}
+            compareSuggestions={compareSuggestions}
+            onCompareQueryChange={setCompareQuery}
+            onAddCompareSymbol={addCompareSymbol}
+            onToggleSeries={toggleCompareSeries}
+            onRemoveCustomSymbol={removeCompareSymbol}
+          />
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <SectionHeader
+              eyebrow="Portfolio"
+              title={language === 'ko' ? '\uD3EC\uD2B8\uD3F4\uB9AC\uC624' : 'Portfolio'}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadPortfolios}
+                loading={loading}
+                className="shrink-0"
+              >
+                {language === 'ko' ? '\uC0C8\uB85C\uACE0\uCE68' : 'Refresh'}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Plus size={15} />}
+                onClick={startCreatePortfolio}
+              >
+                {language === 'ko' ? '\uD3EC\uD2B8\uD3F4\uB9AC\uC624 \uCD94\uAC00' : 'Add portfolio'}
+              </Button>
+            </div>
+          </div>
           <div className="mt-4 flex flex-wrap gap-2">
             {portfolios.map((portfolio) => {
               const selected = selectedIds.includes(portfolio.id);
@@ -1020,6 +1135,7 @@ function PortfolioSection({
               <Plus size={16} />
             </button>
           </div>
+
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.9fr]">
             <div className="rounded-lg border border-border bg-surface-muted p-4">
@@ -1224,9 +1340,266 @@ function PortfolioSection({
               ? '포트폴리오 추가를 눌러 종목과 보유 수량을 입력하세요.'
               : 'Add a portfolio, then enter stocks and quantities.'}
           </p>
+          <Button
+            variant="primary"
+            size="sm"
+            leftIcon={<Plus size={15} />}
+            onClick={startCreatePortfolio}
+            className="mt-5"
+          >
+            {language === 'ko' ? '\uD3EC\uD2B8\uD3F4\uB9AC\uC624 \uCD94\uAC00' : 'Add portfolio'}
+          </Button>
         </div>
       )}
     </div>
+  );
+}
+
+function PortfolioPerformanceChart({
+  points,
+  loading,
+  period,
+  onPeriodChange,
+  portfolioName,
+  language,
+  customSymbols,
+  hiddenKeys,
+  compareQuery,
+  compareSuggestions,
+  onCompareQueryChange,
+  onAddCompareSymbol,
+  onToggleSeries,
+  onRemoveCustomSymbol,
+}: {
+  points: PortfolioPerformancePoint[];
+  loading: boolean;
+  period: string;
+  onPeriodChange: (period: string) => void;
+  portfolioName: string;
+  language: 'en' | 'ko';
+  customSymbols: CompareSymbol[];
+  hiddenKeys: string[];
+  compareQuery: string;
+  compareSuggestions: StockSymbol[];
+  onCompareQueryChange: (value: string) => void;
+  onAddCompareSymbol: (symbol: StockSymbol) => void;
+  onToggleSeries: (key: string) => void;
+  onRemoveCustomSymbol: (key: string) => void;
+}) {
+  const customColors = ['#0ea5e9', '#ec4899', '#84cc16', '#14b8a6', '#f97316', '#64748b'];
+  const series = [
+    { key: 'sp500', label: 'S&P 500', color: '#16a34a', removable: false },
+    { key: 'nasdaq', label: 'Nasdaq', color: '#f59e0b', removable: false },
+    { key: 'nasdaq100', label: 'Nasdaq 100', color: '#9333ea', removable: false },
+    { key: 'kospi', label: 'KOSPI', color: '#dc2626', removable: false },
+    ...customSymbols.map((item, index) => ({
+      key: item.key,
+      label: item.label || item.symbol,
+      color: customColors[index % customColors.length],
+      removable: true,
+    })),
+  ];
+  const visibleSeries = series.filter((item) => !hiddenKeys.includes(item.key));
+  const values = points.flatMap((point) =>
+    visibleSeries
+      .map((item) => point.series?.[item.key] ?? null)
+      .filter((value): value is number => value !== null),
+  );
+  const allValues = points.flatMap((point) =>
+    series
+      .map((item) => point.series?.[item.key] ?? null)
+      .filter((value): value is number => value !== null),
+  );
+  const scaleValues = values.length ? values : allValues;
+  const min = Math.min(0, ...scaleValues);
+  const max = Math.max(0, ...scaleValues);
+  const range = Math.max(max - min, 1);
+  const mid = (max + min) / 2;
+  const yFor = (value: number) => 92 - ((value - min) / range) * 84;
+  const yTicks = [max, mid, min];
+  const xLabels = points.length
+    ? [
+        { key: 'start', label: points[0]?.date.slice(5) ?? '', className: 'text-left' },
+        { key: 'middle', label: points[Math.floor((points.length - 1) / 2)]?.date.slice(5) ?? '', className: 'text-center' },
+        { key: 'end', label: points.at(-1)?.date.slice(5) ?? '', className: 'text-right' },
+      ]
+    : [];
+  const pathFor = (key: string) => {
+    let hasStarted = false;
+    return points
+      .map((point, index) => {
+        const value = point.series?.[key] ?? null;
+        if (value === null) return null;
+        const x = points.length <= 1 ? 0 : (index / (points.length - 1)) * 100;
+        const command = hasStarted ? 'L' : 'M';
+        hasStarted = true;
+        return command + ' ' + x + ' ' + yFor(value);
+      })
+      .filter(Boolean)
+      .join(' ');
+  };
+  const latest = points.at(-1);
+
+  return (
+    <section className="mt-4 rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="font-semibold">
+            {language === 'ko' ? '\uC131\uACFC \uC9C0\uD45C' : 'Performance indicators'}
+          </h3>
+          <p className="mt-1 text-xs text-muted">
+            {portfolioName || (language === 'ko' ? '\uAE30\uBCF8 \uC9C0\uC218\uC640 \uC120\uD0DD\uD55C \uD2F0\uCEE4\uB97C \uBE44\uAD50\uD569\uB2C8\uB2E4.' : 'Compare default indices with selected tickers.')}
+          </p>
+        </div>
+        <SegmentedControl<string>
+          value={period}
+          onChange={onPeriodChange}
+          options={['1W', '1M', '3M', '6M', '1Y', '3Y', '5Y'].map((value) => ({ value, label: value }))}
+        />
+      </div>
+
+      <div className="relative mt-4">
+        <Search
+          size={15}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+        />
+        <input
+          value={compareQuery}
+          onChange={(event) => onCompareQueryChange(event.target.value)}
+          placeholder={language === 'ko' ? '\uBE44\uAD50\uD560 \uC885\uBAA9\uBA85 \uB610\uB294 \uD2F0\uCEE4 \uAC80\uC0C9' : 'Search ticker to compare'}
+          className={cn(INPUT_BASE, 'h-11 bg-surface-muted pl-9 pr-3 transition-colors hover:border-primary/50 hover:bg-surface focus:border-primary')}
+        />
+        {compareSuggestions.length ? (
+          <div className="absolute left-0 right-0 top-full z-20 mt-1.5 overflow-hidden rounded-lg border border-border bg-surface shadow-lg">
+            {compareSuggestions.map((symbol) => {
+              const market = symbol.currency === 'KRW' ? 'KR' : 'US';
+              const primary = market === 'KR' ? symbol.description : symbol.symbol;
+              const secondary = market === 'KR' ? symbol.symbol : symbol.description;
+              return (
+                <button
+                  key={compareKeyForSymbol(symbol)}
+                  type="button"
+                  onClick={() => onAddCompareSymbol(symbol)}
+                  className="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-surface-muted"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="inline-flex shrink-0 items-center rounded bg-surface-subtle px-1.5 py-0.5 text-[10px] font-bold text-muted">
+                      {market}
+                    </span>
+                    <span className="truncate font-semibold text-foreground">{primary}</span>
+                  </span>
+                  <span className="min-w-0 shrink-0 truncate text-xs text-muted">{secondary}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+
+      {loading ? (
+        <Skeleton className="mt-4 h-72" />
+      ) : points.length ? (
+        <>
+          <div className="mt-4 grid grid-cols-[3rem_1fr] gap-2">
+            <div className="relative h-64 text-[11px] font-medium text-muted">
+              {yTicks.map((tick, index) => (
+                <span
+                  key={index}
+                  className="absolute right-0 -translate-y-1/2 tabular-nums"
+                  style={{ top: `${yFor(tick)}%` }}
+                >
+                  {tick >= 0 ? '+' : ''}{tick.toFixed(1)}%
+                </span>
+              ))}
+            </div>
+            <div>
+              <div className="h-64 rounded-md bg-surface-muted p-3">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-full w-full" role="img">
+                  {yTicks.map((tick, index) => (
+                    <line
+                      key={index}
+                      x1="0"
+                      x2="100"
+                      y1={yFor(tick)}
+                      y2={yFor(tick)}
+                      stroke="currentColor"
+                      className="text-border"
+                      strokeDasharray={Math.abs(tick) < 0.0001 ? '2 2' : undefined}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ))}
+                  {visibleSeries.map((item) => (
+                    <path
+                      key={item.key}
+                      d={pathFor(item.key)}
+                      fill="none"
+                      stroke={item.color}
+                      strokeWidth="2"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ))}
+                </svg>
+              </div>
+              <div className="mt-1 grid grid-cols-3 text-[11px] font-medium text-muted">
+                {xLabels.map((item) => (
+                  <span key={item.key} className={item.className}>{item.label}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+            {series.map((item) => {
+              const hidden = hiddenKeys.includes(item.key);
+              const latestValue = latest?.series?.[item.key] ?? null;
+              const hasData = points.some((point) => point.series?.[item.key] !== null && point.series?.[item.key] !== undefined);
+              return (
+                <span
+                  key={item.key}
+                  className={cn(
+                    'inline-flex items-center overflow-hidden rounded-full border border-border bg-surface text-foreground transition-colors hover:border-primary/60 hover:bg-primary/5',
+                    hidden && 'text-muted',
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onToggleSeries(item.key)}
+                    className="inline-flex cursor-pointer items-center gap-1.5 px-2.5 py-1.5 hover:text-primary"
+                    aria-pressed={!hidden}
+                    title={language === 'ko' ? '\uD074\uB9AD\uD574\uC11C \uADF8\uB798\uD504 \uD45C\uC2DC\uB97C \uC804\uD658' : 'Click to toggle line'}
+                  >
+                    <i className="size-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className={cn(hidden && 'line-through decoration-2')}>{item.label}</span>
+                    <span className="text-muted">
+                      {!hasData
+                        ? language === 'ko' ? '\uB370\uC774\uD130 \uC5C6\uC74C' : 'No data'
+                        : latestValue == null ? '-' : (latestValue >= 0 ? '+' : '') + latestValue.toFixed(2) + '%'}
+                    </span>
+                  </button>
+                  {item.removable ? (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onRemoveCustomSymbol(item.key);
+                      }}
+                      className="grid size-7 cursor-pointer place-items-center border-l border-border text-muted transition-colors hover:bg-negative/10 hover:text-negative"
+                      aria-label={language === 'ko' ? item.label + ' \uC0AD\uC81C' : 'Remove ' + item.label}
+                      title={language === 'ko' ? '\uC0AD\uC81C' : 'Remove'}
+                    >
+                      <X size={13} />
+                    </button>
+                  ) : null}
+                </span>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <div className="mt-4 rounded-md border border-dashed border-border px-4 py-12 text-center text-sm text-muted">
+          {language === 'ko' ? '\uC120\uD0DD\uD55C \uAE30\uAC04\uC758 \uBE44\uAD50 \uB370\uC774\uD130\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.' : 'No comparison data for this period yet.'}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1730,7 +2103,20 @@ function makeDraft(): PositionDraft {
     name: '',
     quantity: '',
     averagePrice: '',
+    startedAt: new Date().toISOString().slice(0, 10),
   };
+}
+
+function normalizeCompareSymbol(symbol: StockSymbol): { key: string; symbol: string; market: 'US' | 'KR' } {
+  const raw = (symbol.symbol || symbol.displaySymbol || '').trim().toUpperCase();
+  const [prefix, value] = raw.includes(':') ? raw.split(':', 2) : ['', raw];
+  const market = prefix === 'KR' || symbol.currency === 'KRW' ? 'KR' : 'US';
+  const normalizedSymbol = (value || raw).replace(/^KR:/, '').replace(/^US:/, '').trim().toUpperCase();
+  return { key: market + ':' + normalizedSymbol, symbol: normalizedSymbol, market };
+}
+
+function compareKeyForSymbol(symbol: StockSymbol): string {
+  return normalizeCompareSymbol(symbol).key;
 }
 
 function portfolioSearchScore(item: StockSymbol, rawQuery: string): number {

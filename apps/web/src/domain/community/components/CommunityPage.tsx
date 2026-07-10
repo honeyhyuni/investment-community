@@ -67,6 +67,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
     error,
     setError,
     toggleLike,
+    toggleBookmark,
     createComment,
     editComment,
     deleteComment,
@@ -309,6 +310,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
           replyDrafts={replyDrafts}
           setReplyDrafts={setReplyDrafts}
           onLike={toggleLike}
+          onBookmark={toggleBookmark}
           onComment={createComment}
           onEditPost={(target) => router.push(`/community/${target.id}/edit`)}
           onDeletePost={deletePost}
@@ -437,7 +439,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
             <SegmentedControl
               className="flex-1 sm:inline-flex sm:flex-none"
               aria-label={ko ? "피드 범위" : "Feed scope"}
-              options={(["all", "subscribed", "mine"] as CommunityScope[]).map((item) => ({
+              options={(["all", "subscribed", "mine", "bookmarks"] as CommunityScope[]).map((item) => ({
                 value: item,
                 label:
                   item === "all"
@@ -448,9 +450,13 @@ export function CommunityPage({ userId }: { userId?: string }) {
                       ? ko
                         ? "구독 피드"
                         : "Following"
-                      : ko
-                        ? "내 피드"
-                        : "Mine",
+                      : item === "mine"
+                        ? ko
+                          ? "내 피드"
+                          : "Mine"
+                        : ko
+                          ? "저장한 글"
+                          : "Saved",
               }))}
               value={scope}
               onChange={setScope}

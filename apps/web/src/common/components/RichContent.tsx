@@ -1,15 +1,33 @@
 "use client";
 
-import { MouseEvent } from "react";
+import { memo, MouseEvent, useMemo } from "react";
 
-/** TipTap이 생성한 HTML을 렌더한다. 이미지 클릭 시 onImageClick 호출(확대용). */
-export function RichContent({
-  html,
-  onImageClick,
-}: {
+type RichContentProps = {
   html: string;
   onImageClick?: (url: string) => void;
-}) {
+  maxImages?: number;
+};
+
+/** TipTap이 생성한 HTML을 렌더한다. 이미지 클릭 시 onImageClick 호출(확대용). */
+function RichContentImpl({ html, onImageClick, maxImages }: RichContentProps) {
+  const renderHtml = useMemo(() => {
+    let imageIndex = 0;
+    return html.replace(/<img\b[^>]*>/gi, (tag) => {
+      imageIndex += 1;
+      if (maxImages !== undefined && imageIndex > maxImages) {
+        return "";
+      }
+      if (/\bloading=/i.test(tag)) {
+        return tag;
+      }
+      const loading = maxImages !== undefined ? "eager" : "lazy";
+      return tag.replace(
+        /^<img\b/i,
+        `<img loading="${loading}" decoding="async"`,
+      );
+    });
+  }, [html, maxImages]);
+
   function handleClick(event: MouseEvent<HTMLDivElement>) {
     if (!onImageClick) {
       return;
@@ -26,7 +44,15 @@ export function RichContent({
         onImageClick ? "[&_img]:cursor-zoom-in" : ""
       }`}
       onClick={handleClick}
-      dangerouslySetInnerHTML={{ __html: html }}
+      dangerouslySetInnerHTML={{ __html: renderHtml }}
     />
   );
 }
+
+export const RichContent = memo(
+  RichContentImpl,
+  (previous, next) =>
+    previous.html === next.html &&
+    previous.maxImages === next.maxImages &&
+    Boolean(previous.onImageClick) === Boolean(next.onImageClick),
+);

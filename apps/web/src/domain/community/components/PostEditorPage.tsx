@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Notice } from "@/common/components/Notice";
-import { apiRequest } from "@/common/lib/api";
+import { apiRequest, CommunityImageUpload, deleteCommunityImage } from "@/common/lib/api";
 import {
   NEW_POST_TEMPLATE,
   getPostHtml,
@@ -75,6 +75,7 @@ export function PostEditorPage({ postId }: { postId?: string }) {
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
   const [draftError, setDraftError] = useState("");
+  const [uploadedImages, setUploadedImages] = useState<CommunityImageUpload[]>([]);
 
   const stockSymbols = useMemo(() => [...krSymbols, ...usSymbols], [krSymbols, usSymbols]);
   const draftKey = useMemo(
@@ -192,6 +193,17 @@ export function PostEditorPage({ postId }: { postId?: string }) {
     return () => window.clearTimeout(timeout);
   }, [draftReady, saveDraft]);
 
+  async function cleanupUploads(html = "") {
+    if (!accessToken) return;
+    const used = new Set([...html.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["']/gi)].map((match) => match[1]));
+    await Promise.allSettled(uploadedImages.filter((image) => !used.has(image.url)).map((image) => deleteCommunityImage(image.id, accessToken)));
+  }
+
+  async function cancelEditor() {
+    await cleanupUploads();
+    router.back();
+  }
+
   async function savePost() {
     const html = blocks.find((block) => block.type === "text")?.text?.trim() ?? "";
     const contentBlocks: CommunityContentBlock[] = html
@@ -206,6 +218,8 @@ export function PostEditorPage({ postId }: { postId?: string }) {
     setLoading(true);
     setError("");
     try {
+      await cleanupUploads(html);
+      const imageUrls = [...new Set([...html.matchAll(/<img\b[^>]*\bsrc=["'](\/uploads\/community\/[^"']+)["']/gi)].map((match) => match[1]))];
       const result = await apiRequest<CommunityPost>(
         postId ? `/community/posts/${postId}` : "/community/posts",
         postId ? "PATCH" : "POST",
@@ -216,13 +230,14 @@ export function PostEditorPage({ postId }: { postId?: string }) {
             content: plainContent,
             contentBlocks,
             stockTags: tags,
-            imageUrls: [],
+            imageUrls,
           },
         },
       );
       if (draftKey) {
         window.localStorage.removeItem(draftKey);
       }
+      setUploadedImages([]);
       router.push(`/community/${postId ?? result.id}`);
     } catch (postError) {
       setError(postError instanceof Error ? postError.message : "Could not post.");
@@ -257,7 +272,9 @@ export function PostEditorPage({ postId }: { postId?: string }) {
           draftError={draftError}
           onSaveDraft={() => saveDraft(true)}
           onSubmit={savePost}
-          onCancel={() => router.back()}
+          onCancel={() => void cancelEditor()}
+          accessToken={accessToken}
+          onUploadedImage={(image) => setUploadedImages((items) => [...items, image])}
         />
       </div>
     </>
