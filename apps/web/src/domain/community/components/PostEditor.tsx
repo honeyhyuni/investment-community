@@ -117,6 +117,47 @@ export function PostEditor({
       attributes: {
         class: "tiptap-content min-h-[420px] px-3 py-4 outline-none sm:min-h-[620px] sm:px-6 sm:py-5",
       },
+      handlePaste: (_view, event) => {
+        const items = Array.from(event.clipboardData?.items ?? []);
+        const imageFiles = items
+          .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+          .map((item) => item.getAsFile())
+          .filter((file): file is File => file !== null);
+
+        if (imageFiles.length > 0) {
+          event.preventDefault();
+          void insertImages(imageFiles);
+          return true;
+        }
+
+        const html = event.clipboardData?.getData("text/html");
+        if (!html || !/<img\b/i.test(html)) {
+          return false;
+        }
+
+        const doc = new DOMParser().parseFromString(html, "text/html");
+        let removedExternalImage = false;
+        doc.querySelectorAll("img").forEach((image) => {
+          const src = image.getAttribute("src") ?? "";
+          if (!src.startsWith("/uploads/community/")) {
+            image.remove();
+            removedExternalImage = true;
+          }
+        });
+
+        if (!removedExternalImage) {
+          return false;
+        }
+
+        event.preventDefault();
+        editor?.commands.insertContent(doc.body.innerHTML);
+        setImageStatus(
+          ko
+            ? "외부 이미지는 제거됐습니다. 캡처하거나 이미지 자체를 복사해서 붙여넣어 주세요."
+            : "External images were removed. Paste a copied image or screenshot to upload it.",
+        );
+        return true;
+      },
     },
     onUpdate: ({ editor }) => {
       const html = editor.isEmpty ? "" : editor.getHTML();
@@ -160,7 +201,7 @@ export function PostEditor({
     );
   }
 
-  async function insertImages(files: FileList | null) {
+  async function insertImages(files: FileList | File[] | null) {
     if (!editor || !files || !accessToken) return;
     const count = (editor.getHTML().match(/<img\b/gi) ?? []).length;
     const selected = Array.from(files).slice(0, Math.max(0, 20 - count));
