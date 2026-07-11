@@ -17,6 +17,7 @@ import {
   addMonths,
   buildMonthGrid,
   dateKeysBetween,
+  formatDayLabel,
   formatMonthLabel,
   isAfterMonth,
   isBeforeMonth,
@@ -222,6 +223,8 @@ export function IpoCalendarSection({
               nextAriaLabel={language === 'ko' ? '다음 달' : 'Next month'}
             />
           }
+          renderDayTitle={(day) => formatDayLabel(day.dateKey, language)}
+          countLabel={(count) => (language === 'ko' ? `${count}개` : `${count}`)}
           getEventKey={(event) => `${event.item.id}-${event.type}`}
           renderEvent={(event) => (
             <IpoCompactCard

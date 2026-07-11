@@ -1,5 +1,8 @@
-import type { ReactNode } from 'react';
+'use client';
 
+import { useState, type ReactNode } from 'react';
+
+import { Modal } from '@/common/components/Modal';
 import { cn } from '@/common/utils/cn';
 import { MonthGridCell, toDateKey } from '@/domain/calendar/utils/date';
 
@@ -20,19 +23,24 @@ type CalendarProps<
   /** 달력 위, notice 아래에 표시할 네비게이션/필터 영역. */
   nav?: ReactNode;
   getEventKey: (event: TEvent, day: TDay) => string;
-  /** 카드 하나를 그린다. 공모주/실적 등 실제 카드 디자인은 전부 여기서만 갈린다. */
+  /** 카드 하나를 그린다. 날짜 칸을 눌렀을 때 뜨는 모달 안에서 쓰인다. */
   renderEvent: (event: TEvent, day: TDay) => ReactNode;
-  emptyLabel?: string | ((day: TDay) => string | null);
+  /** 날짜 칸을 눌렀을 때 뜨는 모달의 제목. 기본은 날짜 키(YYYY-MM-DD). */
+  renderDayTitle?: (day: TDay) => ReactNode;
+  /** 칸 안에 보여줄 건수 라벨. 기본은 숫자만 그대로. */
+  countLabel?: (count: number) => string;
   countClassName?: string;
   gridClassName?: string;
   className?: string;
 };
 
+const CELL_BASE_CLASS =
+  'flex h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-md border p-1 sm:h-20 sm:p-2';
+
 /**
  * 공모주 달력 / 실적 발표 달력이 공유하는 요일 정렬 월간 그리드.
- * 일자·요일 헤더, 카운트 뱃지 규칙은 이 컴포넌트가 전담해서 두 달력이 항상 같은 모양을
- * 갖도록 한다. 칸은 고정 높이라 이벤트가 많으면 칸 내부에서 세로 스크롤된다.
- * 카드 자체의 디자인만 renderEvent가 결정한다.
+ * 칸은 폭이 좁아져도 세로로 길어지지 않도록 고정 높이를 쓰고, 날짜와 건수만 보여준다.
+ * 일정이 있는 칸을 누르면 그날의 이벤트 목록을 모달로 보여준다. 카드 디자인은 renderEvent가 결정한다.
  */
 export function Calendar<
   TEvent,
@@ -44,12 +52,14 @@ export function Calendar<
   nav,
   getEventKey,
   renderEvent,
-  emptyLabel,
+  renderDayTitle,
+  countLabel = (count) => `${count}`,
   countClassName = 'bg-primary/10 text-primary',
   gridClassName,
   className,
 }: CalendarProps<TEvent, TDay>) {
   const todayKey = toDateKey(new Date());
+  const [selectedDay, setSelectedDay] = useState<TDay | null>(null);
 
   return (
     <div className={cn('min-w-0', className)}>
@@ -75,76 +85,90 @@ export function Calendar<
       <div className={cn('mt-2 grid grid-cols-7 gap-1 sm:gap-2', gridClassName)}>
         {days.map((day) => {
           const isToday = day.dateKey === todayKey;
-          const resolvedEmptyLabel = day.disabled
-            ? null
-            : typeof emptyLabel === 'function'
-              ? emptyLabel(day)
-              : day.events.length === 0
-                ? (emptyLabel ?? null)
-                : null;
+          const hasEvents = !day.disabled && day.events.length > 0;
 
-          return (
-            <div
-              key={day.dateKey}
+          const cellClassName = cn(
+            CELL_BASE_CLASS,
+            day.disabled
+              ? 'border-border/50 bg-surface/60'
+              : day.inCurrentMonth
+                ? 'border-border bg-surface-muted'
+                : 'border-border/60 bg-surface',
+            isToday && 'border-primary ring-1 ring-inset ring-primary',
+            hasEvents &&
+              'cursor-pointer transition-colors hover:border-primary',
+          );
+
+          const dayNumber = isToday ? (
+            <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white sm:size-6 sm:text-xs">
+              {day.date.getDate()}
+            </span>
+          ) : (
+            <span
               className={cn(
-                'flex h-44 min-w-0 flex-col rounded-md border p-1.5 sm:h-56 sm:p-3',
+                'text-xs font-bold sm:text-sm',
                 day.disabled
-                  ? 'border-border/50 bg-surface/60'
+                  ? 'text-muted/60'
                   : day.inCurrentMonth
-                    ? 'border-border bg-surface-muted'
-                    : 'border-border/60 bg-surface',
-                isToday && 'border-primary ring-1 ring-inset ring-primary',
+                    ? 'text-foreground'
+                    : 'text-muted',
               )}
             >
-              <div className="flex shrink-0 items-center justify-between gap-1">
-                {isToday ? (
-                  <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white sm:size-6 sm:text-xs">
-                    {day.date.getDate()}
-                  </span>
-                ) : (
-                  <span
-                    className={cn(
-                      'text-xs font-bold sm:text-sm',
-                      day.disabled
-                        ? 'text-muted/60'
-                        : day.inCurrentMonth
-                          ? 'text-foreground'
-                          : 'text-muted',
-                    )}
-                  >
-                    {day.date.getDate()}
-                  </span>
-                )}
-                {!day.disabled && day.events.length ? (
-                  <span
-                    className={cn(
-                      'rounded-full px-1.5 py-0.5 text-[10px] font-semibold sm:text-xs',
-                      countClassName,
-                    )}
-                  >
-                    {day.events.length}
-                  </span>
-                ) : null}
-              </div>
+              {day.date.getDate()}
+            </span>
+          );
 
-              {day.disabled ? null : (
-                <div className="mt-1.5 flex min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden sm:mt-2">
-                  {day.events.map((event) => (
-                    <div key={getEventKey(event, day)} className="min-w-0 shrink-0">
-                      {renderEvent(event, day)}
-                    </div>
-                  ))}
-                  {resolvedEmptyLabel ? (
-                    <p className="rounded-md border border-dashed border-border px-1 py-2 text-center text-[10px] text-muted sm:text-xs">
-                      {resolvedEmptyLabel}
-                    </p>
-                  ) : null}
-                </div>
+          const countBadge = hasEvents ? (
+            <span
+              className={cn(
+                'rounded-full px-1.5 py-0.5 text-[10px] font-semibold sm:text-xs',
+                countClassName,
               )}
+            >
+              {countLabel(day.events.length)}
+            </span>
+          ) : null;
+
+          return hasEvents ? (
+            <button
+              key={day.dateKey}
+              type="button"
+              onClick={() => setSelectedDay(day)}
+              className={cellClassName}
+            >
+              {dayNumber}
+              {countBadge}
+            </button>
+          ) : (
+            <div key={day.dateKey} className={cellClassName}>
+              {dayNumber}
+              {countBadge}
             </div>
           );
         })}
       </div>
+
+      <Modal
+        open={!!selectedDay}
+        title={
+          selectedDay
+            ? renderDayTitle
+              ? renderDayTitle(selectedDay)
+              : selectedDay.dateKey
+            : ''
+        }
+        onClose={() => setSelectedDay(null)}
+      >
+        {selectedDay ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {selectedDay.events.map((event) => (
+              <div key={getEventKey(event, selectedDay)} className="min-w-0">
+                {renderEvent(event, selectedDay)}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

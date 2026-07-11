@@ -18,6 +18,7 @@ import {
 import {
   buildMonthGrid,
   dateKeysBetween,
+  formatDayLabel,
   formatMonthLabel,
   formatRangeLabel,
   getPreviousMonthStart,
@@ -368,13 +369,8 @@ export function UsEarningsSection({
               nextAriaLabel={language === 'ko' ? '다음 달' : 'Next month'}
             />
           }
-          emptyLabel={(day) =>
-            effectiveQuery && day.inCurrentMonth && !day.events.length
-              ? language === 'ko'
-                ? '검색 결과 없음'
-                : 'No result'
-              : null
-          }
+          renderDayTitle={(day) => formatDayLabel(day.dateKey, language)}
+          countLabel={(count) => (language === 'ko' ? `${count}건` : `${count}`)}
           getEventKey={(item) => item.id}
           renderEvent={(item) => (
             <EarningsCompactCard

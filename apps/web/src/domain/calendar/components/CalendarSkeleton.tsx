@@ -22,7 +22,7 @@ export function CalendarSkeleton() {
 
       <div className="mt-2 grid grid-cols-7 gap-1 sm:gap-2">
         {Array.from({ length: 42 }).map((_, index) => (
-          <Skeleton key={index} className="h-44 rounded-md sm:h-56" />
+          <Skeleton key={index} className="h-16 rounded-md sm:h-20" />
         ))}
       </div>
     </div>
