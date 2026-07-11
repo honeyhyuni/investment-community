@@ -46,7 +46,7 @@ export function IpoDetailModal({
   );
 }
 
-function IpoDetailBody({
+export function IpoDetailBody({
   item,
   language,
 }: {

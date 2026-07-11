@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, CircleQuestionMark, List } from 'lucide-react';
+import { CalendarDays, CircleQuestionMark, ExternalLink, List } from 'lucide-react';
 
 import { apiRequest } from '@/common/lib/api';
 import { Notice } from '@/common/components/Notice';
@@ -35,7 +35,7 @@ import {
 } from '@/domain/ipo/utils/ipoCalendar';
 
 import { IpoCompactCard } from '@/domain/ipo/components/cards/IpoCompactCard';
-import { IpoDetailModal } from '@/domain/ipo/components/cards/IpoDetailModal';
+import { IpoDetailBody, IpoDetailModal } from '@/domain/ipo/components/cards/IpoDetailModal';
 import { IpoEventList } from '@/domain/ipo/components/IpoEventList';
 import { UnderwriterFilter } from '@/domain/ipo/components/UnderwriterFilter';
 
@@ -238,6 +238,23 @@ export function IpoCalendarSection({
               language={language}
               onClick={() => setSelectedItem(event.item)}
             />
+          )}
+          renderEventInList={(event, _day, onSelect) => (
+            <IpoCompactCard event={event} language={language} onClick={onSelect} />
+          )}
+          renderEventDetail={(event) => (
+            <IpoDetailBody item={event.item} language={language} />
+          )}
+          renderEventDetailFooter={(event) => (
+            <a
+              href={event.item.dartUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-hover"
+            >
+              {language === 'ko' ? 'DART 공시 보기' : 'View DART filing'}
+              <ExternalLink size={15} />
+            </a>
           )}
         />
       ) : (

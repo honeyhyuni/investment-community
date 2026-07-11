@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { ChevronLeft } from 'lucide-react';
 
 import { Modal } from '@/common/components/Modal';
 import { cn } from '@/common/utils/cn';
@@ -23,8 +24,17 @@ type CalendarProps<
   /** 달력 위, notice 아래에 표시할 네비게이션/필터 영역. */
   nav?: ReactNode;
   getEventKey: (event: TEvent, day: TDay) => string;
-  /** 카드 하나를 그린다. PC에서는 칸 안에 직접, 좁은 화면에서는 날짜 클릭 시 모달 안에서 쓰인다. */
+  /** 카드 하나를 그린다. PC에서는 칸 안에 직접 쓰인다. */
   renderEvent: (event: TEvent, day: TDay) => ReactNode;
+  /**
+   * 좁은 화면에서 날짜 목록 모달 안에 카드를 그릴 때 쓰인다. onSelect를 눌렀을 때 연결하면
+   * 새 모달을 띄우지 않고 같은 모달 안에서 renderEventDetail로 전환된다. 없으면 renderEvent를 그대로 쓴다.
+   */
+  renderEventInList?: (event: TEvent, day: TDay, onSelect: () => void) => ReactNode;
+  /** 목록 모달에서 카드를 선택했을 때 같은 모달 안에서 보여줄 상세 내용. 없으면 상세 전환 없이 목록만 쓴다. */
+  renderEventDetail?: (event: TEvent, day: TDay) => ReactNode;
+  /** 상세 화면일 때 모달 하단에 보여줄 푸터 (예: 외부 링크 버튼). */
+  renderEventDetailFooter?: (event: TEvent, day: TDay) => ReactNode;
   /** 좁은 화면에서 날짜 칸을 눌렀을 때 뜨는 모달의 제목. 기본은 날짜 키(YYYY-MM-DD). */
   renderDayTitle?: (day: TDay) => ReactNode;
   /** 칸 안에 보여줄 건수 라벨. 기본은 숫자만 그대로. renderCount가 있으면 무시된다. */
@@ -53,6 +63,9 @@ export function Calendar<
   nav,
   getEventKey,
   renderEvent,
+  renderEventInList,
+  renderEventDetail,
+  renderEventDetailFooter,
   renderDayTitle,
   countLabel = (count) => `${count}`,
   countClassName = 'bg-primary/10 text-primary',
@@ -62,6 +75,19 @@ export function Calendar<
 }: CalendarProps<TEvent, TDay>) {
   const todayKey = toDateKey(new Date());
   const [selectedDay, setSelectedDay] = useState<TDay | null>(null);
+  const [detailEvent, setDetailEvent] = useState<TEvent | null>(null);
+
+  function openDay(day: TDay) {
+    setSelectedDay(day);
+    setDetailEvent(null);
+  }
+
+  function closeDayModal() {
+    setSelectedDay(null);
+    setDetailEvent(null);
+  }
+
+  const showingDetail = !!(selectedDay && detailEvent && renderEventDetail);
 
   return (
     <div className={cn('min-w-0', className)}>
@@ -141,11 +167,11 @@ export function Calendar<
               {hasEvents ? (
                 <button
                   type="button"
-                  onClick={() => setSelectedDay(day)}
+                  onClick={() => openDay(day)}
                   aria-label={
                     renderDayTitle ? undefined : `${day.dateKey} (${day.events.length})`
                   }
-                  className="absolute inset-0 z-10 rounded-md md:hidden"
+                  className="absolute inset-0 z-10 rounded-md transition-colors hover:bg-black/[0.03] active:bg-black/[0.06] md:hidden"
                 >
                   {renderDayTitle ? (
                     <span className="sr-only">{renderDayTitle(day)}</span>
@@ -187,22 +213,46 @@ export function Calendar<
       <Modal
         open={!!selectedDay}
         title={
-          selectedDay
-            ? renderDayTitle
-              ? renderDayTitle(selectedDay)
-              : selectedDay.dateKey
-            : ''
+          selectedDay ? (
+            showingDetail ? (
+              <button
+                type="button"
+                onClick={() => setDetailEvent(null)}
+                className="-ml-1.5 flex items-center gap-1 rounded-md py-1 pl-1.5 pr-2.5 text-base font-semibold text-foreground transition-colors hover:bg-surface-muted hover:text-primary"
+              >
+                <ChevronLeft size={18} />
+                {renderDayTitle ? renderDayTitle(selectedDay) : selectedDay.dateKey}
+              </button>
+            ) : renderDayTitle ? (
+              renderDayTitle(selectedDay)
+            ) : (
+              selectedDay.dateKey
+            )
+          ) : (
+            ''
+          )
         }
-        onClose={() => setSelectedDay(null)}
+        footer={
+          showingDetail && renderEventDetailFooter && selectedDay && detailEvent
+            ? renderEventDetailFooter(detailEvent, selectedDay)
+            : undefined
+        }
+        onClose={closeDayModal}
       >
         {selectedDay ? (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {selectedDay.events.map((event) => (
-              <div key={getEventKey(event, selectedDay)} className="min-w-0">
-                {renderEvent(event, selectedDay)}
-              </div>
-            ))}
-          </div>
+          showingDetail && detailEvent ? (
+            renderEventDetail?.(detailEvent, selectedDay)
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {selectedDay.events.map((event) => (
+                <div key={getEventKey(event, selectedDay)} className="min-w-0">
+                  {renderEventInList
+                    ? renderEventInList(event, selectedDay, () => setDetailEvent(event))
+                    : renderEvent(event, selectedDay)}
+                </div>
+              ))}
+            </div>
+          )
         ) : null}
       </Modal>
     </div>
