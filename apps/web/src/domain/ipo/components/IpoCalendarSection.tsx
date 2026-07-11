@@ -6,6 +6,7 @@ import { CalendarDays, CircleQuestionMark, List } from 'lucide-react';
 import { apiRequest } from '@/common/lib/api';
 import { Notice } from '@/common/components/Notice';
 import { Calendar, CalendarDay } from '@/domain/calendar/components/Calendar';
+import { CalendarDots } from '@/domain/calendar/components/CalendarDots';
 import { CalendarRangeNav } from '@/domain/calendar/components/CalendarRangeNav';
 import {
   CalendarListSkeleton,
@@ -224,7 +225,12 @@ export function IpoCalendarSection({
             />
           }
           renderDayTitle={(day) => formatDayLabel(day.dateKey, language)}
-          countLabel={(count) => (language === 'ko' ? `${count}개` : `${count}`)}
+          renderCount={(count) => (
+            <CalendarDots
+              count={count}
+              label={language === 'ko' ? `${count}개` : `${count}`}
+            />
+          )}
           getEventKey={(event) => `${event.item.id}-${event.type}`}
           renderEvent={(event) => (
             <IpoCompactCard

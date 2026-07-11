@@ -27,9 +27,11 @@ type CalendarProps<
   renderEvent: (event: TEvent, day: TDay) => ReactNode;
   /** 좁은 화면에서 날짜 칸을 눌렀을 때 뜨는 모달의 제목. 기본은 날짜 키(YYYY-MM-DD). */
   renderDayTitle?: (day: TDay) => ReactNode;
-  /** 칸 안에 보여줄 건수 라벨. 기본은 숫자만 그대로. */
+  /** 칸 안에 보여줄 건수 라벨. 기본은 숫자만 그대로. renderCount가 있으면 무시된다. */
   countLabel?: (count: number) => string;
   countClassName?: string;
+  /** 건수를 숫자 배지 대신 직접 그리고 싶을 때 (예: 점 인디케이터). 날짜 아래에 표시된다. */
+  renderCount?: (count: number, day: TDay) => ReactNode;
   gridClassName?: string;
   className?: string;
 };
@@ -54,6 +56,7 @@ export function Calendar<
   renderDayTitle,
   countLabel = (count) => `${count}`,
   countClassName = 'bg-primary/10 text-primary',
+  renderCount,
   gridClassName,
   className,
 }: CalendarProps<TEvent, TDay>) {
@@ -106,14 +109,18 @@ export function Calendar<
           );
 
           const countBadge = hasEvents ? (
-            <span
-              className={cn(
-                'rounded-full px-1.5 py-0.5 text-[10px] font-semibold md:text-xs',
-                countClassName,
-              )}
-            >
-              {countLabel(day.events.length)}
-            </span>
+            renderCount ? (
+              renderCount(day.events.length, day)
+            ) : (
+              <span
+                className={cn(
+                  'rounded-full px-1.5 py-0.5 text-[10px] font-semibold md:text-xs',
+                  countClassName,
+                )}
+              >
+                {countLabel(day.events.length)}
+              </span>
+            )
           ) : null;
 
           return (
@@ -146,10 +153,17 @@ export function Calendar<
                 </button>
               ) : null}
 
-              <div className="flex shrink-0 items-center justify-between gap-1">
-                {dayNumber}
-                {countBadge}
-              </div>
+              {renderCount ? (
+                <div className="flex shrink-0 flex-col items-start gap-1">
+                  {dayNumber}
+                  {countBadge}
+                </div>
+              ) : (
+                <div className="flex shrink-0 items-center justify-between gap-1">
+                  {dayNumber}
+                  {countBadge}
+                </div>
+              )}
 
               {day.disabled ? null : (
                 <div className="mt-1.5 hidden min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden md:mt-2 md:flex">
