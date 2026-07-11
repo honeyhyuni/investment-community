@@ -23,9 +23,9 @@ type CalendarProps<
   /** 달력 위, notice 아래에 표시할 네비게이션/필터 영역. */
   nav?: ReactNode;
   getEventKey: (event: TEvent, day: TDay) => string;
-  /** 카드 하나를 그린다. 날짜 칸을 눌렀을 때 뜨는 모달 안에서 쓰인다. */
+  /** 카드 하나를 그린다. PC에서는 칸 안에 직접, 좁은 화면에서는 날짜 클릭 시 모달 안에서 쓰인다. */
   renderEvent: (event: TEvent, day: TDay) => ReactNode;
-  /** 날짜 칸을 눌렀을 때 뜨는 모달의 제목. 기본은 날짜 키(YYYY-MM-DD). */
+  /** 좁은 화면에서 날짜 칸을 눌렀을 때 뜨는 모달의 제목. 기본은 날짜 키(YYYY-MM-DD). */
   renderDayTitle?: (day: TDay) => ReactNode;
   /** 칸 안에 보여줄 건수 라벨. 기본은 숫자만 그대로. */
   countLabel?: (count: number) => string;
@@ -34,13 +34,11 @@ type CalendarProps<
   className?: string;
 };
 
-const CELL_BASE_CLASS =
-  'flex h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-md border p-1 sm:h-20 sm:p-2';
-
 /**
  * 공모주 달력 / 실적 발표 달력이 공유하는 요일 정렬 월간 그리드.
- * 칸은 폭이 좁아져도 세로로 길어지지 않도록 고정 높이를 쓰고, 날짜와 건수만 보여준다.
- * 일정이 있는 칸을 누르면 그날의 이벤트 목록을 모달로 보여준다. 카드 디자인은 renderEvent가 결정한다.
+ * PC 폭(sm 이상)에서는 칸 안에 카드가 직접 나열되고 넘치면 칸 내부에서 스크롤된다.
+ * 좁은 화면(sm 미만)에서는 칸 비율이 깨지는 걸 막기 위해 날짜와 건수만 보여주고,
+ * 칸을 누르면 그날 이벤트 목록을 모달로 보여준다. 카드 디자인은 renderEvent가 결정한다.
  */
 export function Calendar<
   TEvent,
@@ -87,18 +85,6 @@ export function Calendar<
           const isToday = day.dateKey === todayKey;
           const hasEvents = !day.disabled && day.events.length > 0;
 
-          const cellClassName = cn(
-            CELL_BASE_CLASS,
-            day.disabled
-              ? 'border-border/50 bg-surface/60'
-              : day.inCurrentMonth
-                ? 'border-border bg-surface-muted'
-                : 'border-border/60 bg-surface',
-            isToday && 'border-primary ring-1 ring-inset ring-primary',
-            hasEvents &&
-              'cursor-pointer transition-colors hover:border-primary',
-          );
-
           const dayNumber = isToday ? (
             <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white sm:size-6 sm:text-xs">
               {day.date.getDate()}
@@ -129,20 +115,53 @@ export function Calendar<
             </span>
           ) : null;
 
-          return hasEvents ? (
-            <button
+          return (
+            <div
               key={day.dateKey}
-              type="button"
-              onClick={() => setSelectedDay(day)}
-              className={cellClassName}
+              className={cn(
+                'relative flex h-16 min-w-0 flex-col rounded-md border p-1.5 sm:h-44 sm:p-3 lg:h-56',
+                day.disabled
+                  ? 'border-border/50 bg-surface/60'
+                  : day.inCurrentMonth
+                    ? 'border-border bg-surface-muted'
+                    : 'border-border/60 bg-surface',
+                isToday && 'border-primary ring-1 ring-inset ring-primary',
+              )}
             >
-              {dayNumber}
-              {countBadge}
-            </button>
-          ) : (
-            <div key={day.dateKey} className={cellClassName}>
-              {dayNumber}
-              {countBadge}
+              {/* 좁은 화면 전용: 칸 전체를 덮는 투명 버튼. PC에서는(sm~) 숨겨서 아래 카드들이
+                  직접 클릭되게 한다. */}
+              {hasEvents ? (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDay(day)}
+                  aria-label={
+                    renderDayTitle ? undefined : `${day.dateKey} (${day.events.length})`
+                  }
+                  className="absolute inset-0 z-10 rounded-md sm:hidden"
+                >
+                  {renderDayTitle ? (
+                    <span className="sr-only">{renderDayTitle(day)}</span>
+                  ) : null}
+                </button>
+              ) : null}
+
+              <div className="flex shrink-0 items-center justify-between gap-1">
+                {dayNumber}
+                {countBadge}
+              </div>
+
+              {day.disabled ? null : (
+                <div className="mt-1.5 hidden min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden sm:mt-2 sm:flex">
+                  {day.events.map((event) => (
+                    <div
+                      key={getEventKey(event, day)}
+                      className="min-w-0 shrink-0"
+                    >
+                      {renderEvent(event, day)}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
