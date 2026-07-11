@@ -156,7 +156,9 @@ export function Calendar<
               {renderCount ? (
                 <div className="flex shrink-0 flex-col items-start gap-1">
                   {dayNumber}
-                  {countBadge}
+                  {countBadge ? (
+                    <div className="flex w-full justify-center">{countBadge}</div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="flex shrink-0 items-center justify-between gap-1">
