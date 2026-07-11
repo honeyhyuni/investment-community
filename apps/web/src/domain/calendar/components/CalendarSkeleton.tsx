@@ -14,15 +14,15 @@ export function CalendarSkeleton() {
         <Skeleton className="size-8 rounded-md" />
       </div>
 
-      <div className="mt-4 grid grid-cols-7 gap-1 sm:gap-2">
+      <div className="mt-4 grid grid-cols-7 gap-1 md:gap-2">
         {Array.from({ length: 7 }).map((_, index) => (
           <Skeleton key={index} className="h-8 rounded-md" />
         ))}
       </div>
 
-      <div className="mt-2 grid grid-cols-7 gap-1 sm:gap-2">
+      <div className="mt-2 grid grid-cols-7 gap-1 md:gap-2">
         {Array.from({ length: 42 }).map((_, index) => (
-          <Skeleton key={index} className="h-16 rounded-md sm:h-20" />
+          <Skeleton key={index} className="h-16 rounded-md md:h-44 lg:h-56" />
         ))}
       </div>
     </div>

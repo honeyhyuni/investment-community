@@ -36,9 +36,10 @@ type CalendarProps<
 
 /**
  * 공모주 달력 / 실적 발표 달력이 공유하는 요일 정렬 월간 그리드.
- * PC 폭(sm 이상)에서는 칸 안에 카드가 직접 나열되고 넘치면 칸 내부에서 스크롤된다.
- * 좁은 화면(sm 미만)에서는 칸 비율이 깨지는 걸 막기 위해 날짜와 건수만 보여주고,
- * 칸을 누르면 그날 이벤트 목록을 모달로 보여준다. 카드 디자인은 renderEvent가 결정한다.
+ * PC 폭(md 이상, Market Pulse가 한 줄로 바뀌는 지점과 동일)에서는 칸 안에 카드가 직접
+ * 나열되고 넘치면 칸 내부에서 스크롤된다. 좁은 화면(md 미만)에서는 칸 비율이 깨지는 걸
+ * 막기 위해 날짜와 건수만 보여주고, 칸을 누르면 그날 이벤트 목록을 모달로 보여준다.
+ * 카드 디자인은 renderEvent가 결정한다.
  */
 export function Calendar<
   TEvent,
@@ -71,7 +72,7 @@ export function Calendar<
               <th
                 key={`${label}-${index}`}
                 scope="col"
-                className="border-b border-border bg-surface-subtle px-1 py-2 text-center text-xs font-semibold text-muted first:rounded-tl-md last:rounded-tr-md sm:text-sm"
+                className="border-b border-border bg-surface-subtle px-1 py-2 text-center text-xs font-semibold text-muted first:rounded-tl-md last:rounded-tr-md md:text-sm"
               >
                 {label}
               </th>
@@ -80,19 +81,19 @@ export function Calendar<
         </thead>
       </table>
 
-      <div className={cn('mt-2 grid grid-cols-7 gap-1 sm:gap-2', gridClassName)}>
+      <div className={cn('mt-2 grid grid-cols-7 gap-1 md:gap-2', gridClassName)}>
         {days.map((day) => {
           const isToday = day.dateKey === todayKey;
           const hasEvents = !day.disabled && day.events.length > 0;
 
           const dayNumber = isToday ? (
-            <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white sm:size-6 sm:text-xs">
+            <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white md:size-6 md:text-xs">
               {day.date.getDate()}
             </span>
           ) : (
             <span
               className={cn(
-                'text-xs font-bold sm:text-sm',
+                'text-xs font-bold md:text-sm',
                 day.disabled
                   ? 'text-muted/60'
                   : day.inCurrentMonth
@@ -107,7 +108,7 @@ export function Calendar<
           const countBadge = hasEvents ? (
             <span
               className={cn(
-                'rounded-full px-1.5 py-0.5 text-[10px] font-semibold sm:text-xs',
+                'rounded-full px-1.5 py-0.5 text-[10px] font-semibold md:text-xs',
                 countClassName,
               )}
             >
@@ -119,7 +120,7 @@ export function Calendar<
             <div
               key={day.dateKey}
               className={cn(
-                'relative flex h-16 min-w-0 flex-col rounded-md border p-1.5 sm:h-44 sm:p-3 lg:h-56',
+                'relative flex h-16 min-w-0 flex-col rounded-md border p-1.5 md:h-44 md:p-3 lg:h-56',
                 day.disabled
                   ? 'border-border/50 bg-surface/60'
                   : day.inCurrentMonth
@@ -128,7 +129,7 @@ export function Calendar<
                 isToday && 'border-primary ring-1 ring-inset ring-primary',
               )}
             >
-              {/* 좁은 화면 전용: 칸 전체를 덮는 투명 버튼. PC에서는(sm~) 숨겨서 아래 카드들이
+              {/* 좁은 화면 전용: 칸 전체를 덮는 투명 버튼. PC에서는(md~) 숨겨서 아래 카드들이
                   직접 클릭되게 한다. */}
               {hasEvents ? (
                 <button
@@ -137,7 +138,7 @@ export function Calendar<
                   aria-label={
                     renderDayTitle ? undefined : `${day.dateKey} (${day.events.length})`
                   }
-                  className="absolute inset-0 z-10 rounded-md sm:hidden"
+                  className="absolute inset-0 z-10 rounded-md md:hidden"
                 >
                   {renderDayTitle ? (
                     <span className="sr-only">{renderDayTitle(day)}</span>
@@ -151,7 +152,7 @@ export function Calendar<
               </div>
 
               {day.disabled ? null : (
-                <div className="mt-1.5 hidden min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden sm:mt-2 sm:flex">
+                <div className="mt-1.5 hidden min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden md:mt-2 md:flex">
                   {day.events.map((event) => (
                     <div
                       key={getEventKey(event, day)}
