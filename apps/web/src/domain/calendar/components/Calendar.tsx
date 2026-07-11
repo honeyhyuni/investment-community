@@ -171,7 +171,7 @@ export function Calendar<
                   aria-label={
                     renderDayTitle ? undefined : `${day.dateKey} (${day.events.length})`
                   }
-                  className="absolute inset-0 z-10 rounded-md transition-colors hover:bg-black/[0.03] active:bg-black/[0.06] md:hidden"
+                  className="absolute inset-0 z-10 cursor-pointer rounded-md transition-colors hover:bg-black/[0.03] active:bg-black/[0.06] md:hidden"
                 >
                   {renderDayTitle ? (
                     <span className="sr-only">{renderDayTitle(day)}</span>
@@ -218,7 +218,7 @@ export function Calendar<
               <button
                 type="button"
                 onClick={() => setDetailEvent(null)}
-                className="-ml-1.5 flex items-center gap-1 rounded-md py-1 pl-1.5 pr-2.5 text-base font-semibold text-foreground transition-colors hover:bg-surface-muted hover:text-primary"
+                className="-ml-1.5 flex cursor-pointer items-center gap-1 rounded-md py-1 pl-1.5 pr-2.5 text-base font-semibold text-foreground transition-colors hover:bg-surface-muted hover:text-primary"
               >
                 <ChevronLeft size={18} />
                 {renderDayTitle ? renderDayTitle(selectedDay) : selectedDay.dateKey}
