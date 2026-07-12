@@ -36,6 +36,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/common/utils/cn';
 import { apiRequest } from '@/common/lib/api';
 import { Button } from '@/common/components/Button';
+import { HoverNavigateCard } from '@/common/components/HoverNavigateCard';
 import { Modal } from '@/common/components/Modal';
 import { Notice } from '@/common/components/Notice';
 import { SectionHeader } from '@/common/components/SectionHeader';
@@ -2302,22 +2303,17 @@ function FavoriteStockCard({
   onOpen: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <HoverNavigateCard
       onClick={onOpen}
-      className="group relative block w-full cursor-pointer overflow-hidden rounded-xl border border-border bg-surface-muted p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+      label={language === 'ko' ? '종목 상세 보기' : 'View stock details'}
+      className="rounded-xl border border-border bg-surface-muted p-4 hover:border-primary/40"
     >
       <FavoriteCardContent
         stock={stock}
         language={language}
         exchangeRate={exchangeRate}
       />
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-surface/50 opacity-0 backdrop-blur-[1px] transition-opacity duration-200 group-hover:opacity-100">
-        <span className="text-sm font-semibold text-foreground">
-          {language === 'ko' ? '종목 상세 보기' : 'View stock details'}
-        </span>
-      </div>
-    </button>
+    </HoverNavigateCard>
   );
 }
 

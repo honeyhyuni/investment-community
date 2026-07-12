@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 
+import { HoverNavigateCard } from '@/common/components/HoverNavigateCard';
+import { cn } from '@/common/utils/cn';
 import { UsEarningsCalendarItem } from '@/domain/ipo/types';
 import {
   earningsSessionAccentClass,
@@ -27,16 +29,17 @@ export function EarningsCard({
   const router = useRouter();
   const accentClass = earningsSessionAccentClass(item.timeOfTheDay);
   return (
-    <button
-      type="button"
+    <HoverNavigateCard
       onClick={() =>
         router.push(`/?symbol=${encodeURIComponent(item.symbol)}&market=US`)
       }
-      className={`group relative flex w-full min-w-0 cursor-pointer items-center justify-between gap-3 overflow-hidden rounded-lg border py-3 pl-4 pr-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+      label={language === 'ko' ? '종목 상세 보기' : 'View stock details'}
+      className={cn(
+        'flex items-center justify-between gap-3 rounded-lg border py-3 pl-4 pr-3',
         highlighted
           ? 'border-primary bg-primary/10'
-          : 'border-border bg-surface hover:border-primary/40'
-      }`}
+          : 'border-border bg-surface hover:border-primary/40',
+      )}
     >
       <span
         className={`absolute inset-y-0 left-0 w-1 ${highlighted ? 'bg-primary' : accentClass}`}
@@ -66,11 +69,6 @@ export function EarningsCard({
           {formatEarningsEstimate(item, language)}
         </p>
       </div>
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-surface/50 opacity-0 backdrop-blur-[1px] transition-opacity duration-200 group-hover:opacity-100">
-        <span className="text-sm font-semibold text-foreground">
-          {language === 'ko' ? '종목 상세 보기' : 'View stock details'}
-        </span>
-      </div>
-    </button>
+    </HoverNavigateCard>
   );
 }
