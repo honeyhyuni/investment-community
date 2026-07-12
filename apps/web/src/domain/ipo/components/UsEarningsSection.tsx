@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, Star } from 'lucide-react';
 
 import { apiRequest } from '@/common/lib/api';
@@ -57,7 +58,12 @@ export function UsEarningsSection({
   const loadStockSymbols = useMarketDataStore(
     (state) => state.loadStockSymbols,
   );
-  const [view, setView] = useState<EarningsView>('daily');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawUrlView = searchParams.get('view');
+  const urlView: EarningsView =
+    rawUrlView === 'weekly' || rawUrlView === 'monthly' ? rawUrlView : 'daily';
+  const [view, setView] = useState<EarningsView>(urlView);
   const [anchorDate, setAnchorDate] = useState(() => startOfDay(new Date()));
   const [query, setQuery] = useState('');
   const [myCalendarOnly, setMyCalendarOnly] = useState(false);
@@ -93,6 +99,18 @@ export function UsEarningsSection({
       .slice(0, 8)
       .map(({ item }) => item);
   }, [effectiveQuery, highlightedSymbol, usSymbols]);
+
+  useEffect(() => {
+    setView(urlView);
+  }, [urlView]);
+
+  function changeView(nextView: EarningsView) {
+    setView(nextView);
+    setAnchorDate(startOfDay(new Date()));
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('view', nextView);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
 
   useEffect(() => {
     if (accessToken) {
@@ -269,10 +287,7 @@ export function UsEarningsSection({
             },
           ]}
           value={view}
-          onChange={(nextView) => {
-            setView(nextView);
-            setAnchorDate(startOfDay(new Date()));
-          }}
+          onChange={changeView}
         />
         <button
           type="button"
