@@ -1238,7 +1238,7 @@ function PortfolioSection({
                   <div
                     ref={allocationScrollRef}
                     onScroll={updateAllocationScrollHint}
-                    className="grid h-80 content-start gap-2 overflow-y-auto pr-1"
+                    className="flex h-80 flex-col gap-2 overflow-y-auto pr-1"
                   >
                     {sortedRows.map((row) => (
                       <HoverNavigateCard
@@ -1249,7 +1249,7 @@ function PortfolioSection({
                         label={
                           language === 'ko' ? '종목 상세 보기' : 'View stock details'
                         }
-                        className="flex items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2 hover:border-primary/50"
+                        className="flex shrink-0 items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2 hover:border-primary/50"
                       >
                         <div className="flex min-w-0 items-center gap-2">
                           <span
