@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, Star } from 'lucide-react';
 
 import { apiRequest } from '@/common/lib/api';
+import { InfoHint } from '@/common/components/InfoHint';
 import { Notice } from '@/common/components/Notice';
 import { useMarketDataStore } from '@/common/stores/market-data';
 import { StockSymbol } from '@/common/types';
@@ -275,7 +276,13 @@ export function UsEarningsSection({
     <div className="pt-4">
       {error ? <Notice error={error} /> : null}
 
-      <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+      <InfoHint>
+        {language === 'ko'
+          ? '지난달 1일부터 최대 3개월 후까지의 미국 실적 발표 일정을 제공합니다. 매일 새벽 3시 20분에 갱신됩니다.'
+          : 'Shows US earnings schedules from the 1st of last month up to about 3 months ahead. Updated daily at 3:20 AM.'}
+      </InfoHint>
+
+      <div className="mt-4 flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <ViewToggle<EarningsView>
           aria-label={language === 'ko' ? '실적 기간' : 'Earnings range'}
           options={[
