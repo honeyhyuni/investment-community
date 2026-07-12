@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { CalendarDays, CircleQuestionMark, ExternalLink, List } from 'lucide-react';
 
 import { apiRequest } from '@/common/lib/api';
@@ -52,13 +53,28 @@ export function IpoCalendarSection({
   accessToken: string | null;
   language: 'en' | 'ko';
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlViewMode: IpoViewMode =
+    searchParams.get('view') === 'calendar' ? 'calendar' : 'list';
   const [items, setItems] = useState<IpoCalendarItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [anchorMonth, setAnchorMonth] = useState(() => startOfMonth(new Date()));
   const [selectedItem, setSelectedItem] = useState<IpoCalendarItem | null>(null);
-  const [viewMode, setViewMode] = useState<IpoViewMode>('list');
+  const [viewMode, setViewMode] = useState<IpoViewMode>(urlViewMode);
   const [selectedUnderwriters, setSelectedUnderwriters] = useState<string[]>([]);
+
+  useEffect(() => {
+    setViewMode(urlViewMode);
+  }, [urlViewMode]);
+
+  function changeViewMode(nextMode: IpoViewMode) {
+    setViewMode(nextMode);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('view', nextMode);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
 
   useEffect(() => {
     if (!accessToken) {
@@ -193,7 +209,7 @@ export function IpoCalendarSection({
             },
           ]}
           value={viewMode}
-          onChange={setViewMode}
+          onChange={changeViewMode}
         />
         <UnderwriterFilter
           options={underwriterOptions}
