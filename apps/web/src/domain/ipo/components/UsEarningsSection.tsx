@@ -376,13 +376,25 @@ export function UsEarningsSection({
             </span>
           )}
           inlineEventLimit={2}
-          renderMoreLabel={(remaining) =>
-            language === 'ko' ? `+${remaining}개 더보기` : `+${remaining} more`
+          renderMoreLabel={(_remaining, day) =>
+            language === 'ko'
+              ? `${day.events.length}개 더보기`
+              : `${day.events.length} more`
           }
           getEventKey={(item) => item.id}
           renderEvent={(item) => (
             <EarningsCompactCard
               item={item}
+              highlighted={
+                !!effectiveQuery &&
+                item.symbol.toUpperCase() === highlightedSymbol
+              }
+            />
+          )}
+          renderInlineEvent={(item) => (
+            <EarningsCompactCard
+              item={item}
+              tickerOnly
               highlighted={
                 !!effectiveQuery &&
                 item.symbol.toUpperCase() === highlightedSymbol

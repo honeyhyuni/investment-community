@@ -26,6 +26,8 @@ type CalendarProps<
   getEventKey: (event: TEvent, day: TDay) => string;
   /** 카드 하나를 그린다. PC에서는 칸 안에 직접 쓰인다. */
   renderEvent: (event: TEvent, day: TDay) => ReactNode;
+  /** PC 칸 안에 inlineEventLimit만큼 직접 나열될 때 쓰는 축약 렌더러. 없으면 renderEvent를 그대로 쓴다. */
+  renderInlineEvent?: (event: TEvent, day: TDay) => ReactNode;
   /**
    * 좁은 화면에서 날짜 목록 모달 안에 카드를 그릴 때 쓰인다. onSelect를 눌렀을 때 연결하면
    * 새 모달을 띄우지 않고 같은 모달 안에서 renderEventDetail로 전환된다. 없으면 renderEvent를 그대로 쓴다.
@@ -70,6 +72,7 @@ export function Calendar<
   nav,
   getEventKey,
   renderEvent,
+  renderInlineEvent,
   renderEventInList,
   renderEventDetail,
   renderEventDetailFooter,
@@ -192,7 +195,14 @@ export function Calendar<
                 <div className="flex shrink-0 flex-col items-start gap-1">
                   {dayNumber}
                   {countBadge ? (
-                    <div className="flex w-full justify-center">{countBadge}</div>
+                    <div
+                      className={cn(
+                        'flex w-full justify-center',
+                        inlineEventLimit && 'md:hidden',
+                      )}
+                    >
+                      {countBadge}
+                    </div>
                   ) : null}
                 </div>
               ) : (
@@ -203,7 +213,12 @@ export function Calendar<
               )}
 
               {day.disabled ? null : (
-                <div className="mt-1.5 hidden min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden md:mt-2 md:flex">
+                <div
+                  className={cn(
+                    'mt-1.5 hidden min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-x-hidden md:mt-2 md:flex',
+                    inlineEventLimit ? 'overflow-y-visible' : 'overflow-y-auto',
+                  )}
+                >
                   {(inlineEventLimit
                     ? day.events.slice(0, inlineEventLimit)
                     : day.events
@@ -212,7 +227,9 @@ export function Calendar<
                       key={getEventKey(event, day)}
                       className="min-w-0 shrink-0"
                     >
-                      {renderEvent(event, day)}
+                      {renderInlineEvent
+                        ? renderInlineEvent(event, day)
+                        : renderEvent(event, day)}
                     </div>
                   ))}
                   {inlineEventLimit && day.events.length > inlineEventLimit ? (
