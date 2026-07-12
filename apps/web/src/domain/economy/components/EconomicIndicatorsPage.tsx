@@ -1,7 +1,14 @@
 ﻿'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Activity, ExternalLink } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
+import { InfoHint } from '@/common/components/InfoHint';
 import { Notice } from '@/common/components/Notice';
 import { SectionHeader } from '@/common/components/SectionHeader';
 import { SegmentedControl } from '@/common/components/SegmentedControl';
@@ -204,6 +211,7 @@ export function EconomicIndicatorsPage() {
   const [history, setHistory] = useState<EconomicIndicator[]>([]);
   const [selected, setSelected] = useState<string>('CPIAUCSL');
   const [period, setPeriod] = useState<Period>('5Y');
+  const [indicatorsExpanded, setIndicatorsExpanded] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [error, setError] = useState('');
@@ -256,56 +264,24 @@ export function EconomicIndicatorsPage() {
   }
 
   return (
-    <div className="grid gap-4 py-4 sm:gap-6 sm:py-6">
+    <div className="grid min-w-0 max-w-full gap-4 py-4 sm:gap-6 sm:py-6">
       <SectionHeader eyebrow="FRED" title={ko ? '경제 지표' : 'Economic Indicators'} />
-      <p className="-mt-3 text-sm text-muted">
+      <InfoHint className="-mt-3">
         {ko
           ? '물가, 고용, 성장, 금리, 유동성 지표의 장기 추이를 FRED 공식 데이터로 확인합니다.'
           : 'Track long-run trends in prices, labor, growth, rates, and liquidity using official FRED data.'}
-      </p>
+      </InfoHint>
 
       {error ? <Notice message="" error={error} /> : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {latest.map((item) => {
-          const meta = META[item.seriesId];
-          const actual = Number(item.actual);
-          const previous = Number(item.previous);
-          const change = actual - previous;
-          return (
-            <button
-              key={item.seriesId}
-              type="button"
-              onClick={() => setSelected(item.seriesId)}
-              className={`rounded-lg border p-4 text-left shadow-sm transition ${
-                selected === item.seriesId
-                  ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-                  : 'border-border bg-surface hover:border-primary/40'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-primary">{meta ? (ko ? meta.categoryKo : meta.categoryEn) : item.seriesId}</p>
-                  <h2 className="mt-1 font-semibold">{ko ? meta?.ko : meta?.en}</h2>
-                </div>
-                <Activity size={18} className="text-muted" />
-              </div>
-              <p className="mt-3 text-2xl font-bold">
-                {formatValue(actual, item.seriesId)}{' '}
-                <span className="text-xs font-semibold text-muted">{ko ? meta?.unitKo : meta?.unitEn}</span>
-              </p>
-              <p className={`mt-1 text-xs font-semibold ${change >= 0 ? 'text-positive' : 'text-negative'}`}>
-                {Number.isFinite(change) ? `${change >= 0 ? '+' : ''}${formatValue(change, item.seriesId)}` : '-'}
-              </p>
-              <p className="mt-2 text-xs text-muted">
-                {ko
-                  ? `기준 ${formatDate(item.observationDate, true)} · 직전 관측값 대비`
-                  : `As of ${formatDate(item.observationDate, false)} · Change vs previous observation`}
-              </p>
-            </button>
-          );
-        })}
-      </div>
+      <IndicatorCards
+        items={latest}
+        selected={selected}
+        expanded={indicatorsExpanded}
+        ko={ko}
+        onSelect={setSelected}
+        onExpandedChange={setIndicatorsExpanded}
+      />
 
       {latest.length ? (
         <IndicatorChart
@@ -323,6 +299,209 @@ export function EconomicIndicatorsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function IndicatorCards({
+  items,
+  selected,
+  expanded,
+  ko,
+  onSelect,
+  onExpandedChange,
+}: {
+  items: EconomicIndicator[];
+  selected: string;
+  expanded: boolean;
+  ko: boolean;
+  onSelect: (seriesId: string) => void;
+  onExpandedChange: (expanded: boolean) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollHint = useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) {
+      setCanScrollLeft(false);
+      setCanScrollRight(false);
+      return;
+    }
+
+    const remainingScroll =
+      element.scrollWidth - element.clientWidth - element.scrollLeft;
+    setCanScrollLeft(element.scrollLeft > 4);
+    setCanScrollRight(remainingScroll > 4);
+  }, []);
+
+  useEffect(() => {
+    updateScrollHint();
+    window.addEventListener('resize', updateScrollHint);
+    return () => window.removeEventListener('resize', updateScrollHint);
+  }, [expanded, items.length, updateScrollHint]);
+
+  return (
+    <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-surface p-3 shadow-sm sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            {ko ? '주요 지표' : 'Key indicators'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onExpandedChange(!expanded)}
+          className="inline-flex h-9 cursor-pointer items-center gap-1 rounded-md border border-border bg-surface px-3 text-sm font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
+          aria-expanded={expanded}
+        >
+          {expanded ? (
+            <>
+              {ko ? '접기' : 'Collapse'}
+              <ChevronUp size={16} />
+            </>
+          ) : (
+            <>
+              {ko ? '펼치기' : 'Expand'}
+              <ChevronDown size={16} />
+            </>
+          )}
+        </button>
+      </div>
+
+      {expanded ? (
+        <div className="grid min-w-0 max-w-full gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((item) => (
+            <IndicatorCard
+              key={item.seriesId}
+              item={item}
+              selected={selected === item.seriesId}
+              ko={ko}
+              onSelect={() => onSelect(item.seriesId)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="relative min-w-0 max-w-full overflow-hidden">
+          <div
+            ref={scrollRef}
+            onScroll={updateScrollHint}
+            className="flex min-w-0 max-w-full gap-3 overflow-x-auto pb-1"
+          >
+            {items.map((item) => (
+              <IndicatorCard
+                key={item.seriesId}
+                item={item}
+                selected={selected === item.seriesId}
+                ko={ko}
+                onSelect={() => onSelect(item.seriesId)}
+                compact
+              />
+            ))}
+          </div>
+          <div
+            className={`pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-surface via-surface/90 to-transparent backdrop-blur-[1px] transition-opacity duration-200 ${
+              canScrollLeft ? 'opacity-100' : 'opacity-0'
+            }`}
+            aria-hidden
+          />
+          <div
+            className={`pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-surface via-surface/90 to-transparent backdrop-blur-[1px] transition-opacity duration-200 ${
+              canScrollRight ? 'opacity-100' : 'opacity-0'
+            }`}
+            aria-hidden
+          />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function IndicatorCard({
+  item,
+  selected,
+  ko,
+  onSelect,
+  compact = false,
+}: {
+  item: EconomicIndicator;
+  selected: boolean;
+  ko: boolean;
+  onSelect: () => void;
+  compact?: boolean;
+}) {
+  const meta = META[item.seriesId];
+  const actual = parseNumeric(item.actual);
+  const previous = parseNumeric(item.previous);
+  const change = actual !== null && previous !== null ? actual - previous : null;
+  const positive = change === null || change >= 0;
+  const percentChange =
+    change !== null && previous !== null && previous !== 0
+      ? (change / Math.abs(previous)) * 100
+      : null;
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`relative min-w-0 cursor-pointer overflow-hidden rounded-md border bg-surface p-4 text-left shadow-sm transition-colors duration-150 hover:border-primary hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+        compact ? 'min-w-[260px]' : ''
+      } ${
+        selected
+          ? 'border-primary bg-primary/5 shadow-md ring-2 ring-primary/35'
+          : 'border-border'
+      }`}
+    >
+      <span
+        className={`absolute inset-x-0 top-0 h-1 ${
+          positive ? 'bg-positive' : 'bg-negative'
+        }`}
+        aria-hidden
+      />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-primary">
+            {meta ? (ko ? meta.categoryKo : meta.categoryEn) : item.seriesId}
+          </p>
+          <h2 className="mt-1 truncate text-sm font-semibold text-foreground md:text-base">
+            {ko ? meta?.ko : meta?.en}
+          </h2>
+        </div>
+        <span
+          className={`grid size-8 shrink-0 place-items-center rounded-md ${
+            positive
+              ? 'bg-positive-surface text-positive'
+              : 'bg-negative-surface text-negative'
+          }`}
+        >
+          {positive ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+        </span>
+      </div>
+
+      <p className="mt-3 truncate font-mono text-xl font-semibold tabular-nums text-foreground md:text-2xl">
+        {actual === null ? '-' : formatValue(actual, item.seriesId)}
+      </p>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <p
+          className={`truncate font-mono text-xs font-semibold tabular-nums md:text-sm ${
+            positive ? 'text-positive' : 'text-negative'
+          }`}
+        >
+          {formatChange(change, percentChange, item.seriesId)}
+        </p>
+        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
+          {ko ? meta?.unitKo : meta?.unitEn}
+        </span>
+      </div>
+      <p className="mt-3 line-clamp-2 text-xs leading-5 text-muted">
+        {ko ? meta?.descriptionKo : meta?.descriptionEn}
+      </p>
+      <p className="mt-2 text-xs font-semibold text-muted">
+        {ko
+          ? `${formatDate(item.observationDate, true)} 기준`
+          : `As of ${formatDate(item.observationDate, false)}`}
+      </p>
+    </button>
   );
 }
 
@@ -389,9 +568,9 @@ function IndicatorChart({
   const lastPoint = point(Number(rows.at(-1)!.actual), rows.length - 1);
 
   return (
-    <section className="rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+    <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
+      <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
           <p className="text-xs font-semibold text-primary">{ko ? meta?.categoryKo : meta?.categoryEn}</p>
           <h2 className="mt-1 text-lg font-semibold">{ko ? meta?.ko : meta?.en}</h2>
           <p className="mt-1 text-xs text-muted">
@@ -401,26 +580,28 @@ function IndicatorChart({
             {ko ? `${meta?.unitKo} · 계절조정 여부는 FRED 원자료 기준` : `${meta?.unitEn} · Seasonal adjustment follows FRED`}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <SegmentedControl<Period>
             value={period}
             onChange={onPeriodChange}
             options={PERIODS.map((value) => ({ value, label: value === 'MAX' && ko ? '전체' : value }))}
+            className="inline-flex max-w-full flex-nowrap overflow-visible"
+            buttonClassName="flex-none px-2 text-xs sm:px-3 sm:text-sm"
           />
           <a
             href={sourceUrl}
             target="_blank"
             rel="noreferrer"
             aria-label="FRED source"
-            className="grid size-10 place-items-center rounded-md border border-border text-primary"
+            className="grid size-10 shrink-0 place-items-center rounded-md border border-border text-primary"
           >
             <ExternalLink size={16} />
           </a>
         </div>
       </div>
 
-      <div className="mt-4 overflow-x-auto">
-        <svg viewBox={`0 0 ${width} ${height}`} className="h-[360px] min-w-[700px] w-full" role="img" aria-label={ko ? `${meta?.ko} 추이 차트` : `${meta?.en} trend chart`}>
+      <div className="mt-4 max-w-full overflow-x-auto overscroll-x-contain">
+        <svg viewBox={`0 0 ${width} ${height}`} className="h-[300px] w-[700px] max-w-none sm:h-[360px] sm:w-full sm:min-w-[700px]" role="img" aria-label={ko ? `${meta?.ko} 추이 차트` : `${meta?.en} trend chart`}>
           {yTicks.map((tick) => {
             const y = top + ((max - tick) / range) * chartHeight;
             return (
@@ -466,6 +647,30 @@ function formatValue(value: number, seriesId: string) {
   return new Intl.NumberFormat('ko-KR', {
     maximumFractionDigits: ['PAYEMS', 'GDPC1', 'M1SL', 'M2SL', 'BOGMBASE', 'WALCL', 'D2WLTGAL'].includes(seriesId) ? 0 : 2,
   }).format(value);
+}
+
+function parseNumeric(value: string | null) {
+  if (value === null) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatChange(
+  change: number | null,
+  percentChange: number | null,
+  seriesId: string,
+) {
+  if (change === null) {
+    return '-';
+  }
+  const sign = change >= 0 ? '+' : '';
+  const percentText =
+    percentChange === null
+      ? ''
+      : ` (${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(2)}%)`;
+  return `${sign}${formatValue(change, seriesId)}${percentText}`;
 }
 
 function formatAxis(value: number) {

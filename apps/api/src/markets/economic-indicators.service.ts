@@ -23,6 +23,8 @@ const SERIES = [
   { id: 'D2WLTGAL', name: 'Treasury General Account', unit: 'millions USD' },
 ] as const;
 
+const UPSERT_CHUNK_SIZE = 1000;
+
 export type EconomicIndicatorListOptions = {
   limit?: number;
   seriesId?: string;
@@ -101,7 +103,12 @@ export class EconomicIndicatorsService {
           importance: 'high',
           sourceUrl: `https://fred.stlouisfed.org/series/${series.id}`,
         }));
-        await this.indicators.upsert(rows, ['seriesId', 'observationDate']);
+        for (let index = 0; index < rows.length; index += UPSERT_CHUNK_SIZE) {
+          await this.indicators.upsert(
+            rows.slice(index, index + UPSERT_CHUNK_SIZE),
+            ['seriesId', 'observationDate'],
+          );
+        }
         updated += rows.length;
       } catch (error) {
         this.logger.warn(`FRED ${series.id} refresh failed: ${error instanceof Error ? error.message : 'unknown'}`);

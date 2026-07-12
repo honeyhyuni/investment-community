@@ -12,3 +12,5 @@ redis-data
 .gstack/
 .cloudflared.*.log
 .next-dev*.log
+.DS_Store
+.claude/settings.local.json

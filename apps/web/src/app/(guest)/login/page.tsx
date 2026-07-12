@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { SessionLoading } from "@/common/components/SessionLoading";
 import { useSessionStore } from "@/common/stores/session";
 import { AuthPanel } from "@/domain/auth/components/AuthPanel";
-import { PendingPanel } from "@/domain/auth/components/PendingPanel";
 import { AuthMode } from "@/domain/auth/types";
 
 const REMEMBER_EMAIL_KEY = "rememberedEmail";
@@ -84,7 +83,7 @@ export default function LoginPage() {
   const heading = mode === "login" ? "Sign in" : "Request access";
 
   return (
-    <div className="grid flex-1 items-start gap-5 py-5 sm:py-6 lg:grid-cols-[420px_1fr]">
+    <div className="grid flex-1 place-items-center py-2 sm:py-4">
       <AuthPanel
         mode={mode}
         setMode={setMode}
@@ -103,7 +102,6 @@ export default function LoginPage() {
         loading={loading}
         submitAuth={submitAuth}
       />
-      <PendingPanel user={user} />
     </div>
   );
 }

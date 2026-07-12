@@ -137,7 +137,32 @@ Tailwind 4px 스케일 기준. 자주 쓰는 값으로 통일한다.
 
 ---
 
-## 6. 토큰 사용 & 마이그레이션 상태
+## 6. 인터랙션 패턴
+
+### 6.1 카드 → 상세 이동 호버 (`HoverNavigateCard`)
+
+클릭하면 다른 화면(주로 종목 상세)으로 이동하는 카드는 카드 전체를 버튼으로 감싸고, 호버 시
+① 살짝 떠오르는 효과(`-translate-y-0.5` + `shadow-md`) ② 블러 오버레이 + "종목 상세 보기" 라벨을
+함께 보여준다. 공통 컴포넌트: `common/components/HoverNavigateCard.tsx`.
+
+```tsx
+<HoverNavigateCard
+  onClick={() => router.push(`/?symbol=${symbol}&market=US`)}
+  label={language === 'ko' ? '종목 상세 보기' : 'View stock details'}
+  className="rounded-lg border border-border bg-surface p-4" // 카드 모양(라운드·보더·배경·내부 레이아웃)은 여기서
+>
+  {/* 카드 내용 */}
+</HoverNavigateCard>
+```
+
+- `HoverNavigateCard`는 호버 인터랙션(뜨는 효과 + 블러 오버레이)만 책임진다. 라운드 정도·보더·배경·padding·내부 레이아웃(`flex`/`block` 등)은 전부 `className`으로 넘긴다.
+- 라벨 문구는 **"종목 상세 보기" / "View stock details"** 로 고정. 다른 대상(게시글 등)으로 이동하는 카드를 새로 만들 때는 문맥에 맞게 바꾸되 이 패턴(뜨는 효과 + 블러 + 라벨)은 그대로 재사용한다.
+- 현재 사용처: 즐겨찾기 카드(`FavoritesPage.tsx`의 `FavoriteStockCard`), 실적 발표 카드(`EarningsCard.tsx`).
+- 드래그 정렬 등 버튼으로 감쌀 수 없는 카드(예: `SortableFavoriteCard`)에는 적용하지 않는다.
+
+---
+
+## 7. 토큰 사용 & 마이그레이션 상태
 
 - **단일 소스:** 모든 색은 `globals.css`의 토큰. 컴포넌트는 의미 유틸(`bg-surface`, `text-primary` …)만 사용.
 - **다크모드:** `.dark-app`(현 토글) / `.dark`에서 semantic 변수만 스왑. 신규 코드는 hex 직접 다크 분기를 만들지 말 것.
