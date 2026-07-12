@@ -24,11 +24,11 @@ export function EarningsList({
             key={date}
             className="rounded-md border border-border bg-surface-muted p-3"
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-foreground">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold leading-none text-foreground">
                 {formatDayLabel(date, language)}
               </h3>
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold leading-none text-primary">
                 {items.length}
               </span>
             </div>

@@ -282,11 +282,11 @@ export function Calendar<
                 {renderDayTitle ? renderDayTitle(selectedDay) : selectedDay.dateKey}
               </button>
             ) : (
-              <span className="flex items-center gap-2">
-                <span>
+              <span className="inline-flex items-center gap-2">
+                <span className="leading-none">
                   {renderDayTitle ? renderDayTitle(selectedDay) : selectedDay.dateKey}
                 </span>
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold leading-none text-primary">
                   {selectedDay.events.length}
                 </span>
               </span>
