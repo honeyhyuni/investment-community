@@ -193,7 +193,7 @@ export function IpoCalendarSection({
         </span>
       </div>
 
-      <div className="mt-4 flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
         <ViewToggle<IpoViewMode>
           aria-label={language === 'ko' ? '보기 방식' : 'View mode'}
           options={[
