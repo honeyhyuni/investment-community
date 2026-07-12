@@ -375,7 +375,7 @@ export function UsEarningsSection({
               {count}
             </span>
           )}
-          inlineEventLimit={2}
+          inlineEventLimit={5}
           renderMoreLabel={(_remaining, day) =>
             language === 'ko'
               ? `${day.events.length}개 더보기`

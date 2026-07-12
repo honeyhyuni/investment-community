@@ -19,15 +19,34 @@ export function EarningsCompactCard({
   tickerOnly?: boolean;
 }) {
   const router = useRouter();
+
+  if (tickerOnly) {
+    return (
+      <button
+        type="button"
+        onClick={() =>
+          router.push(`/?symbol=${encodeURIComponent(item.symbol)}&market=US`)
+        }
+        className={`flex h-full w-full min-w-0 cursor-pointer items-center justify-center gap-1 rounded-md border px-1 transition-colors ${
+          highlighted
+            ? 'border-primary bg-primary/10 text-primary'
+            : 'border-border bg-surface text-foreground hover:border-primary hover:bg-primary/5 hover:text-primary'
+        }`}
+      >
+        <span className="w-full truncate text-center text-[11px] font-bold leading-none sm:text-xs">
+          {item.symbol}
+        </span>
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
       onClick={() =>
         router.push(`/?symbol=${encodeURIComponent(item.symbol)}&market=US`)
       }
-      className={`min-w-0 cursor-pointer rounded-md border text-left transition-colors hover:border-primary hover:text-primary ${
-        tickerOnly ? 'px-2 py-1' : 'px-2 py-1.5'
-      } ${
+      className={`min-w-0 cursor-pointer rounded-md border px-2 py-1.5 text-left transition-colors hover:border-primary hover:text-primary ${
         highlighted
           ? 'border-primary bg-primary/10'
           : 'border-border bg-surface'
@@ -36,16 +55,12 @@ export function EarningsCompactCard({
       <p className="truncate text-xs font-bold text-foreground sm:text-sm">
         {item.symbol}
       </p>
-      {tickerOnly ? null : (
-        <>
-          <p className="hidden truncate text-[11px] font-semibold text-muted sm:block">
-            {item.companyName}
-          </p>
-          <p className="mt-1 truncate text-[10px] font-semibold text-primary sm:text-[11px]">
-            {formatEarningsMeta(item)}
-          </p>
-        </>
-      )}
+      <p className="hidden truncate text-[11px] font-semibold text-muted sm:block">
+        {item.companyName}
+      </p>
+      <p className="mt-1 truncate text-[10px] font-semibold text-primary sm:text-[11px]">
+        {formatEarningsMeta(item)}
+      </p>
     </button>
   );
 }

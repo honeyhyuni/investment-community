@@ -215,8 +215,10 @@ export function Calendar<
               {day.disabled ? null : (
                 <div
                   className={cn(
-                    'mt-1.5 hidden min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-x-hidden md:mt-2 md:flex',
-                    inlineEventLimit ? 'overflow-y-visible' : 'overflow-y-auto',
+                    'mt-1.5 hidden min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden md:mt-2 md:flex',
+                    inlineEventLimit
+                      ? 'gap-1 overflow-y-visible'
+                      : 'gap-1.5 overflow-y-auto',
                   )}
                 >
                   {(inlineEventLimit
@@ -225,7 +227,10 @@ export function Calendar<
                   ).map((event) => (
                     <div
                       key={getEventKey(event, day)}
-                      className="min-w-0 shrink-0"
+                      className={cn(
+                        'min-w-0',
+                        inlineEventLimit ? 'min-h-0 flex-1' : 'shrink-0',
+                      )}
                     >
                       {renderInlineEvent
                         ? renderInlineEvent(event, day)
@@ -236,7 +241,7 @@ export function Calendar<
                     <button
                       type="button"
                       onClick={() => openDay(day)}
-                      className="shrink-0 cursor-pointer rounded-md border border-dashed border-border px-2 py-1 text-left text-[11px] font-semibold text-muted transition-colors hover:border-primary hover:text-primary"
+                      className="flex min-h-0 flex-1 cursor-pointer items-center justify-center gap-0.5 rounded-md border border-primary/30 bg-primary/10 px-1.5 text-[11px] font-bold text-primary transition-colors hover:border-primary hover:bg-primary/20"
                     >
                       {renderMoreLabel
                         ? renderMoreLabel(day.events.length - inlineEventLimit, day)
