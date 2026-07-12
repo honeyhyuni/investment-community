@@ -585,10 +585,14 @@ function IndicatorChart({
 
   const handlePointerMove = (event: MouseEvent<SVGSVGElement>) => {
     const svg = svgRef.current;
-    if (!svg) return;
-    const rect = svg.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * width;
-    const ratio = Math.min(Math.max((x - left) / chartWidth, 0), 1);
+    const matrix = svg?.getScreenCTM()?.inverse();
+    if (!svg || !matrix) return;
+
+    const cursor = svg.createSVGPoint();
+    cursor.x = event.clientX;
+    cursor.y = event.clientY;
+    const svgPoint = cursor.matrixTransform(matrix);
+    const ratio = Math.min(Math.max((svgPoint.x - left) / chartWidth, 0), 1);
     setHoverIndex(Math.round(ratio * Math.max(rows.length - 1, 0)));
   };
 

@@ -564,7 +564,7 @@ export function GuruPortfoliosPage({
       <section className="rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
         <Link href="/gurus" className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-muted hover:text-primary">
           <ArrowLeft size={16} />
-          {ko ? "嫄곗옣 紐⑸줉" : "All gurus"}
+          {ko ? "거장 목록" : "All gurus"}
         </Link>
         <div className="mt-5 flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
