@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Star } from 'lucide-react';
 
 import { apiRequest } from '@/common/lib/api';
 import { Notice } from '@/common/components/Notice';
 import { SegmentedControl } from '@/common/components/SegmentedControl';
 import { useMarketDataStore } from '@/common/stores/market-data';
 import { StockSymbol } from '@/common/types';
+import { cn } from '@/common/utils/cn';
 import { stockSearchScore } from '@/common/utils/stock-search';
 import { Calendar, CalendarDay } from '@/domain/calendar/components/Calendar';
 import { CalendarRangeNav } from '@/domain/calendar/components/CalendarRangeNav';
@@ -256,7 +257,7 @@ export function UsEarningsSection({
     <div className="pt-4">
       {error ? <Notice error={error} /> : null}
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <SegmentedControl<EarningsView>
           aria-label={language === 'ko' ? '실적 기간' : 'Earnings range'}
           options={[
@@ -273,42 +274,46 @@ export function UsEarningsSection({
             setAnchorDate(startOfDay(new Date()));
           }}
         />
-      </div>
-
-      <label className="mt-4 inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-foreground">
-        <input
-          type="checkbox"
-          checked={myCalendarOnly}
-          onChange={(event) => {
-            setMyCalendarOnly(event.target.checked);
-            if (event.target.checked) {
+        <button
+          type="button"
+          onClick={() => {
+            const next = !myCalendarOnly;
+            setMyCalendarOnly(next);
+            if (next) {
               setQuery('');
               setSelectedEarningsSymbol('');
             }
           }}
-          className="size-4 accent-primary"
-        />
-        {language === 'ko' ? '내 관심종목·포트폴리오만' : 'My favorites and portfolio only'}
-      </label>
+          aria-pressed={myCalendarOnly}
+          className={cn(
+            'inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors',
+            myCalendarOnly
+              ? 'border-primary bg-primary/10 text-primary'
+              : 'border-border bg-surface text-muted hover:border-primary hover:text-primary',
+          )}
+        >
+          <Star size={13} fill={myCalendarOnly ? 'currentColor' : 'none'} />
+          {language === 'ko' ? '내 관심종목·포트폴리오만' : 'My favorites and portfolio only'}
+        </button>
+      </div>
 
       <div className="mt-4 flex flex-col gap-2 sm:max-w-md">
-        <label
-          className="text-xs font-semibold text-muted"
-          htmlFor="earnings-search"
-        >
-          {language === 'ko' ? '티커 또는 회사명 검색' : 'Search ticker or company'}
-        </label>
         <div className="flex h-11 items-center gap-2 rounded-md border border-border bg-surface px-3 focus-within:border-primary">
           <Search size={17} className="text-muted" />
           <input
             id="earnings-search"
+            aria-label={
+              language === 'ko' ? '티커 또는 회사명 검색' : 'Search ticker or company'
+            }
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
               setSelectedEarningsSymbol('');
             }}
             placeholder={
-              language === 'ko' ? '예: TSLA, Tesla' : 'e.g. TSLA, Tesla'
+              language === 'ko'
+                ? '티커 또는 회사명 검색 (예: TSLA, Tesla)'
+                : 'Search ticker or company (e.g. TSLA, Tesla)'
             }
             className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted"
           />

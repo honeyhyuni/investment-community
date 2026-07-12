@@ -146,7 +146,9 @@ export function Calendar<
                 day.disabled
                   ? 'text-muted/60'
                   : day.inCurrentMonth
-                    ? 'text-foreground'
+                    ? hasEvents
+                      ? 'text-foreground'
+                      : 'text-muted'
                     : 'text-muted',
               )}
             >
@@ -177,7 +179,9 @@ export function Calendar<
                 day.disabled
                   ? 'border-border/50 bg-surface/60'
                   : day.inCurrentMonth
-                    ? 'border-border bg-surface-muted'
+                    ? hasEvents
+                      ? 'border-border bg-surface-muted'
+                      : 'border-border/70 bg-surface'
                     : 'border-border/60 bg-surface',
                 isToday && 'border-primary ring-1 ring-inset ring-primary',
               )}
