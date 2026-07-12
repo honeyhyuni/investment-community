@@ -1,4 +1,4 @@
-﻿import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -25,12 +25,20 @@ const SERIES = [
 
 const UPSERT_CHUNK_SIZE = 1000;
 
+export type EconomicIndicatorTransform = 'raw' | 'mom' | 'yoy';
+
 export type EconomicIndicatorListOptions = {
   limit?: number;
   seriesId?: string;
   start?: string;
   end?: string;
   latest?: boolean;
+  transform?: EconomicIndicatorTransform;
+};
+
+export type EconomicIndicatorResponse = EconomicIndicatorEntity & {
+  transform: EconomicIndicatorTransform;
+  valueUnit: string;
 };
 
 @Injectable()
@@ -43,7 +51,12 @@ export class EconomicIndicatorsService {
     private readonly indicators: Repository<EconomicIndicatorEntity>,
   ) {}
 
-  async list(options: EconomicIndicatorListOptions = {}): Promise<EconomicIndicatorEntity[]> {
+  async list(options: EconomicIndicatorListOptions = {}): Promise<EconomicIndicatorResponse[]> {
+    const transform = this.normalizeTransform(options.transform);
+    if (transform !== 'raw') {
+      return this.listFredTransformed({ ...options, transform });
+    }
+
     const limit = Math.min(Math.max(options.limit ?? 5000, 1), 50000);
     const query = this.indicators.createQueryBuilder('indicator');
 
@@ -58,18 +71,20 @@ export class EconomicIndicatorsService {
     }
 
     if (options.latest) {
-      return query
+      const rows = await query
         .distinctOn(['indicator.seriesId'])
         .orderBy('indicator.seriesId', 'ASC')
         .addOrderBy('indicator.observationDate', 'DESC')
         .getMany();
+      return rows.map((row) => this.withTransformMeta(row, 'raw'));
     }
 
-    return query
+    const rows = await query
       .orderBy('indicator.observationDate', 'DESC')
       .addOrderBy('indicator.name', 'ASC')
       .take(limit)
       .getMany();
+    return rows.map((row) => this.withTransformMeta(row, 'raw'));
   }
 
   @Cron('0 15 7 * * 1-5', { timeZone: 'Asia/Seoul' })
@@ -115,5 +130,73 @@ export class EconomicIndicatorsService {
       }
     }
     return { updated, skipped: false };
+  }
+  private async listFredTransformed(
+    options: EconomicIndicatorListOptions & { transform: Exclude<EconomicIndicatorTransform, 'raw'> },
+  ): Promise<EconomicIndicatorResponse[]> {
+    const seriesId = options.seriesId?.trim();
+    const apiKey = this.config.get<string>('FRED_API_KEY')?.trim();
+    if (!seriesId || !apiKey) return [];
+
+    const series = SERIES.find((item) => item.id === seriesId);
+    const limit = Math.min(Math.max(options.limit ?? 5000, 1), 100000);
+    const url = new URL('https://api.stlouisfed.org/fred/series/observations');
+    url.searchParams.set('series_id', seriesId);
+    url.searchParams.set('api_key', apiKey);
+    url.searchParams.set('file_type', 'json');
+    url.searchParams.set('sort_order', 'desc');
+    url.searchParams.set('limit', String(limit));
+    url.searchParams.set('units', options.transform === 'mom' ? 'pch' : 'pc1');
+    if (options.start) url.searchParams.set('observation_start', options.start);
+    if (options.end) url.searchParams.set('observation_end', options.end);
+
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const body = (await response.json()) as {
+        observations?: Array<{ date: string; value: string }>;
+      };
+      const values = (body.observations ?? []).filter(
+        (row) => row.value !== '.' && Number.isFinite(Number(row.value)),
+      );
+
+      return values.map((value, index) => ({
+        id: `${seriesId}-${options.transform}-${value.date}`,
+        seriesId,
+        name: series?.name ?? seriesId,
+        country: 'US',
+        observationDate: value.date,
+        actual: value.value,
+        previous: index < values.length - 1 ? values[index + 1].value : null,
+        expected: null,
+        unit: 'percent',
+        importance: 'high',
+        sourceUrl: `https://fred.stlouisfed.org/series/${seriesId}`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        transform: options.transform,
+        valueUnit: 'percent',
+      }));
+    } catch (error) {
+      this.logger.warn(`FRED ${seriesId} ${options.transform} fetch failed: ${error instanceof Error ? error.message : 'unknown'}`);
+      return [];
+    }
+  }
+
+  private withTransformMeta(
+    row: EconomicIndicatorEntity,
+    transform: EconomicIndicatorTransform,
+  ): EconomicIndicatorResponse {
+    return {
+      ...row,
+      transform,
+      valueUnit: row.unit,
+    };
+  }
+
+  private normalizeTransform(
+    transform?: EconomicIndicatorTransform,
+  ): EconomicIndicatorTransform {
+    return transform === 'mom' || transform === 'yoy' ? transform : 'raw';
   }
 }

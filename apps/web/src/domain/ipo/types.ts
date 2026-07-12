@@ -11,6 +11,8 @@ export type EconomicIndicator = {
   importance: string;
   sourceUrl: string;
   updatedAt: string;
+  transform?: 'raw' | 'mom' | 'yoy';
+  valueUnit?: string;
 };
 export type IpoCalendarItem = {
   id: string;

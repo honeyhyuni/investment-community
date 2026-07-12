@@ -1,4 +1,4 @@
-﻿import {
+import {
   Body,
   Controller,
   Delete,
@@ -45,8 +45,11 @@ import {
   type GuruConsensusResponse,
   type GuruSummaryResponse,
 } from './guru-portfolios.service';
-import { EconomicIndicatorsService } from './economic-indicators.service';
-import { EconomicIndicatorEntity } from './economic-indicator.entity';
+import {
+  EconomicIndicatorsService,
+  type EconomicIndicatorResponse,
+  type EconomicIndicatorTransform,
+} from './economic-indicators.service';
 
 @Controller('markets')
 @UseGuards(JwtAuthGuard)
@@ -241,13 +244,15 @@ export class MarketsController {
     @Query('start') start?: string,
     @Query('end') end?: string,
     @Query('latest') latest?: string,
-  ): Promise<EconomicIndicatorEntity[]> {
+    @Query('transform') transform?: EconomicIndicatorTransform,
+  ): Promise<EconomicIndicatorResponse[]> {
     return this.economicIndicatorsService.list({
       limit: limit ? Number(limit) : undefined,
       seriesId,
       start,
       end,
       latest: latest === 'true',
+      transform,
     });
   }
 
