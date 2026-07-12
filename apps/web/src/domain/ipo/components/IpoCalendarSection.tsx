@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { CalendarDays, CircleQuestionMark, ExternalLink, List } from 'lucide-react';
+import { CalendarDays, ExternalLink, List } from 'lucide-react';
 
+import { InfoHint } from '@/common/components/InfoHint';
 import { apiRequest } from '@/common/lib/api';
 import { Notice } from '@/common/components/Notice';
 import { Calendar, CalendarDay } from '@/domain/calendar/components/Calendar';
@@ -184,14 +185,11 @@ export function IpoCalendarSection({
     <div>
       {error ? <Notice error={error} /> : null}
 
-      <div className="mt-4 flex items-start gap-1.5 rounded-md bg-surface-subtle px-3 py-2 text-xs font-bold text-muted">
-        <CircleQuestionMark size={14} className="mt-0.5 shrink-0" />
-        <span>
-          {language === 'ko'
-            ? `오늘부터 ${IPO_WINDOW_DAYS}일간의 공모주 청약·상장 일정만 제공합니다. DART 공시 기준으로 매일 새벽 3시에 갱신됩니다.`
-            : `Only shows IPO subscription/listing schedules for the next ${IPO_WINDOW_DAYS} days from today. Updated daily at 3 AM from DART disclosures.`}
-        </span>
-      </div>
+      <InfoHint className="mt-4">
+        {language === 'ko'
+          ? `오늘부터 ${IPO_WINDOW_DAYS}일간의 공모주 청약·상장 일정만 제공합니다. DART 공시 기준으로 매일 새벽 3시에 갱신됩니다.`
+          : `Only shows IPO subscription/listing schedules for the next ${IPO_WINDOW_DAYS} days from today. Updated daily at 3 AM from DART disclosures.`}
+      </InfoHint>
 
       <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
         <ViewToggle<IpoViewMode>
