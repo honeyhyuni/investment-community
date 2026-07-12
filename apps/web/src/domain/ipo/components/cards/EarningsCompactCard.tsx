@@ -5,27 +5,6 @@ import { useRouter } from 'next/navigation';
 import { UsEarningsCalendarItem } from '@/domain/ipo/types';
 import { formatEarningsMeta } from '@/domain/ipo/utils/earningsCalendar';
 
-const PRE_MARKET_KEYS = ['bmo', 'pre-market', 'premarket', 'before-market'];
-const POST_MARKET_KEYS = [
-  'amc',
-  'post-market',
-  'postmarket',
-  'after-market',
-  'after hours',
-];
-
-/** 장전/장후 발표 시점에 따라 왼쪽 액센트 바 색을 다르게 준다. */
-function getSessionAccentClass(timeOfTheDay: string | null): string {
-  const normalized = timeOfTheDay?.trim().toLowerCase();
-  if (normalized && PRE_MARKET_KEYS.includes(normalized)) {
-    return 'bg-amber-400';
-  }
-  if (normalized && POST_MARKET_KEYS.includes(normalized)) {
-    return 'bg-indigo-400';
-  }
-  return 'bg-border';
-}
-
 /**
  * 월간 달력 칸 안에 들어가는 압축 카드.
  * tickerOnly면 티커만 한 줄로 보여준다 (PC 칸 안에 직접 나열될 때 쓰는 축약형).
@@ -42,22 +21,18 @@ export function EarningsCompactCard({
   const router = useRouter();
 
   if (tickerOnly) {
-    const accentClass = getSessionAccentClass(item.timeOfTheDay);
     return (
       <button
         type="button"
         onClick={() =>
           router.push(`/?symbol=${encodeURIComponent(item.symbol)}&market=US`)
         }
-        className={`group relative flex h-full w-full min-w-0 cursor-pointer items-center overflow-hidden rounded-md border pl-2.5 pr-1.5 shadow-sm transition-colors ${
+        className={`flex h-full w-full min-w-0 cursor-pointer items-center justify-center rounded-md border px-1.5 shadow-sm transition-colors ${
           highlighted
             ? 'border-primary bg-primary/10 text-primary'
             : 'border-border bg-surface text-foreground hover:border-primary hover:bg-primary/5 hover:text-primary'
         }`}
       >
-        <span
-          className={`absolute inset-y-0 left-0 w-1 ${highlighted ? 'bg-primary' : accentClass}`}
-        />
         <span className="w-full truncate text-center text-[11px] font-bold tracking-wide leading-none sm:text-xs">
           {item.symbol}
         </span>
