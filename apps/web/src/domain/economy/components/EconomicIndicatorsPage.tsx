@@ -205,6 +205,7 @@ const META: Record<string, IndicatorMeta> = {
 
 const PERIODS: Period[] = ['1M', '3M', '6M', '1Y', '5Y', '10Y', 'MAX'];
 const TRANSFORMS: Transform[] = ['raw', 'mom', 'yoy'];
+const TRANSFORMABLE_SERIES = new Set<string>(['CPIAUCSL', 'PCEPI', 'PCEPILFE', 'PPIACO', 'GDPC1']);
 
 export function EconomicIndicatorsPage() {
   const accessToken = useSessionStore((state) => state.accessToken);
@@ -218,6 +219,8 @@ export function EconomicIndicatorsPage() {
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [error, setError] = useState('');
+  const selectedSupportsTransform = supportsIndicatorTransform(selected);
+  const effectiveTransform = selectedSupportsTransform ? transform : 'raw';
 
   useEffect(() => {
     if (!accessToken) return;
@@ -231,13 +234,18 @@ export function EconomicIndicatorsPage() {
   useEffect(() => {
     if (!accessToken || !selected) return;
     setLoadingHistory(true);
-    const params = new URLSearchParams({ seriesId: selected, limit: '50000', transform });
+    const params = new URLSearchParams({ seriesId: selected, limit: '50000', transform: effectiveTransform });
     apiRequest<EconomicIndicator[]>(`/markets/calendar/economic/us?${params.toString()}`, 'GET', { accessToken })
       .then(setHistory)
       .catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load indicator history.'))
       .finally(() => setLoadingHistory(false));
-  }, [accessToken, selected, transform]);
+  }, [accessToken, effectiveTransform, selected]);
 
+  useEffect(() => {
+    if (!selectedSupportsTransform && transform !== 'raw') {
+      setTransform('raw');
+    }
+  }, [selectedSupportsTransform, transform]);
   const latest = useMemo(() => {
     const map = new Map<string, EconomicIndicator>();
     summary.forEach((item) => {
@@ -292,8 +300,9 @@ export function EconomicIndicatorsPage() {
           seriesId={selected}
           period={period}
           onPeriodChange={setPeriod}
-          transform={transform}
+          transform={effectiveTransform}
           onTransformChange={setTransform}
+          supportsTransform={selectedSupportsTransform}
           ko={ko}
           loading={loadingHistory}
           sourceUrl={latest.find((item) => item.seriesId === selected)?.sourceUrl ?? `https://fred.stlouisfed.org/series/${selected}`}
@@ -517,6 +526,7 @@ function IndicatorChart({
   onPeriodChange,
   transform,
   onTransformChange,
+  supportsTransform,
   ko,
   loading,
   sourceUrl,
@@ -527,6 +537,7 @@ function IndicatorChart({
   onPeriodChange: (value: Period) => void;
   transform: Transform;
   onTransformChange: (value: Transform) => void;
+  supportsTransform: boolean;
   ko: boolean;
   loading: boolean;
   sourceUrl: string;
@@ -616,16 +627,18 @@ function IndicatorChart({
           </p>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <SegmentedControl<Transform>
-            value={transform}
-            onChange={onTransformChange}
-            options={TRANSFORMS.map((value) => ({
-              value,
-              label: value === 'raw' ? (ko ? '원자료' : 'Raw') : value === 'mom' ? (ko ? '전기대비 %' : 'Prev. %') : (ko ? 'YoY %' : 'YoY %'),
-            }))}
-            className="inline-flex max-w-full flex-nowrap overflow-visible"
-            buttonClassName="flex-none px-2 text-xs sm:px-3 sm:text-sm"
-          />
+          {supportsTransform ? (
+            <SegmentedControl<Transform>
+              value={transform}
+              onChange={onTransformChange}
+              options={TRANSFORMS.map((value) => ({
+                value,
+                label: value === 'raw' ? (ko ? '원자료' : 'Raw') : value === 'mom' ? (ko ? '전기대비 %' : 'Prev. %') : (ko ? 'YoY %' : 'YoY %'),
+              }))}
+              className="inline-flex max-w-full flex-nowrap overflow-visible"
+              buttonClassName="flex-none px-2 text-xs sm:px-3 sm:text-sm"
+            />
+          ) : null}
           <SegmentedControl<Period>
             value={period}
             onChange={onPeriodChange}
@@ -705,6 +718,10 @@ function IndicatorChart({
     </section>
   );
 }
+function supportsIndicatorTransform(seriesId: string) {
+  return TRANSFORMABLE_SERIES.has(seriesId);
+}
+
 function seriesOrder(seriesId: string) {
   const index = SERIES_ORDER.indexOf(seriesId as (typeof SERIES_ORDER)[number]);
   return index === -1 ? Number.MAX_SAFE_INTEGER : index;
