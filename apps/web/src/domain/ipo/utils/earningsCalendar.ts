@@ -85,3 +85,18 @@ export function formatEarningsEstimate(
   }
   return `${item.estimate.toFixed(2)} ${item.currency}`;
 }
+
+/**
+ * 장전/장후에 따른 왼쪽 액센트 바 색. formatEarningsSession으로 이미 텍스트 라벨을 보여주는
+ * 카드에서만 쓴다 (색만으로는 의미가 안 드러나서, 라벨이 없는 축약 카드에는 쓰지 않는다).
+ */
+export function earningsSessionAccentClass(timeOfTheDay: string | null): string {
+  const normalized = timeOfTheDay?.trim().toLowerCase();
+  if (normalized === 'bmo' || normalized === 'pre-market' || normalized === 'premarket') {
+    return 'bg-amber-400';
+  }
+  if (normalized === 'amc' || normalized === 'post-market' || normalized === 'postmarket') {
+    return 'bg-indigo-400';
+  }
+  return 'bg-border';
+}

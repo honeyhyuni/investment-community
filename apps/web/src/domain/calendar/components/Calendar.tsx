@@ -281,10 +281,15 @@ export function Calendar<
                 <ChevronLeft size={18} />
                 {renderDayTitle ? renderDayTitle(selectedDay) : selectedDay.dateKey}
               </button>
-            ) : renderDayTitle ? (
-              renderDayTitle(selectedDay)
             ) : (
-              selectedDay.dateKey
+              <span className="flex items-center gap-2">
+                <span>
+                  {renderDayTitle ? renderDayTitle(selectedDay) : selectedDay.dateKey}
+                </span>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                  {selectedDay.events.length}
+                </span>
+              </span>
             )
           ) : (
             ''
