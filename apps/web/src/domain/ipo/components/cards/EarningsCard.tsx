@@ -68,7 +68,7 @@ export function EarningsCard({
       </div>
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-surface/50 opacity-0 backdrop-blur-[1px] transition-opacity duration-200 group-hover:opacity-100">
         <span className="text-sm font-semibold text-foreground">
-          {language === 'ko' ? '상세 보기' : 'Show detail'}
+          {language === 'ko' ? '종목 상세 보기' : 'View stock details'}
         </span>
       </div>
     </button>
