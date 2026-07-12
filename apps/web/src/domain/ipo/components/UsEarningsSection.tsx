@@ -371,10 +371,14 @@ export function UsEarningsSection({
           }
           renderDayTitle={(day) => formatDayLabel(day.dateKey, language)}
           renderCount={(count) => (
-            <span className="text-[11px] font-bold text-primary md:text-sm">
+            <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-bold text-primary md:size-6 md:text-xs">
               {count}
             </span>
           )}
+          inlineEventLimit={2}
+          renderMoreLabel={(remaining) =>
+            language === 'ko' ? `+${remaining}개 더보기` : `+${remaining} more`
+          }
           getEventKey={(item) => item.id}
           renderEvent={(item) => (
             <EarningsCompactCard

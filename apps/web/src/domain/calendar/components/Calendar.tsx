@@ -42,6 +42,13 @@ type CalendarProps<
   countClassName?: string;
   /** 건수를 숫자 배지 대신 직접 그리고 싶을 때 (예: 점 인디케이터). 날짜 아래에 표시된다. */
   renderCount?: (count: number, day: TDay) => ReactNode;
+  /**
+   * PC(md~)에서 칸 안에 카드로 직접 보여줄 최대 개수. 넘으면 나머지는 숨기고
+   * "더보기" 버튼을 눌러 날짜 목록 모달로 확인하게 한다. 기본은 제한 없음(전체 표시+스크롤).
+   */
+  inlineEventLimit?: number;
+  /** inlineEventLimit을 넘었을 때 보여줄 더보기 버튼 라벨. 기본은 "+N". */
+  renderMoreLabel?: (remainingCount: number, day: TDay) => ReactNode;
   gridClassName?: string;
   className?: string;
 };
@@ -70,6 +77,8 @@ export function Calendar<
   countLabel = (count) => `${count}`,
   countClassName = 'bg-primary/10 text-primary',
   renderCount,
+  inlineEventLimit,
+  renderMoreLabel,
   gridClassName,
   className,
 }: CalendarProps<TEvent, TDay>) {
@@ -195,7 +204,10 @@ export function Calendar<
 
               {day.disabled ? null : (
                 <div className="mt-1.5 hidden min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden md:mt-2 md:flex">
-                  {day.events.map((event) => (
+                  {(inlineEventLimit
+                    ? day.events.slice(0, inlineEventLimit)
+                    : day.events
+                  ).map((event) => (
                     <div
                       key={getEventKey(event, day)}
                       className="min-w-0 shrink-0"
@@ -203,6 +215,17 @@ export function Calendar<
                       {renderEvent(event, day)}
                     </div>
                   ))}
+                  {inlineEventLimit && day.events.length > inlineEventLimit ? (
+                    <button
+                      type="button"
+                      onClick={() => openDay(day)}
+                      className="shrink-0 cursor-pointer rounded-md border border-dashed border-border px-2 py-1 text-left text-[11px] font-semibold text-muted transition-colors hover:border-primary hover:text-primary"
+                    >
+                      {renderMoreLabel
+                        ? renderMoreLabel(day.events.length - inlineEventLimit, day)
+                        : `+${day.events.length - inlineEventLimit}`}
+                    </button>
+                  ) : null}
                 </div>
               )}
             </div>

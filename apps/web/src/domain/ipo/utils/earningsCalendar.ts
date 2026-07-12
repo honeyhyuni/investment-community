@@ -53,6 +53,10 @@ export function groupEarningsByDate(items: UsEarningsCalendarItem[]) {
     current.push(item);
     grouped.set(item.reportDate, current);
   });
+  // 심볼(ABC) 순으로 정렬해 PC 달력 칸에 앞쪽 한두 개만 보여줄 때 항상 같은 순서가 되게 한다.
+  grouped.forEach((dayItems) => {
+    dayItems.sort((a, b) => a.symbol.localeCompare(b.symbol));
+  });
   return grouped;
 }
 
