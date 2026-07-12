@@ -32,10 +32,10 @@ export function EarningsCard({
       onClick={() =>
         router.push(`/?symbol=${encodeURIComponent(item.symbol)}&market=US`)
       }
-      className={`relative flex w-full min-w-0 cursor-pointer items-center justify-between gap-3 overflow-hidden rounded-lg border py-3 pl-4 pr-3 text-left transition-colors ${
+      className={`group relative flex w-full min-w-0 cursor-pointer items-center justify-between gap-3 overflow-hidden rounded-lg border py-3 pl-4 pr-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
         highlighted
           ? 'border-primary bg-primary/10'
-          : 'border-border bg-surface hover:border-primary hover:bg-primary/5'
+          : 'border-border bg-surface hover:border-primary/40'
       }`}
     >
       <span
@@ -65,6 +65,11 @@ export function EarningsCard({
         <p className="mt-0.5 text-sm font-bold text-primary">
           {formatEarningsEstimate(item, language)}
         </p>
+      </div>
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-surface/50 opacity-0 backdrop-blur-[1px] transition-opacity duration-200 group-hover:opacity-100">
+        <span className="text-sm font-semibold text-foreground">
+          {language === 'ko' ? '상세 보기' : 'Show detail'}
+        </span>
       </div>
     </button>
   );
