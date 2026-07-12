@@ -5,7 +5,6 @@ import { Search, Star } from 'lucide-react';
 
 import { apiRequest } from '@/common/lib/api';
 import { Notice } from '@/common/components/Notice';
-import { SegmentedControl } from '@/common/components/SegmentedControl';
 import { useMarketDataStore } from '@/common/stores/market-data';
 import { StockSymbol } from '@/common/types';
 import { cn } from '@/common/utils/cn';
@@ -16,6 +15,7 @@ import {
   CalendarListSkeleton,
   CalendarSkeleton,
 } from '@/domain/calendar/components/CalendarSkeleton';
+import { ViewToggle } from '@/domain/calendar/components/ViewToggle';
 import {
   buildMonthGrid,
   dateKeysBetween,
@@ -258,7 +258,7 @@ export function UsEarningsSection({
       {error ? <Notice error={error} /> : null}
 
       <div className="flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <SegmentedControl<EarningsView>
+        <ViewToggle<EarningsView>
           aria-label={language === 'ko' ? '실적 기간' : 'Earnings range'}
           options={[
             { value: 'daily', label: language === 'ko' ? '데일리' : 'Daily' },
