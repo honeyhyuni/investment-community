@@ -282,7 +282,7 @@ export function UsEarningsSection({
           : 'Shows US earnings schedules from the 1st of last month up to about 3 months ahead. Updated daily at 3:20 AM.'}
       </InfoHint>
 
-      <div className="mt-4 flex flex-col items-start gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
         <ViewToggle<EarningsView>
           aria-label={language === 'ko' ? '실적 기간' : 'Earnings range'}
           options={[
