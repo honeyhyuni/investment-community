@@ -38,11 +38,14 @@ export function CalendarListSkeleton({
   groups = 3,
   cardsPerGroup = 3,
   cardClassName = 'h-20',
+  cardGridClassName = 'grid gap-2 sm:grid-cols-2 xl:grid-cols-3',
   boxed = false,
 }: {
   groups?: number;
   cardsPerGroup?: number;
   cardClassName?: string;
+  /** 실제 카드 그리드와 같은 반응형 브레이크포인트로 맞춘다 (IPO는 sm:, 실적은 md:). */
+  cardGridClassName?: string;
   boxed?: boolean;
 }) {
   return (
@@ -56,18 +59,13 @@ export function CalendarListSkeleton({
               : groupIndex > 0 && 'mt-6 border-t border-border pt-6',
           )}
         >
-          <div
-            className={cn(
-              'flex items-baseline gap-2',
-              boxed && 'justify-between',
-            )}
-          >
+          <div className={cn('flex gap-2', boxed ? 'items-center' : 'items-baseline')}>
             <Skeleton
               className={boxed ? 'h-5 w-28 rounded-md' : 'h-6 w-32 rounded-md'}
             />
             <Skeleton className="h-5 w-8 rounded-full" />
           </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <div className={cn('mt-3', cardGridClassName)}>
             {Array.from({ length: cardsPerGroup }).map((_, cardIndex) => (
               <Skeleton
                 key={cardIndex}

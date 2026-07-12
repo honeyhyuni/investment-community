@@ -353,7 +353,12 @@ export function UsEarningsSection({
         view === 'monthly' ? (
           <CalendarSkeleton />
         ) : (
-          <CalendarListSkeleton boxed cardClassName="h-16" />
+          <CalendarListSkeleton
+            boxed
+            groups={view === 'daily' ? 1 : 5}
+            cardClassName="h-20"
+            cardGridClassName="grid gap-2 md:grid-cols-2 xl:grid-cols-3"
+          />
         )
       ) : view === 'monthly' ? (
         <Calendar<UsEarningsCalendarItem, EarningsGridDay>
@@ -427,7 +432,11 @@ export function UsEarningsSection({
             nextAriaLabel={language === 'ko' ? '다음 기간' : 'Next period'}
           />
           <EarningsList
-            dates={dateKeysBetween(range.from, range.to, { skipWeekends: true })}
+            dates={dateKeysBetween(range.from, range.to, {
+              // 데일리 탭은 주말이어도 그 날짜 자체를 보여줘야 Empty 상태가 뜬다.
+              // 스킵해버리면 dates가 통째로 비어서 아무것도 안 뜨는 빈 화면이 됐었다.
+              skipWeekends: view !== 'daily',
+            })}
             groupedItems={groupedItems}
             language={language}
             highlightedSymbol={highlightedSymbol}

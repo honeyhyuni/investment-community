@@ -36,6 +36,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/common/utils/cn';
 import { apiRequest } from '@/common/lib/api';
 import { Button } from '@/common/components/Button';
+import { EmptyState } from '@/common/components/EmptyState';
 import { HoverNavigateCard } from '@/common/components/HoverNavigateCard';
 import { Modal } from '@/common/components/Modal';
 import { Notice } from '@/common/components/Notice';
@@ -432,19 +433,14 @@ function WatchlistSection({
           </div>
         )
       ) : (
-        <div className="mt-4 rounded-md border border-dashed border-border bg-surface-muted px-4 py-12 text-center">
-          <Star
-            size={28}
-            className="mx-auto text-[#f4b400]"
-            fill="currentColor"
-          />
-          <p className="mt-3 text-base font-semibold text-foreground">
-            아직 관심종목이 없습니다.
-          </p>
-          <p className="mt-1 text-sm text-muted">
-            종목 상세에서 별 아이콘을 눌러 관심종목에 추가하세요.
-          </p>
-        </div>
+        <EmptyState
+          className="mt-4 py-12"
+          icon={Star}
+          iconClassName="text-[#f4b400]"
+          iconFill="currentColor"
+          title="아직 관심종목이 없습니다."
+          body="종목 상세에서 별 아이콘을 눌러 관심종목에 추가하세요."
+        />
       )}
     </div>
   );
@@ -1331,18 +1327,19 @@ function PortfolioSection({
 
         </>
       ) : (
-        <div className="mt-4 rounded-md border border-dashed border-border bg-surface-muted px-4 py-12 text-center">
-          <PieChart size={32} className="mx-auto text-primary" />
-          <p className="mt-3 text-base font-semibold text-foreground">
-            {language === 'ko'
-              ? '아직 포트폴리오가 없습니다.'
-              : 'No portfolios yet.'}
-          </p>
-          <p className="mt-1 text-sm text-muted">
-            {language === 'ko'
+        <EmptyState
+          className="mt-4 py-12"
+          icon={PieChart}
+          iconSize={32}
+          title={
+            language === 'ko' ? '아직 포트폴리오가 없습니다.' : 'No portfolios yet.'
+          }
+          body={
+            language === 'ko'
               ? '포트폴리오 추가를 눌러 종목과 보유 수량을 입력하세요.'
-              : 'Add a portfolio, then enter stocks and quantities.'}
-          </p>
+              : 'Add a portfolio, then enter stocks and quantities.'
+          }
+        >
           <Button
             variant="primary"
             size="sm"
@@ -1352,7 +1349,7 @@ function PortfolioSection({
           >
             {language === 'ko' ? '\uD3EC\uD2B8\uD3F4\uB9AC\uC624 \uCD94\uAC00' : 'Add portfolio'}
           </Button>
-        </div>
+        </EmptyState>
       )}
     </div>
   );
