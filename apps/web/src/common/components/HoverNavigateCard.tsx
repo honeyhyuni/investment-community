@@ -14,11 +14,16 @@ import { cn } from '@/common/utils/cn';
  */
 export function HoverNavigateCard({
   onClick,
+  onMouseEnter,
+  onMouseLeave,
   label,
   className,
   children,
 }: {
   onClick: () => void;
+  /** 카드 밖의 다른 UI(예: 파이차트 조각)와 호버를 연동해야 할 때 쓴다. */
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
   /** 호버 시 블러 오버레이에 뜨는 라벨. 보통 "종목 상세 보기" / "View stock details". */
   label: ReactNode;
   className?: string;
@@ -28,6 +33,8 @@ export function HoverNavigateCard({
     <button
       type="button"
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       className={cn(
         'group relative w-full min-w-0 cursor-pointer overflow-hidden text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md',
         className,

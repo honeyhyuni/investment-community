@@ -1241,13 +1241,15 @@ function PortfolioSection({
                     className="grid h-80 content-start gap-2 overflow-y-auto pr-1"
                   >
                     {sortedRows.map((row) => (
-                      <button
+                      <HoverNavigateCard
                         key={`${row.market}-${row.symbol}`}
-                        type="button"
                         onClick={() => openStock(row)}
                         onMouseEnter={() => setHoveredSlice(row.key)}
                         onMouseLeave={() => setHoveredSlice(null)}
-                        className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2 text-left transition-colors hover:border-primary/50"
+                        label={
+                          language === 'ko' ? '종목 상세 보기' : 'View stock details'
+                        }
+                        className="flex items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2 hover:border-primary/50"
                       >
                         <div className="flex min-w-0 items-center gap-2">
                           <span
@@ -1301,7 +1303,7 @@ function PortfolioSection({
                             </p>
                           ) : null}
                         </div>
-                      </button>
+                      </HoverNavigateCard>
                     ))}
                   </div>
                   <div
