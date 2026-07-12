@@ -60,11 +60,28 @@ export function groupEarningsByDate(items: UsEarningsCalendarItem[]) {
   return grouped;
 }
 
-export function formatEarningsMeta(item: UsEarningsCalendarItem): string {
-  const estimate =
-    item.estimate !== null && item.currency
-      ? `EPS ${item.estimate.toFixed(2)} ${item.currency}`
-      : 'EPS -';
-  const time = item.timeOfTheDay || 'Time TBD';
-  return `${estimate} · ${time}`;
+/** 장전/장후 여부를 짧은 라벨로. 데일리/주간 카드, 월간 '더보기' 모달 카드가 함께 쓴다. */
+export function formatEarningsSession(
+  timeOfTheDay: string | null,
+  language: 'en' | 'ko',
+): string {
+  const normalized = timeOfTheDay?.trim().toLowerCase();
+  if (normalized === 'bmo' || normalized === 'pre-market' || normalized === 'premarket') {
+    return language === 'ko' ? '장전' : 'Pre-market';
+  }
+  if (normalized === 'amc' || normalized === 'post-market' || normalized === 'postmarket') {
+    return language === 'ko' ? '장후' : 'After-market';
+  }
+  return language === 'ko' ? '시간 미정' : 'Time TBD';
+}
+
+/** EPS 추정치 라벨. */
+export function formatEarningsEstimate(
+  item: UsEarningsCalendarItem,
+  language: 'en' | 'ko',
+): string {
+  if (item.estimate === null || !item.currency) {
+    return language === 'ko' ? '미정' : 'TBD';
+  }
+  return `${item.estimate.toFixed(2)} ${item.currency}`;
 }

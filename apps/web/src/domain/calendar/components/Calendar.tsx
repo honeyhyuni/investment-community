@@ -51,6 +51,8 @@ type CalendarProps<
   inlineEventLimit?: number;
   /** inlineEventLimit을 넘었을 때 보여줄 더보기 버튼 라벨. 기본은 "+N". */
   renderMoreLabel?: (remainingCount: number, day: TDay) => ReactNode;
+  /** 날짜 목록 모달 안 카드 목록의 레이아웃. 기본은 sm 이상에서 2열. 카드를 폭 100%로 쌓으려면 'grid gap-2' 처럼 열 지정 없이 넘긴다. */
+  eventListClassName?: string;
   gridClassName?: string;
   className?: string;
 };
@@ -82,6 +84,7 @@ export function Calendar<
   renderCount,
   inlineEventLimit,
   renderMoreLabel,
+  eventListClassName = 'grid gap-2 sm:grid-cols-2',
   gridClassName,
   className,
 }: CalendarProps<TEvent, TDay>) {
@@ -298,7 +301,7 @@ export function Calendar<
           showingDetail && detailEvent ? (
             renderEventDetail?.(detailEvent, selectedDay)
           ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className={eventListClassName}>
               {selectedDay.events.map((event) => (
                 <div key={getEventKey(event, selectedDay)} className="min-w-0">
                   {renderEventInList

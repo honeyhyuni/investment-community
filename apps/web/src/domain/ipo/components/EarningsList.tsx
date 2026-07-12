@@ -38,6 +38,7 @@ export function EarningsList({
                   <EarningsCard
                     key={item.id}
                     item={item}
+                    language={language}
                     highlighted={
                       item.symbol.toUpperCase() === highlightedSymbol
                     }

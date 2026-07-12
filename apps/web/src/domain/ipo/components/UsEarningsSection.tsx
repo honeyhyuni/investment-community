@@ -40,6 +40,7 @@ import {
 } from '@/domain/ipo/utils/earningsCalendar';
 
 import { EarningsList } from '@/domain/ipo/components/EarningsList';
+import { EarningsCard } from '@/domain/ipo/components/cards/EarningsCard';
 import { EarningsCompactCard } from '@/domain/ipo/components/cards/EarningsCompactCard';
 
 type EarningsGridDay = CalendarDay<UsEarningsCalendarItem>;
@@ -381,10 +382,12 @@ export function UsEarningsSection({
               ? `${day.events.length}개 더보기`
               : `${day.events.length} more`
           }
+          eventListClassName="grid gap-2"
           getEventKey={(item) => item.id}
           renderEvent={(item) => (
-            <EarningsCompactCard
+            <EarningsCard
               item={item}
+              language={language}
               highlighted={
                 !!effectiveQuery &&
                 item.symbol.toUpperCase() === highlightedSymbol
@@ -394,7 +397,16 @@ export function UsEarningsSection({
           renderInlineEvent={(item) => (
             <EarningsCompactCard
               item={item}
-              tickerOnly
+              highlighted={
+                !!effectiveQuery &&
+                item.symbol.toUpperCase() === highlightedSymbol
+              }
+            />
+          )}
+          renderEventInList={(item) => (
+            <EarningsCard
+              item={item}
+              language={language}
               highlighted={
                 !!effectiveQuery &&
                 item.symbol.toUpperCase() === highlightedSymbol
