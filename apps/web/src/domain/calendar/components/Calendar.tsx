@@ -126,6 +126,11 @@ export function Calendar<
         {days.map((day) => {
           const isToday = day.dateKey === todayKey;
           const hasEvents = !day.disabled && day.events.length > 0;
+          const isOverflowing = !!inlineEventLimit && day.events.length > inlineEventLimit;
+          // 더보기 버튼이 뜨는 칸도 카드 한 칸 + 더보기 버튼을 합쳐 항상 inlineEventLimit개의
+          // 자리를 채우게 해서, 이벤트가 몇 개든 카드 한 칸의 높이가 늘 똑같게 만든다.
+          const visibleEventLimit =
+            inlineEventLimit && isOverflowing ? inlineEventLimit - 1 : inlineEventLimit;
 
           const dayNumber = isToday ? (
             <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white md:size-6 md:text-xs">
@@ -215,21 +220,26 @@ export function Calendar<
               {day.disabled ? null : (
                 <div
                   className={cn(
-                    'mt-1.5 hidden min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden md:mt-2 md:flex',
+                    'mt-1.5 hidden min-h-0 min-w-0 flex-1 overflow-x-hidden md:mt-2',
                     inlineEventLimit
-                      ? 'gap-1 overflow-y-visible'
-                      : 'gap-1.5 overflow-y-auto',
+                      ? 'gap-1 overflow-y-visible md:grid'
+                      : 'gap-1.5 overflow-y-auto md:flex md:flex-col',
                   )}
+                  style={
+                    inlineEventLimit
+                      ? { gridTemplateRows: `repeat(${inlineEventLimit}, minmax(0, 1fr))` }
+                      : undefined
+                  }
                 >
-                  {(inlineEventLimit
-                    ? day.events.slice(0, inlineEventLimit)
+                  {(visibleEventLimit
+                    ? day.events.slice(0, visibleEventLimit)
                     : day.events
                   ).map((event) => (
                     <div
                       key={getEventKey(event, day)}
                       className={cn(
-                        'min-w-0',
-                        inlineEventLimit ? 'min-h-0 flex-1' : 'shrink-0',
+                        'min-w-0 min-h-0',
+                        !inlineEventLimit && 'shrink-0',
                       )}
                     >
                       {renderInlineEvent
@@ -237,15 +247,15 @@ export function Calendar<
                         : renderEvent(event, day)}
                     </div>
                   ))}
-                  {inlineEventLimit && day.events.length > inlineEventLimit ? (
+                  {isOverflowing ? (
                     <button
                       type="button"
                       onClick={() => openDay(day)}
-                      className="flex min-h-0 flex-1 cursor-pointer items-center justify-center gap-0.5 rounded-md border border-primary/30 bg-primary/10 px-1.5 text-[11px] font-bold text-primary transition-colors hover:border-primary hover:bg-primary/20"
+                      className="flex min-h-0 cursor-pointer items-center justify-center gap-0.5 rounded-md border border-primary/30 bg-primary/10 px-1.5 text-[11px] font-bold text-primary transition-colors hover:border-primary hover:bg-primary/20"
                     >
                       {renderMoreLabel
-                        ? renderMoreLabel(day.events.length - inlineEventLimit, day)
-                        : `+${day.events.length - inlineEventLimit}`}
+                        ? renderMoreLabel(day.events.length - (visibleEventLimit ?? 0), day)
+                        : `+${day.events.length - (visibleEventLimit ?? 0)}`}
                     </button>
                   ) : null}
                 </div>
