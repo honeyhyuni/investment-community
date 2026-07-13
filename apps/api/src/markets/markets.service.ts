@@ -1354,7 +1354,7 @@ export class MarketsService {
       }
     }
 
-    const [metrics, nextEarnings, usFinancials, allTimeHigh] = await Promise.all([
+    const [metrics, nextEarnings, usFinancials, range52Week, allTimeHigh] = await Promise.all([
       this.getMetrics(normalizedSymbol).catch(() => null),
       this.getNextUsEarnings(normalizedSymbol),
       this.usStockFinancials.getIfSp500(normalizedSymbol).catch((error) => {
@@ -1365,12 +1365,17 @@ export class MarketsService {
         );
         return null;
       }),
+      this.getUs52WeekRange(normalizedSymbol, quote).catch(() => null),
       this.getAllTimeHigh(normalizedSymbol).catch(() => null),
     ]);
 
     const displayMetrics = usFinancials
       ? this.buildUsSp500Metrics(usFinancials, quote.current, profile, metrics)
       : metrics;
+    if (displayMetrics && range52Week) {
+      displayMetrics['52WeekHigh'] = range52Week.high;
+      displayMetrics['52WeekLow'] = range52Week.low;
+    }
     if (displayMetrics && allTimeHigh) {
       displayMetrics['AllTimeHigh'] = allTimeHigh;
     }
@@ -2575,6 +2580,48 @@ export class MarketsService {
     return chart;
   }
 
+  private async getUs52WeekRange(
+    symbol: string,
+    quote: MarketQuote,
+  ): Promise<{ high: number; low: number } | null> {
+    const normalizedSymbol = symbol.toUpperCase().trim();
+    const cacheKey = `market:range52:us:v1:${normalizedSymbol}`;
+    const cached = await this.redis
+      .get(cacheKey)
+      .then((value) =>
+        value ? (JSON.parse(value) as { high: number; low: number }) : null,
+      )
+      .catch(() => null);
+    if (cached && cached.high > 0 && cached.low > 0) {
+      const high = Math.max(cached.high, quote.current, quote.high);
+      const lowCandidates = [cached.low, quote.current, quote.low].filter(
+        (value) => Number.isFinite(value) && value > 0,
+      );
+      return { high, low: Math.min(...lowCandidates) };
+    }
+
+    const candles = await this.getCandles(normalizedSymbol, '1Y');
+    const highs = candles
+      .map((candle) => candle.high)
+      .filter((value) => Number.isFinite(value) && value > 0);
+    const lows = candles
+      .map((candle) => candle.low)
+      .filter((value) => Number.isFinite(value) && value > 0);
+    if (!highs.length || !lows.length) return null;
+
+    const high = Math.max(...highs, quote.current, quote.high);
+    const low = Math.min(
+      ...lows,
+      ...[quote.current, quote.low].filter(
+        (value) => Number.isFinite(value) && value > 0,
+      ),
+    );
+    const range = { high, low };
+    await this.redis
+      .set(cacheKey, JSON.stringify(range), 'EX', 6 * 60 * 60)
+      .catch(() => undefined);
+    return range;
+  }
   private async getAllTimeHigh(symbol: string): Promise<number | null> {
     const normalizedSymbol = symbol.toUpperCase().trim();
     const cacheKey = `market:all-time-high:v2:${normalizedSymbol}`;
