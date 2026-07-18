@@ -1,6 +1,6 @@
-﻿'use client';
+'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -19,6 +19,7 @@ import { useSessionStore } from '@/common/stores/session';
 import type { EconomicIndicator } from '@/domain/ipo/types';
 
 type Period = '1M' | '3M' | '6M' | '1Y' | '5Y' | '10Y' | 'MAX';
+type Transform = 'raw' | 'mom' | 'yoy';
 
 type IndicatorMeta = {
   ko: string;
@@ -203,6 +204,8 @@ const META: Record<string, IndicatorMeta> = {
 };
 
 const PERIODS: Period[] = ['1M', '3M', '6M', '1Y', '5Y', '10Y', 'MAX'];
+const TRANSFORMS: Transform[] = ['raw', 'mom', 'yoy'];
+const TRANSFORMABLE_SERIES = new Set<string>(['CPIAUCSL', 'PCEPI', 'PCEPILFE', 'PPIACO', 'GDPC1']);
 
 export function EconomicIndicatorsPage() {
   const accessToken = useSessionStore((state) => state.accessToken);
@@ -211,10 +214,13 @@ export function EconomicIndicatorsPage() {
   const [history, setHistory] = useState<EconomicIndicator[]>([]);
   const [selected, setSelected] = useState<string>('CPIAUCSL');
   const [period, setPeriod] = useState<Period>('5Y');
+  const [transform, setTransform] = useState<Transform>('raw');
   const [indicatorsExpanded, setIndicatorsExpanded] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [error, setError] = useState('');
+  const selectedSupportsTransform = supportsIndicatorTransform(selected);
+  const effectiveTransform = selectedSupportsTransform ? transform : 'raw';
 
   useEffect(() => {
     if (!accessToken) return;
@@ -228,13 +234,18 @@ export function EconomicIndicatorsPage() {
   useEffect(() => {
     if (!accessToken || !selected) return;
     setLoadingHistory(true);
-    const params = new URLSearchParams({ seriesId: selected, limit: '50000' });
+    const params = new URLSearchParams({ seriesId: selected, limit: '50000', transform: effectiveTransform });
     apiRequest<EconomicIndicator[]>(`/markets/calendar/economic/us?${params.toString()}`, 'GET', { accessToken })
       .then(setHistory)
       .catch((reason) => setError(reason instanceof Error ? reason.message : 'Could not load indicator history.'))
       .finally(() => setLoadingHistory(false));
-  }, [accessToken, selected]);
+  }, [accessToken, effectiveTransform, selected]);
 
+  useEffect(() => {
+    if (!selectedSupportsTransform && transform !== 'raw') {
+      setTransform('raw');
+    }
+  }, [selectedSupportsTransform, transform]);
   const latest = useMemo(() => {
     const map = new Map<string, EconomicIndicator>();
     summary.forEach((item) => {
@@ -289,6 +300,9 @@ export function EconomicIndicatorsPage() {
           seriesId={selected}
           period={period}
           onPeriodChange={setPeriod}
+          transform={effectiveTransform}
+          onTransformChange={setTransform}
+          supportsTransform={selectedSupportsTransform}
           ko={ko}
           loading={loadingHistory}
           sourceUrl={latest.find((item) => item.seriesId === selected)?.sourceUrl ?? `https://fred.stlouisfed.org/series/${selected}`}
@@ -510,6 +524,9 @@ function IndicatorChart({
   seriesId,
   period,
   onPeriodChange,
+  transform,
+  onTransformChange,
+  supportsTransform,
   ko,
   loading,
   sourceUrl,
@@ -518,11 +535,17 @@ function IndicatorChart({
   seriesId: string;
   period: Period;
   onPeriodChange: (value: Period) => void;
+  transform: Transform;
+  onTransformChange: (value: Transform) => void;
+  supportsTransform: boolean;
   ko: boolean;
   loading: boolean;
   sourceUrl: string;
 }) {
   const meta = META[seriesId];
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const isPercentMode = transform !== 'raw';
 
   if (loading) {
     return <Skeleton className="h-[28rem]" />;
@@ -542,15 +565,15 @@ function IndicatorChart({
   const right = 28;
   const top = 26;
   const bottom = 60;
-  const values = rows.map((row) => Number(row.actual)).filter(Number.isFinite);
-  const rawMin = Math.min(...values);
-  const rawMax = Math.max(...values);
-  const padding = Math.max((rawMax - rawMin) * 0.08, Math.abs(rawMax) * 0.01, 0.1);
-  const min = rawMin - padding;
-  const max = rawMax + padding;
-  const range = Math.max(max - min, 1);
   const chartWidth = width - left - right;
   const chartHeight = height - top - bottom;
+  const values = rows.map((row) => Number(row.actual)).filter(Number.isFinite);
+  const baseMin = isPercentMode ? Math.min(...values, 0) : Math.min(...values);
+  const baseMax = isPercentMode ? Math.max(...values, 0) : Math.max(...values);
+  const padding = Math.max((baseMax - baseMin) * 0.08, Math.abs(baseMax) * 0.01, 0.1);
+  const min = baseMin - padding;
+  const max = baseMax + padding;
+  const range = Math.max(max - min, 1);
 
   const point = (value: number, index: number) => ({
     x: left + (rows.length <= 1 ? 0 : index / (rows.length - 1)) * chartWidth,
@@ -566,6 +589,23 @@ function IndicatorChart({
   const yTicks = Array.from({ length: 5 }, (_, index) => max - (index * range) / 4);
   const xIndexes = [...new Set(Array.from({ length: Math.min(6, rows.length) }, (_, index) => Math.round((index * Math.max(rows.length - 1, 0)) / Math.max(Math.min(6, rows.length) - 1, 1))))];
   const lastPoint = point(Number(rows.at(-1)!.actual), rows.length - 1);
+  const zeroY = top + ((max - 0) / range) * chartHeight;
+  const hoveredIndex = hoverIndex ?? -1;
+  const hovered = hoveredIndex >= 0 ? rows[hoveredIndex] : null;
+  const hoveredPoint = hovered ? point(Number(hovered.actual), hoveredIndex) : null;
+
+  const handlePointerMove = (event: MouseEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    const matrix = svg?.getScreenCTM()?.inverse();
+    if (!svg || !matrix) return;
+
+    const cursor = svg.createSVGPoint();
+    cursor.x = event.clientX;
+    cursor.y = event.clientY;
+    const svgPoint = cursor.matrixTransform(matrix);
+    const ratio = Math.min(Math.max((svgPoint.x - left) / chartWidth, 0), 1);
+    setHoverIndex(Math.round(ratio * Math.max(rows.length - 1, 0)));
+  };
 
   return (
     <section className="min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
@@ -577,10 +617,28 @@ function IndicatorChart({
             {ko ? meta?.descriptionKo : meta?.descriptionEn}
           </p>
           <p className="mt-1 text-xs text-muted">
-            {ko ? `${meta?.unitKo} · 계절조정 여부는 FRED 원자료 기준` : `${meta?.unitEn} · Seasonal adjustment follows FRED`}
+            {isPercentMode
+              ? ko
+                ? 'FRED 공식 변환값 · 단위 %'
+                : 'Official FRED transformed values · %'
+              : ko
+                ? `${meta?.unitKo} · 계절조정 여부는 FRED 원자료 기준`
+                : `${meta?.unitEn} · Seasonal adjustment follows FRED`}
           </p>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {supportsTransform ? (
+            <SegmentedControl<Transform>
+              value={transform}
+              onChange={onTransformChange}
+              options={TRANSFORMS.map((value) => ({
+                value,
+                label: value === 'raw' ? (ko ? '원자료' : 'Raw') : value === 'mom' ? (ko ? '전기대비 %' : 'Prev. %') : (ko ? 'YoY %' : 'YoY %'),
+              }))}
+              className="inline-flex max-w-full flex-nowrap overflow-visible"
+              buttonClassName="flex-none px-2 text-xs sm:px-3 sm:text-sm"
+            />
+          ) : null}
           <SegmentedControl<Period>
             value={period}
             onChange={onPeriodChange}
@@ -601,16 +659,27 @@ function IndicatorChart({
       </div>
 
       <div className="mt-4 max-w-full overflow-x-auto overscroll-x-contain">
-        <svg viewBox={`0 0 ${width} ${height}`} className="h-[300px] w-[700px] max-w-none sm:h-[360px] sm:w-full sm:min-w-[700px]" role="img" aria-label={ko ? `${meta?.ko} 추이 차트` : `${meta?.en} trend chart`}>
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${width} ${height}`}
+          className="h-[300px] w-[700px] max-w-none sm:h-[360px] sm:w-full sm:min-w-[700px]"
+          role="img"
+          aria-label={ko ? `${meta?.ko} 추이 차트` : `${meta?.en} trend chart`}
+          onMouseMove={handlePointerMove}
+          onMouseLeave={() => setHoverIndex(null)}
+        >
           {yTicks.map((tick) => {
             const y = top + ((max - tick) / range) * chartHeight;
             return (
               <g key={tick}>
                 <line x1={left} x2={width - right} y1={y} y2={y} stroke="currentColor" className="text-border" strokeDasharray="3 4" />
-                <text x={left - 10} y={y + 4} textAnchor="end" className="fill-muted text-[11px]">{formatAxis(tick)}</text>
+                <text x={left - 10} y={y + 4} textAnchor="end" className="fill-muted text-[11px]">{formatAxis(tick, isPercentMode)}</text>
               </g>
             );
           })}
+          {isPercentMode && zeroY >= top && zeroY <= height - bottom ? (
+            <line x1={left} x2={width - right} y1={zeroY} y2={zeroY} stroke="#64748b" strokeWidth="1.5" strokeDasharray="6 4" />
+          ) : null}
           <line x1={left} x2={left} y1={top} y2={height - bottom} stroke="currentColor" className="text-border-strong" />
           <line x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} stroke="currentColor" className="text-border-strong" />
           {xIndexes.map((index) => {
@@ -623,10 +692,22 @@ function IndicatorChart({
             );
           })}
           <text transform={`translate(18 ${(top + height - bottom) / 2}) rotate(-90)`} textAnchor="middle" className="fill-muted text-[11px]">
-            {ko ? meta?.unitKo : meta?.unitEn}
+            {isPercentMode ? '%' : ko ? meta?.unitKo : meta?.unitEn}
           </text>
           <path d={path} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
           <circle cx={lastPoint.x} cy={lastPoint.y} r="4" fill="#2563eb" />
+          {hovered && hoveredPoint ? (
+            <g pointerEvents="none">
+              <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={top} y2={height - bottom} stroke="#94a3b8" strokeDasharray="4 4" />
+              <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r="4.5" fill="#2563eb" stroke="white" strokeWidth="2" />
+              <g transform={`translate(${Math.min(Math.max(hoveredPoint.x + 12, left + 8), width - right - 162)} ${Math.max(hoveredPoint.y - 46, top + 8)})`}>
+                <rect width="154" height="42" rx="6" fill="rgba(15, 23, 42, 0.92)" />
+                <text x="10" y="16" className="fill-white text-[11px] font-semibold">{formatDate(hovered.observationDate, ko)}</text>
+                <text x="10" y="32" className="fill-white text-[12px] font-semibold">{formatChartValue(Number(hovered.actual), seriesId, isPercentMode)}</text>
+              </g>
+            </g>
+          ) : null}
+          <rect x={left} y={top} width={chartWidth} height={chartHeight} fill="transparent" />
         </svg>
       </div>
 
@@ -636,6 +717,9 @@ function IndicatorChart({
       </div>
     </section>
   );
+}
+function supportsIndicatorTransform(seriesId: string) {
+  return TRANSFORMABLE_SERIES.has(seriesId);
 }
 
 function seriesOrder(seriesId: string) {
@@ -673,10 +757,15 @@ function formatChange(
   return `${sign}${formatValue(change, seriesId)}${percentText}`;
 }
 
-function formatAxis(value: number) {
-  return Math.abs(value) >= 1000
+function formatAxis(value: number, percent = false) {
+  const formatted = Math.abs(value) >= 1000
     ? new Intl.NumberFormat('ko-KR', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
     : value.toFixed(Math.abs(value) < 10 ? 2 : 1);
+  return percent ? `${formatted}%` : formatted;
+}
+
+function formatChartValue(value: number, seriesId: string, percent = false) {
+  return percent ? `${value.toFixed(2)}%` : formatValue(value, seriesId);
 }
 
 function formatDate(value: string, ko: boolean) {

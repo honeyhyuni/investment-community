@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -244,7 +244,7 @@ function HoldingRows({
       <div className="mt-3 divide-y divide-border">
         {items.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted">
-            {ko ? "鍮꾧탳???쒖텧 ?댁뿭???놁뒿?덈떎." : "No comparable filing data."}
+            {ko ? "비교 가능한 공시 내역이 없습니다." : "No comparable filing data."}
           </p>
         ) : (
           items.map((item) => (
@@ -564,7 +564,7 @@ export function GuruPortfoliosPage({
       <section className="rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
         <Link href="/gurus" className="inline-flex cursor-pointer items-center gap-1.5 text-sm font-semibold text-muted hover:text-primary">
           <ArrowLeft size={16} />
-          {ko ? "嫄곗옣 紐⑸줉" : "All gurus"}
+          {ko ? "거장 목록" : "All gurus"}
         </Link>
         <div className="mt-5 flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
@@ -576,9 +576,9 @@ export function GuruPortfoliosPage({
             <p className="mt-1 text-sm text-muted">{detail.firmName}</p>
           </div>
           <div className="min-w-0 text-left text-sm sm:text-right">
-            <p className="font-semibold">{formatMoney(detail.totalValue)} 쨌 {detail.positionCount} {ko ? "醫낅ぉ" : "positions"}</p>
+            <p className="font-semibold">{formatMoney(detail.totalValue)} · {detail.positionCount} {ko ? "종목" : "positions"}</p>
             <p className="mt-1 text-xs text-muted">
-              {detail.reportDate ? `${quarterLabel(detail.reportDate)} ${ko ? "湲곗?" : "as of"}` : ko ? "理쒓렐 ?먮즺 ?놁쓬" : "No recent filing"}
+              {detail.reportDate ? `${quarterLabel(detail.reportDate)} ${ko ? "기준" : "as of"}` : ko ? "최근 자료 없음" : "No recent filing"}
             </p>
             <p className="mt-1 text-xs text-muted">
               {ko ? "\uB9C8\uC9C0\uB9C9 \uC218\uC9D1" : "Last collected"} {formatKstDateTime(detail.lastCollectedAt)} KST
@@ -657,8 +657,8 @@ export function GuruPortfoliosPage({
           </section>
 
           <div className="grid gap-4 lg:grid-cols-2">
-        <HoldingRows title={ko ? "理쒓렐 ?곸쐞 留ㅼ닔 Top 5" : "Top 5 recent buys"} items={detail.topBuys} positive ko={ko} />
-        <HoldingRows title={ko ? "理쒓렐 ?곸쐞 留ㅻ룄 Top 5" : "Top 5 recent sells"} items={detail.topSells} positive={false} ko={ko} />
+        <HoldingRows title={ko ? "최근 상위 매수 Top 5" : "Top 5 recent buys"} items={detail.topBuys} positive ko={ko} />
+        <HoldingRows title={ko ? "최근 상위 매도 Top 5" : "Top 5 recent sells"} items={detail.topSells} positive={false} ko={ko} />
           </div>
 
           <section className="rounded-lg border border-border bg-surface p-4 shadow-sm sm:p-5">
@@ -799,7 +799,7 @@ export function GuruPortfoliosPage({
                     </tr>
                   ))}
                   {!visibleHoldings.length ? (
-                    <tr><td colSpan={7} className="px-2 py-8 text-center text-sm font-semibold text-muted">{ko ? "議곌굔??留욌뒗 蹂댁쑀醫낅ぉ???놁뒿?덈떎." : "No holdings match the current filters."}</td></tr>
+                    <tr><td colSpan={7} className="px-2 py-8 text-center text-sm font-semibold text-muted">{ko ? "조건에 맞는 보유종목이 없습니다." : "No holdings match the current filters."}</td></tr>
                   ) : null}
                 </tbody>
               </table>
@@ -903,7 +903,7 @@ export function GuruPortfoliosPage({
         ) : (
           <div className="mt-4 grid h-64 place-items-center rounded-lg bg-surface-muted text-sm text-muted">
             <RefreshCw size={18} className="mb-2" />
-            {ko ? "理쒓렐 13F holdings ?먮즺媛 ?놁뒿?덈떎." : "No recent 13F holdings."}
+            {ko ? "최근 13F 보유종목 자료가 없습니다." : "No recent 13F holdings."}
           </div>
         )}
         <p className="mt-3 text-xs text-muted">
