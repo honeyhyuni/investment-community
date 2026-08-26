@@ -1180,13 +1180,9 @@ export class MarketsService {
 
         const multiplier = position.market === 'US' ? usdKrw : 1;
         costKrw += quantity * (Number.isFinite(averagePrice) ? averagePrice : 0) * multiplier;
-        const startedAt = Math.max(
-          cutoff,
-          Math.floor(new Date(`${position.startedAt ?? position.createdAt.toISOString().slice(0, 10)}T00:00:00Z`).getTime() / 1000),
-        );
         const candles = this.filterPerformanceCandles(
           await this.getCandles(position.symbol, period).catch(() => []),
-          startedAt,
+          cutoff,
         );
 
         return { quantity, multiplier, candles };

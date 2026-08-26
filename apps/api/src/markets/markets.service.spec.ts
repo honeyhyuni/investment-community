@@ -344,13 +344,13 @@ describe('MarketsService portfolio performance', () => {
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
       date: '2026-01-01',
-      valueKrw: 300000,
+      valueKrw: 300700,
       costKrw: 270800,
       profitRate: 0,
     });
     expect(result[0].series.portfolio).toBe(0);
     expect(result[1].valueKrw).toBe(331000);
-    expect(result[1].series.portfolio).toBeCloseTo(10.3333, 4);
+    expect(result[1].series.portfolio).toBeCloseTo(10.0765, 4);
   });
 });
 
