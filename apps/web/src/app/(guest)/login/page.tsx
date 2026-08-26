@@ -375,19 +375,19 @@ function LoginIntro() {
               key={feature.id}
               type="button"
               onClick={() => setModalFeatureId(feature.id)}
-              className="flex min-w-0 cursor-pointer items-start gap-3 rounded-lg border border-border bg-surface p-3 text-left shadow-sm transition hover:border-primary/60 hover:bg-primary/5 hover:shadow-md"
+              className="flex min-w-0 cursor-pointer items-start gap-3 rounded-lg border border-border bg-surface p-3.5 text-left shadow-sm transition hover:border-primary/60 hover:bg-primary/5 hover:shadow-md"
             >
               <span className="grid size-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
                 <Icon className="size-4" />
               </span>
               <span className="min-w-0">
-                <span className="block text-sm font-semibold text-foreground">
+                <span className="block text-base font-semibold text-foreground">
                   {feature.title}
                 </span>
-                <span className="mt-1 block text-xs leading-5 text-muted">
+                <span className="mt-1 block text-sm leading-6 text-muted">
                   {feature.description}
                 </span>
-                <span className="mt-2 block text-xs font-semibold text-primary">
+                <span className="mt-2 block text-sm font-semibold text-primary">
                   자세히 보기
                 </span>
               </span>
@@ -455,16 +455,16 @@ function FeatureModal({
               <Icon className="size-5" />
             </span>
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase text-primary">
+              <p className="text-sm font-semibold uppercase text-primary">
                 15F 주요 기능
               </p>
               <h2
                 id="feature-modal-title"
-                className="mt-1 text-2xl font-semibold text-foreground"
+                className="mt-1 text-3xl font-semibold text-foreground"
               >
                 {feature.title}
               </h2>
-              <p className="mt-1 text-sm leading-6 text-muted">
+              <p className="mt-1 text-base leading-7 text-muted">
                 {feature.description}
               </p>
             </div>
@@ -489,10 +489,10 @@ function FeatureModal({
                   className="overflow-hidden rounded-lg border border-border bg-white shadow-sm"
                 >
                   <div className="border-b border-border bg-surface px-4 py-3">
-                    <p className="text-sm font-semibold text-foreground">
+                    <p className="text-base font-semibold text-foreground">
                       {preview.label}
                     </p>
-                    <p className="mt-1 text-sm leading-6 text-muted">
+                    <p className="mt-1 text-base leading-7 text-muted">
                       {preview.comment}
                     </p>
                   </div>
@@ -513,17 +513,17 @@ function FeatureModal({
               {feature.items.map((item) => (
                 <div
                   key={item}
-                  className="rounded-lg border border-border bg-surface-muted px-4 py-3 text-sm leading-6 text-foreground"
+                  className="rounded-lg border border-border bg-surface-muted px-4 py-3 text-base leading-7 text-foreground"
                 >
                   {item}
                 </div>
               ))}
               <div className="grid min-h-72 place-items-center rounded-lg border border-dashed border-border bg-surface-muted p-6 text-center">
                 <div>
-                  <p className="text-sm font-semibold text-foreground">
+                  <p className="text-base font-semibold text-foreground">
                     화면 캡처 준비 중
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-muted">
+                  <p className="mt-2 text-base leading-7 text-muted">
                     해당 메뉴 캡처를 추가하면 이 영역에 실제 화면이 크게
                     표시됩니다.
                   </p>
