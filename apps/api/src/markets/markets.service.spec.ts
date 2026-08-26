@@ -352,6 +352,58 @@ describe('MarketsService portfolio performance', () => {
     expect(result[1].valueKrw).toBe(331000);
     expect(result[1].series.portfolio).toBeCloseTo(10.0765, 4);
   });
+
+  it('does not calculate portfolio returns from a partial holdings baseline', async () => {
+    const service = makeService();
+    service.portfoliosRepository.findOne.mockResolvedValue({ id: 'p1' });
+    service.portfoliosRepository.find.mockResolvedValue([
+      {
+        id: 'p1',
+        positions: [
+          {
+            symbol: 'AAPL',
+            market: 'US',
+            quantity: '1',
+            averagePrice: '100',
+            startedAt: '2026-01-01',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+          },
+          {
+            symbol: 'MSFT',
+            market: 'US',
+            quantity: '1',
+            averagePrice: '100',
+            startedAt: '2026-01-01',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+          },
+        ],
+      },
+    ]);
+    service.getUsdKrwExchangeRate.mockResolvedValue({ current: 1000 });
+    service.getCandles.mockImplementation((symbol: string) => {
+      if (symbol === 'AAPL') {
+        return Promise.resolve([
+          candle('2026-01-01', 100),
+          candle('2026-01-02', 100),
+        ]);
+      }
+      if (symbol === 'MSFT') {
+        return Promise.resolve([
+          candle('2026-01-02', 100),
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const result = await service.getPortfolioPerformance('user-1', 'p1', '1M');
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      date: '2026-01-02',
+      valueKrw: 200000,
+      profitRate: 0,
+    });
+  });
 });
 
 describe('MarketsService S&P 500 metrics', () => {

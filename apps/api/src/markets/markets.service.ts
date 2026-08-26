@@ -1200,19 +1200,25 @@ export class MarketsService {
       availablePositionSeries.flatMap((item) => item.candles.map((candle) => candle.time)),
     )].sort((a, b) => a - b);
 
-    const candles = timestamps.map((time) => {
+    const candles = timestamps.flatMap((time) => {
+      let hasAllPositionPrices = true;
       const value = availablePositionSeries.reduce((sum, item) => {
         const close = this.findCloseAtOrBefore(item.candles, time);
+        if (!close) {
+          hasAllPositionPrices = false;
+          return sum;
+        }
         return close ? sum + item.quantity * close * item.multiplier : sum;
       }, 0);
-      return {
+      if (!hasAllPositionPrices) return [];
+      return [{
         time,
         open: value,
         high: value,
         low: value,
         close: value,
         volume: 0,
-      };
+      }];
     });
 
     return candles.length ? { key: 'portfolio', candles, costKrw } : null;
