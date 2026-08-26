@@ -1,63 +1,91 @@
-# Investment Community
+# 15F - Investment Community
 
-Private investment community for tracking US/Korean markets, reading market briefings, and discussing stocks with ticker-aware community posts.
+미국/한국 주식 시장 정보를 확인하고, 투자자들이 의견을 나눌 수 있는 투자 커뮤니티 웹 서비스입니다.
 
-The repository is a TypeScript monorepo with a Next.js web app, a NestJS API, PostgreSQL, Redis, and Docker Compose environments for local development and deployment.
+`15F`는 종목 검색, 시장 지표, 뉴스, 마켓 브리핑, 커뮤니티 피드를 하나의 서비스에서 사용할 수 있도록 구성한 프로젝트입니다. 회원가입 후 승인된 사용자만 서비스를 이용할 수 있으며, 커뮤니티에서는 게시글 작성, 댓글, 좋아요, 북마크, 공개/비공개 게시글 관리 기능을 제공합니다.
 
-## Features
+## 주요 기능
 
-- Private member access with registration, login, refresh-token cookies, profile updates, password changes, and admin approval.
-- Stocks workspace for US and Korean markets with quote lists, search popovers, candles, valuation metrics, company overviews, related posts, and related news.
-- URL-driven stock selection with `symbol`, `market`, and `currency` query state, so ticker links from community posts and briefings open the exact selected stock view.
-- Market pulse for USD/KRW, KOSPI, KOSDAQ, major US indexes, commodities, and crypto.
-- Community feed with TipTap rich-text posts, comments, replies, likes, related stock tags, author pages, following feeds, and admin moderation.
-- Market news and stock-specific news with Korean/English language support.
-- Market briefings generated from market news and pulse data, including scheduled US/KR briefing jobs and admin-triggered generation.
-- Admin tools for approving users and running market/profile/master/financial batches.
-- PWA-ready web app with responsive mobile navigation and production service worker registration.
+### 회원 및 인증
 
-## Tech Stack
+- 이메일 기반 회원가입 및 로그인
+- Refresh Token 쿠키 기반 로그인 유지
+- 프로필 수정 및 비밀번호 변경
+- 관리자 승인 기반 회원 접근 제어
 
-| Area | Stack |
+### 주식 및 시장 정보
+
+- 미국/한국 주식 종목 목록 조회
+- 종목 검색 및 선택
+- 종목별 현재가, 차트, 밸류에이션 지표, 기업 개요 제공
+- USD/KRW, KOSPI, KOSDAQ, 미국 주요 지수, 원자재, 가상자산 등 시장 지표 확인
+- 종목별 관련 뉴스 및 커뮤니티 게시글 연결
+
+### 커뮤니티
+
+- TipTap 기반 리치 텍스트 게시글 작성
+- 게시글 목록, 상세 페이지, 사용자별 피드 제공
+- 댓글, 대댓글, 좋아요, 북마크
+- 종목 태그 기반 관련 게시글 연결
+- 팔로우 기반 피드
+- 게시글 공개/비공개 설정
+- 관리자 게시글 관리
+
+### 마켓 뉴스 및 브리핑
+
+- 한국어/영어 시장 뉴스 제공
+- 시장 뉴스와 주요 지표 기반 마켓 브리핑 생성
+- 미국장/한국장 브리핑 스케줄링
+- 관리자 브리핑 생성 및 관리
+
+### 관리자 기능
+
+- 가입 대기 사용자 승인
+- 시장 데이터, 종목 마스터, 기업 프로필, 재무 데이터 배치 실행
+- 브리핑 생성 및 수정
+
+## 기술 스택
+
+| 영역 | 기술 |
 | --- | --- |
-| Web | Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4, Zustand, Socket.IO client, TipTap, lightweight-charts, lucide-react |
-| API | NestJS 11, TypeScript, TypeORM, PostgreSQL, Redis, Socket.IO, JWT, Passport, Nest Schedule |
-| Data providers | KIS, Finnhub, Yahoo Finance fallback, Naver Search/Finance, DART, OpenAI |
-| Infrastructure | Docker Compose, PostgreSQL 17, Redis 8, optional nginx gateway for VM deployment |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Zustand, TipTap, lightweight-charts, lucide-react |
+| Backend | NestJS 11, TypeScript, TypeORM, PostgreSQL, Redis, Socket.IO, JWT, Passport, Nest Schedule |
+| Data | KIS, Finnhub, Yahoo Finance fallback, Naver Search/Finance, DART, OpenAI |
+| Infra | Docker Compose, PostgreSQL 17, Redis 8, Nginx Gateway |
 
-## Repository Layout
+## 프로젝트 구조
 
 ```text
 .
 ├── apps
-│   ├── api                 # NestJS API
+│   ├── api
 │   │   └── src
-│   │       ├── auth         # login, refresh, JWT guards, profile/password
-│   │       ├── community    # posts, comments, likes, subscriptions
-│   │       ├── markets      # quotes, news, briefings, batches, WebSocket gateway
-│   │       └── users        # approval/admin user management
-│   └── web                 # Next.js app
+│   │       ├── auth        # 로그인, 토큰 갱신, JWT Guard, 프로필/비밀번호
+│   │       ├── community   # 게시글, 댓글, 좋아요, 구독, 공개/비공개
+│   │       ├── markets     # 시세, 뉴스, 브리핑, 배치, WebSocket Gateway
+│   │       └── users       # 사용자 승인 및 관리자 사용자 관리
+│   └── web
 │       └── src
-│           ├── app          # App Router routes/layouts/providers
-│           ├── common       # shared UI, stores, utils, API client
-│           └── domain       # auth, admin, community, markets, news, profile
-├── docker-compose.yml       # local development stack
-├── docker-compose.prod.yml  # build-and-run production stack
-├── docker-compose.vm.yml    # VM stack using prebuilt images + nginx gateway
-└── package.json             # workspace scripts
+│           ├── app         # Next.js App Router 라우트/레이아웃
+│           ├── common      # 공통 UI, store, util, API client
+│           └── domain      # auth, admin, community, markets, news, profile
+├── docker-compose.yml       # 로컬 개발용 Docker Compose
+├── docker-compose.prod.yml  # 프로덕션 빌드/실행용 Compose
+├── docker-compose.vm.yml    # VM 배포용 Compose
+└── package.json             # Workspace scripts
 ```
 
-## Quick Start
+## 실행 방법
 
-### 1. Configure environment
+### 1. 환경 변수 설정
 
 ```bash
 cp .env.example .env
 ```
 
-For a local UI/API/database run, the defaults are enough to boot the stack. External market and AI keys can be added progressively for richer data.
+로컬에서 기본 UI/API/DB를 실행하는 데 필요한 값은 `.env.example`에 포함되어 있습니다. 외부 시장 데이터와 AI 관련 키는 필요에 따라 추가할 수 있습니다.
 
-Important local defaults:
+주요 로컬 기본값은 다음과 같습니다.
 
 ```env
 WEB_PORT=3000
@@ -70,26 +98,26 @@ JWT_ACCESS_SECRET=change-me-access
 JWT_REFRESH_SECRET=change-me-refresh
 ```
 
-### 2. Start with Docker Compose
+### 2. Docker Compose로 실행
 
 ```bash
 docker compose up --build
 ```
 
-Open:
+실행 후 아래 주소에서 확인할 수 있습니다.
 
 - Web: http://localhost:3000
-- API health: http://localhost:4000/api/health
+- Health Check: http://localhost:4000/api/health
 
-Stop:
+종료:
 
 ```bash
 docker compose down
 ```
 
-### 3. Run without Docker
+### 3. Docker 없이 실행
 
-You still need PostgreSQL and Redis running locally, then set `DATABASE_URL` and `REDIS_URL`.
+PostgreSQL과 Redis를 로컬에서 먼저 실행한 뒤 `DATABASE_URL`, `REDIS_URL`을 설정해야 합니다.
 
 ```bash
 npm install
@@ -97,176 +125,68 @@ npm run dev:api
 npm run dev:web
 ```
 
-## Scripts
+## 주요 스크립트
 
-Run from the repository root:
+루트 디렉터리에서 실행합니다.
 
 ```bash
-npm run dev:web       # Next.js dev server
+npm run dev:web       # Next.js 개발 서버
 npm run dev:api       # NestJS watch mode
-npm run build:web     # production web build
-npm run build:api     # production API build
-npm run lint:web      # web lint
+npm run build:web     # Web 프로덕션 빌드
+npm run build:api     # API 프로덕션 빌드
+npm run lint:web      # Web lint
 npm run lint:api      # API lint
-npm run test:api      # API unit tests
+npm run test:api      # API unit test
 npm run docker:up     # docker compose up --build
 npm run docker:down   # docker compose down
 ```
 
-App-specific scripts live in `apps/web/package.json` and `apps/api/package.json`.
+앱별 세부 스크립트는 `apps/web/package.json`, `apps/api/package.json`에서 확인할 수 있습니다.
 
-## Environment Variables
+## 화면 구성
 
-### Core
-
-| Variable | Purpose |
+| 경로 | 설명 |
 | --- | --- |
-| `WEB_ORIGIN` | Allowed web origin for API CORS |
-| `NEXT_PUBLIC_API_BASE_URL` | Browser-visible API base URL, usually `/api` or `http://localhost:4000/api` |
-| `DATABASE_URL` | PostgreSQL connection string used by TypeORM |
-| `REDIS_URL` | Redis connection string for volatile market caches |
-| `JWT_ACCESS_SECRET` | JWT access-token signing secret |
-| `JWT_REFRESH_SECRET` | JWT refresh-token signing secret |
-| `REFRESH_COOKIE_SECURE` | Optional production override for secure refresh cookies |
+| `/login` | 로그인 및 회원가입 |
+| `/` | 주식/시장 정보 메인 화면 |
+| `/news` | 시장 뉴스 |
+| `/market-briefing` | 마켓 브리핑 목록 및 최신 브리핑 |
+| `/market-briefing/:briefingId` | 브리핑 상세 |
+| `/community` | 커뮤니티 피드 |
+| `/community/new` | 게시글 작성 |
+| `/community/:postId` | 게시글 상세 |
+| `/community/:postId/edit` | 게시글 수정 |
+| `/community/users/:userId` | 사용자별 피드 |
+| `/profile` | 프로필 및 비밀번호 설정 |
+| `/admin` | 사용자 승인 및 관리자 배치 도구 |
 
-### Market and AI providers
+## 데이터 처리 방식
 
-| Variable | Used for |
+- Redis는 변동성이 큰 시세, 시장 지표, 차트, 뉴스 데이터를 캐싱합니다.
+- PostgreSQL은 사용자, 게시글, 댓글, 구독, 종목 마스터, 기업 프로필, 재무 데이터, 브리핑을 저장합니다.
+- 미국 실시간 체결 데이터는 Finnhub WebSocket을 통해 수신하고 Socket.IO로 웹 앱에 전달합니다.
+- 시장 지표 변경 사항은 `market:pulse` 이벤트로 웹 앱에 전달됩니다.
+- 한국 종목 뉴스는 Naver Search, Naver Finance, 모바일 종목 코드 fallback 경로를 조합해 제공합니다.
+- 한국 종목 상세 정보는 DART 기업 정보와 재무 데이터를 통해 보강할 수 있습니다.
+
+## 스케줄 작업
+
+모든 cron 스케줄은 `Asia/Seoul` 기준입니다.
+
+| 스케줄 | 작업 |
 | --- | --- |
-| `KIS_APP_KEY`, `KIS_APP_SECRET` | Korean quotes, indexes, exchange rate, stock master data |
-| `KIS_ACCOUNT_NO`, `KIS_ACCOUNT_PRODUCT_CODE` | KIS account-related configuration |
-| `FINNHUB_API_KEY` | US symbols, profiles, quote fallback, live trades over WebSocket |
-| `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` | Korean market/stock news search |
-| `DART_API_KEY` | Korean company profiles, financials, listed share counts |
-| `OPENAI_API_KEY`, `OPENAI_MODEL` | Market briefing text generation |
-| `OPENAI_IMAGE_MODEL` | Reserved in compose env; current briefing flow does not render generated images |
+| 매일 01:00 | 한국/미국 종목 마스터 및 DART 매핑 갱신 |
+| 매일 02:00 | 기본 종목 프로필 갱신 |
+| 화-토 08:25 | 이전 미국장 마켓 브리핑 생성 |
+| 월-금 15:55 | 당일 한국장 마켓 브리핑 생성 |
 
-External keys are optional for local boot, but missing keys reduce data quality or disable provider-specific features.
+KOSPI 200 재무 데이터 갱신은 관리자 기능으로 제공되며, 현재 cron에는 등록되어 있지 않습니다.
 
-## API Overview
+## 배포 메모
 
-The API uses a global `/api` prefix and validates request bodies with `ValidationPipe`.
+프로덕션 환경에서는 Docker Compose 기반으로 Web, API, PostgreSQL, Redis, Nginx Gateway를 실행합니다.
 
-### Auth
-
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/refresh`
-- `POST /api/auth/logout`
-- `GET /api/auth/me`
-- `PATCH /api/auth/me`
-- `PATCH /api/auth/password`
-
-Access tokens are sent as `Authorization: Bearer <token>`. Refresh tokens are stored in the `refresh_token` httpOnly cookie.
-
-### Users/Admin
-
-- `GET /api/users/pending`
-- `PATCH /api/users/:id/status`
-
-Admin-only routes use `JwtAuthGuard` and `RolesGuard`.
-
-### Community
-
-- `GET /api/community/feed?scope=all|subscribed|mine|user&sort=latest|popular`
-- `GET /api/community/related?symbol=<symbol>`
-- `POST /api/community/posts`
-- `GET /api/community/posts/:id`
-- `PATCH /api/community/posts/:id`
-- `DELETE /api/community/posts/:id`
-- `POST /api/community/posts/:id/like`
-- `POST /api/community/posts/:id/comments`
-- `PATCH /api/community/comments/:id`
-- `DELETE /api/community/comments/:id`
-- `GET /api/community/users`
-- `POST /api/community/users/:id/subscribe`
-
-Community stock tags are stored with canonical symbols:
-
-```ts
-{ symbol: "000660", name: "SK하이닉스", market: "KR" }
-{ symbol: "NVDA", name: "NVIDIA Corp", market: "US" }
-```
-
-### Markets
-
-- `GET /api/markets/pulse`
-- `GET /api/markets/quotes?symbols=AAPL,MSFT,NVDA`
-- `GET /api/markets/stocks/us`
-- `GET /api/markets/stocks/kr`
-- `GET /api/markets/symbols/us`
-- `GET /api/markets/symbols/kr`
-- `GET /api/markets/stocks/detail?symbol=AAPL&market=US`
-- `GET /api/markets/stocks/quote?symbol=005930&market=KR`
-- `GET /api/markets/stocks/news?symbol=005930&market=KR&language=ko`
-- `GET /api/markets/news?market=US|KR&language=en|ko`
-- `GET /api/markets/candles?symbol=AAPL&period=1M&market=US`
-- `GET /api/markets/briefings?market=US|KR`
-- `GET /api/markets/briefings/:id`
-
-Admin market operations:
-
-- `PATCH /api/markets/briefings/:id`
-- `DELETE /api/markets/briefings/:id`
-- `POST /api/markets/briefings/run?market=US|KR`
-- `POST /api/markets/profiles/batch`
-- `POST /api/markets/master/batch`
-- `POST /api/markets/financials/batch?limit=200`
-
-## Web Routes
-
-| Route | Purpose |
-| --- | --- |
-| `/login` | Login and registration |
-| `/` | Stocks workspace |
-| `/?symbol=AAPL&market=US&currency=USD` | Shareable selected stock state |
-| `/news` | Market news |
-| `/market-briefing` | Market briefing list/latest view |
-| `/market-briefing/:briefingId` | Shareable briefing detail |
-| `/community` | Community feed |
-| `/community/new` | New post editor |
-| `/community/:postId` | Shareable post detail |
-| `/community/:postId/edit` | Edit post |
-| `/community/users/:userId` | User feed |
-| `/profile` | Profile/password settings |
-| `/admin` | User approval and admin batch tools |
-
-Authenticated routes share the shell in `apps/web/src/app/(auth)/layout.tsx`, including market pulse, desktop navigation, and mobile bottom navigation.
-
-## Market Data Behavior
-
-- Redis caches volatile quote, pulse, candle, and news data.
-- PostgreSQL stores users, posts, comments, subscriptions, stock master data, profiles, financial rows, and briefings.
-- US live trade ticks use Finnhub WebSocket and are emitted to the web app over Socket.IO as `market:trade`.
-- Market pulse updates are emitted as `market:pulse`.
-- Korean selected-stock quotes are polled by the web app and preserve authoritative `current`, `change`, `percentChange`, and `previousClose` values.
-- Korean stock news combines Naver Search, Naver Finance, and mobile stock-code fallback paths.
-- Korean stock detail can be enriched from DART company profile and financial data.
-
-## Scheduled Jobs
-
-All cron schedules use `Asia/Seoul`.
-
-| Schedule | Job |
-| --- | --- |
-| Daily 01:00 | Refresh Korean/US stock master and DART mapping |
-| Daily 02:00 | Refresh default stock profiles |
-| Tue-Sat 08:25 | Generate previous US-session market briefing |
-| Mon-Fri 15:55 | Generate current Korean-session market briefing |
-
-KOSPI 200 financial refresh is exposed through the admin endpoint and is not currently scheduled by cron.
-
-## Deployment Notes
-
-### Build production images locally
-
-```bash
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-### VM deployment stack
-
-`docker-compose.vm.yml` expects prebuilt images and an nginx gateway:
+VM 배포용 compose는 사전에 빌드된 이미지를 사용합니다.
 
 ```env
 WEB_IMAGE=honeyhyuni12/investment-community-web:latest
@@ -276,42 +196,23 @@ WEB_ORIGIN=https://your-domain.example
 REFRESH_COOKIE_SECURE=true
 ```
 
-Then:
-
-```bash
-docker compose -f docker-compose.vm.yml up -d
-```
-
-Verify:
+배포 후에는 Health Check와 웹 접속 상태를 확인합니다.
 
 ```bash
 curl http://localhost:4000/api/health
 ```
 
-## Development Notes
+## 개발 메모
 
-- Production sets TypeORM `synchronize: false`; schema changes need explicit migrations or manual DB updates.
-- Do not commit `.env`, credentials, tokens, generated logs, `.next`, or local Docker volumes.
-- The root `.env` is consumed by Docker Compose. Local non-Docker commands need equivalent environment variables in the shell or app-specific env files.
-- The web build uses `next/font`; production builds may need network access to fetch Google fonts unless fonts are vendored or cached.
-- Current web lint can surface existing React hook lint rules in older pages. `npx tsc --noEmit` is the quickest type-level verification.
+- 프로덕션에서는 TypeORM `synchronize`를 사용하지 않으므로 스키마 변경 시 명시적인 마이그레이션이 필요합니다.
+- `.env`, 인증 정보, 토큰, 로그, `.next`, 로컬 Docker volume은 커밋하지 않습니다.
+- 루트 `.env`는 Docker Compose에서 사용합니다.
+- Docker 없이 실행할 경우 각 앱이 필요한 환경 변수를 별도로 설정해야 합니다.
+- Web 빌드는 `next/font`를 사용하므로 Google Fonts 접근이 필요할 수 있습니다.
+- 타입 검증은 `npm --prefix apps/web exec tsc --noEmit`, API 빌드는 `npm --prefix apps/api run build`로 확인할 수 있습니다.
 
-## Useful Verification Commands
+## 커뮤니티 이미지 백업
 
-```bash
-# API
-docker compose exec -T api npm run build
-docker compose logs --tail=100 api
+커뮤니티 이미지는 `community_uploads` Docker volume에 저장됩니다. 서버 교체나 운영 백업 시 PostgreSQL과 함께 해당 volume도 백업해야 합니다.
 
-# Web
-docker compose exec -T web npm run build
-docker compose logs --tail=100 web
-
-# Local type checks
-npm --prefix apps/web exec tsc --noEmit
-npm --prefix apps/api run build
-```
-
-## Community image backup
-
-Community images are stored in the persistent `community_uploads` Docker volume. Back up and restore it together with PostgreSQL before replacing the server. Keep the named volume during container recreation and do not use `docker compose down -v` for routine deployments.
+일반적인 컨테이너 재생성 과정에서는 named volume을 유지해야 하며, routine deployment에서 `docker compose down -v`는 사용하지 않습니다.
