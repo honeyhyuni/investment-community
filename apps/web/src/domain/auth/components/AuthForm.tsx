@@ -70,7 +70,7 @@ export function AuthForm({
           value={password}
           setValue={setPassword}
           type="password"
-          minLength={8}
+          minLength={7}
         />
         {mode === "login" ? (
           <label className="inline-flex w-fit cursor-pointer items-center gap-2 text-xs font-semibold text-muted">

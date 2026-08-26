@@ -31,12 +31,12 @@ class UpdateProfileDto {
 
 class ChangePasswordDto {
   @IsString()
-  @MinLength(8)
+  @MinLength(7)
   @MaxLength(72)
   currentPassword: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(7)
   @MaxLength(72)
   newPassword: string;
 }
