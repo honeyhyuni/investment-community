@@ -8,6 +8,13 @@ type KisGet = (
   trId: string,
 ) => Promise<unknown>;
 type TestMarketsService = {
+  getPortfolioPerformance: (
+    userId: string,
+    portfolioId: string,
+    period?: string,
+    symbols?: string,
+    portfolioIds?: string,
+  ) => Promise<Array<{ date: string; valueKrw: number; costKrw: number; profitRate: number | null; series: Record<string, number | null> }>>;
   calculateMovingAverage: (
     source: Array<{ time: number; close: number }>,
     period: number,
@@ -26,6 +33,12 @@ type TestMarketsService = {
     interval: string;
   };
   kisGet: jest.MockedFunction<KisGet>;
+  getCandles: jest.Mock;
+  getUsdKrwExchangeRate: jest.Mock;
+  portfoliosRepository: {
+    findOne: jest.Mock;
+    find: jest.Mock;
+  };
   fetchOpenAiWithRetry: (
     url: string,
     init: RequestInit,
@@ -227,6 +240,117 @@ describe('MarketsService OpenAI service tiers', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toMatchObject({
       service_tier: 'default',
     });
+  });
+});
+
+describe('MarketsService portfolio performance', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-01-31T00:00:00Z'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  function makeService() {
+    const service = Object.create(
+      MarketsService.prototype,
+    ) as TestMarketsService;
+    service.portfoliosRepository = {
+      findOne: jest.fn(),
+      find: jest.fn(),
+    };
+    service.getUsdKrwExchangeRate = jest.fn();
+    service.getCandles = jest.fn();
+    return service;
+  }
+
+  function candle(date: string, close: number) {
+    return {
+      time: Math.floor(new Date(`${date}T00:00:00Z`).getTime() / 1000),
+      open: close,
+      high: close,
+      low: close,
+      close,
+      volume: 0,
+    };
+  }
+
+  it('adds a selected-portfolio aggregate return series', async () => {
+    const service = makeService();
+    service.portfoliosRepository.findOne.mockResolvedValue({ id: 'p1' });
+    service.portfoliosRepository.find.mockResolvedValue([
+      {
+        id: 'p1',
+        positions: [
+          {
+            symbol: 'AAPL',
+            market: 'US',
+            quantity: '1',
+            averagePrice: '90',
+            startedAt: '2026-01-01',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+          },
+        ],
+      },
+      {
+        id: 'p2',
+        positions: [
+          {
+            symbol: 'AAPL',
+            market: 'US',
+            quantity: '2',
+            averagePrice: '90',
+            startedAt: '2026-01-01',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+          },
+          {
+            symbol: '005930',
+            market: 'KR',
+            quantity: '1',
+            averagePrice: '800',
+            startedAt: '2026-01-02',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+          },
+        ],
+      },
+    ]);
+    service.getUsdKrwExchangeRate.mockResolvedValue({ current: 1000 });
+    service.getCandles.mockImplementation((symbol: string) => {
+      if (symbol === 'AAPL') {
+        return Promise.resolve([
+          candle('2026-01-01', 100),
+          candle('2026-01-02', 110),
+        ]);
+      }
+      if (symbol === '005930') {
+        return Promise.resolve([
+          candle('2026-01-01', 700),
+          candle('2026-01-02', 1000),
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const result = await service.getPortfolioPerformance(
+      'user-1',
+      'p1',
+      '1M',
+      '',
+      'p1,p2',
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      date: '2026-01-01',
+      valueKrw: 300000,
+      costKrw: 270800,
+      profitRate: 0,
+    });
+    expect(result[0].series.portfolio).toBe(0);
+    expect(result[1].valueKrw).toBe(331000);
+    expect(result[1].series.portfolio).toBeCloseTo(10.3333, 4);
   });
 });
 

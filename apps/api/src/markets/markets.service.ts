@@ -162,6 +162,12 @@ type PriceSeries = {
   candles: CandlePoint[];
 };
 
+type PortfolioValueSeries = {
+  key: 'portfolio';
+  candles: CandlePoint[];
+  costKrw: number;
+};
+
 type PerformanceCompareSymbol = {
   key: string;
   symbol: string;
@@ -1009,6 +1015,7 @@ export class MarketsService {
     portfolioId: string,
     period = '1M',
     symbols = '',
+    portfolioIds = '',
   ): Promise<PortfolioPerformancePoint[]> {
     const portfolio = await this.portfoliosRepository.findOne({
       where: { id: portfolioId, userId },
@@ -1020,10 +1027,18 @@ export class MarketsService {
     const chartPeriod = this.toPortfolioPerformanceChartPeriod(periodKey);
     const cutoff = this.getPortfolioPerformanceCutoff(periodKey);
     const compareSymbols = this.getPortfolioPerformanceCompareSymbols(symbols);
-    const seriesList = await Promise.all(
-      compareSymbols.map((item) => this.loadPerformanceSeries(item.key, item.symbol, chartPeriod, cutoff)),
-    );
-    const availableSeries = seriesList.filter((series) => series.candles.length > 0);
+    const selectedPortfolioIds = this.getPortfolioPerformancePortfolioIds(portfolioId, portfolioIds);
+    const [seriesList, portfolioSeries] = await Promise.all([
+      Promise.all(
+        compareSymbols.map((item) => this.loadPerformanceSeries(item.key, item.symbol, chartPeriod, cutoff)),
+      ),
+      this.loadPortfolioValueSeries(userId, selectedPortfolioIds, chartPeriod, cutoff),
+    ]);
+    const allSeries = portfolioSeries ? [portfolioSeries, ...seriesList] : seriesList;
+    const allPerformanceKeys = portfolioSeries
+      ? [{ key: portfolioSeries.key }, ...compareSymbols]
+      : compareSymbols;
+    const availableSeries = allSeries.filter((series) => series.candles.length > 0);
     if (!availableSeries.length) return [];
 
     const timestamps = [...new Set(
@@ -1035,7 +1050,7 @@ export class MarketsService {
 
     for (const timestamp of timestamps) {
       const series: Record<string, number | null> = {};
-      for (const item of compareSymbols) {
+      for (const item of allPerformanceKeys) {
         const candles = availableSeries.find((entry) => entry.key === item.key)?.candles ?? [];
         const close = this.findCloseAtOrBefore(candles, timestamp);
         if (close && close > 0 && !baseByKey.has(item.key)) {
@@ -1047,9 +1062,9 @@ export class MarketsService {
 
       points.push({
         date: this.formatUnixDate(timestamp),
-        valueKrw: 0,
-        costKrw: 0,
-        profitRate: null,
+        valueKrw: this.findCloseAtOrBefore(portfolioSeries?.candles ?? [], timestamp) ?? 0,
+        costKrw: portfolioSeries?.costKrw ?? 0,
+        profitRate: series.portfolio ?? null,
         spyReturn: series.sp500 ?? null,
         nasdaqReturn: series.nasdaq ?? null,
         nasdaq100Return: series.nasdaq100 ?? null,
@@ -1060,6 +1075,14 @@ export class MarketsService {
     }
 
     return this.downsamplePerformancePoints(this.compactPerformancePointsByDate(points));
+  }
+
+  private getPortfolioPerformancePortfolioIds(primaryId: string, portfolioIds: string): string[] {
+    const ids = portfolioIds
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    return [...new Set(ids.length ? ids : [primaryId])].slice(0, 20);
   }
 
   private getPortfolioPerformanceCompareSymbols(symbols: string): PerformanceCompareSymbol[] {
@@ -1127,6 +1150,76 @@ export class MarketsService {
         cutoff,
       ),
     };
+  }
+
+  private async loadPortfolioValueSeries(
+    userId: string,
+    portfolioIds: string[],
+    period: ChartPeriod,
+    cutoff: number,
+  ): Promise<PortfolioValueSeries | null> {
+    if (!portfolioIds.length) return null;
+
+    const portfolios = await this.portfoliosRepository.find({
+      where: { id: In(portfolioIds), userId },
+      relations: { positions: true },
+    });
+    const positions = portfolios.flatMap((item) => item.positions ?? []);
+    if (!positions.length) return null;
+
+    const usdKrw = await this.getUsdKrwExchangeRate()
+      .then((quote) => quote.current)
+      .catch(() => 1300);
+    let costKrw = 0;
+
+    const positionSeries = await Promise.all(
+      positions.map(async (position) => {
+        const quantity = Number(position.quantity);
+        const averagePrice = Number(position.averagePrice);
+        if (!Number.isFinite(quantity) || quantity <= 0) return null;
+
+        const multiplier = position.market === 'US' ? usdKrw : 1;
+        costKrw += quantity * (Number.isFinite(averagePrice) ? averagePrice : 0) * multiplier;
+        const startedAt = Math.max(
+          cutoff,
+          Math.floor(new Date(`${position.startedAt ?? position.createdAt.toISOString().slice(0, 10)}T00:00:00Z`).getTime() / 1000),
+        );
+        const candles = this.filterPerformanceCandles(
+          await this.getCandles(position.symbol, period).catch(() => []),
+          startedAt,
+        );
+
+        return { quantity, multiplier, candles };
+      }),
+    );
+    const availablePositionSeries = positionSeries.filter(
+      (
+        item,
+      ): item is { quantity: number; multiplier: number; candles: CandlePoint[] } =>
+        item !== null && item.candles.length > 0,
+    );
+    if (!availablePositionSeries.length) return null;
+
+    const timestamps = [...new Set(
+      availablePositionSeries.flatMap((item) => item.candles.map((candle) => candle.time)),
+    )].sort((a, b) => a - b);
+
+    const candles = timestamps.map((time) => {
+      const value = availablePositionSeries.reduce((sum, item) => {
+        const close = this.findCloseAtOrBefore(item.candles, time);
+        return close ? sum + item.quantity * close * item.multiplier : sum;
+      }, 0);
+      return {
+        time,
+        open: value,
+        high: value,
+        low: value,
+        close: value,
+        volume: 0,
+      };
+    });
+
+    return candles.length ? { key: 'portfolio', candles, costKrw } : null;
   }
 
   private filterPerformanceCandles(candles: CandlePoint[], cutoff: number): CandlePoint[] {
