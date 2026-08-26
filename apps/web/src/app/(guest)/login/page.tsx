@@ -499,11 +499,12 @@ function FeatureModal({
                   <Image
                     src={preview.src}
                     alt={preview.alt}
-                    width={1203}
-                    height={770}
-                    sizes="(min-width: 1024px) 1040px, 100vw"
+                    width={2000}
+                    height={1280}
+                    sizes="(min-width: 1280px) 1120px, (min-width: 1024px) 1040px, 100vw"
                     className="h-auto w-full"
                     priority={feature.id === "market"}
+                    unoptimized
                   />
                 </figure>
               ))}
