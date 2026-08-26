@@ -23,6 +23,7 @@ type CommunityPostDraft = {
   title: string;
   blocks: CommunityContentBlock[];
   tags: StockTag[];
+  isPublic?: boolean;
   savedAt: string;
 };
 
@@ -69,6 +70,7 @@ export function PostEditorPage({ postId }: { postId?: string }) {
   ]);
   const [tagQuery, setTagQuery] = useState("");
   const [tags, setTags] = useState<StockTag[]>([]);
+  const [isPublic, setIsPublic] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [draftReady, setDraftReady] = useState(false);
@@ -93,6 +95,7 @@ export function PostEditorPage({ postId }: { postId?: string }) {
       { id: makeEditorBlockId(), type: "text", text: "" },
     ]);
     setTags(draft.tags);
+    setIsPublic(draft.isPublic ?? true);
     setDraftSavedAt(draft.savedAt);
     setDraftRestored(true);
     return true;
@@ -117,6 +120,7 @@ export function PostEditorPage({ postId }: { postId?: string }) {
       setTitle(post.title ?? "");
       setBlocks([{ id: makeEditorBlockId(), type: "text", text: getPostHtml(post) }]);
       setTags(post.stockTags);
+      setIsPublic(post.isPublic);
       restoreDraft(key);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Could not load post.");
@@ -173,6 +177,7 @@ export function PostEditorPage({ postId }: { postId?: string }) {
       title,
       blocks,
       tags,
+      isPublic,
       savedAt,
     };
     try {
@@ -183,7 +188,7 @@ export function PostEditorPage({ postId }: { postId?: string }) {
     } catch {
       setDraftError("임시저장 공간이 부족합니다. 큰 이미지를 줄인 뒤 다시 시도해 주세요.");
     }
-  }, [blocks, draftKey, draftReady, postId, tags, title]);
+  }, [blocks, draftKey, draftReady, isPublic, postId, tags, title]);
 
   useEffect(() => {
     if (!draftReady) {
@@ -231,6 +236,7 @@ export function PostEditorPage({ postId }: { postId?: string }) {
             contentBlocks,
             stockTags: tags,
             imageUrls,
+            isPublic,
           },
         },
       );
@@ -259,6 +265,8 @@ export function PostEditorPage({ postId }: { postId?: string }) {
           setTagQuery={setTagQuery}
           tags={tags}
           setTags={setTags}
+          isPublic={isPublic}
+          setIsPublic={setIsPublic}
           stockSymbols={stockSymbols}
           usStocks={usStocks}
           krStocks={krStocks}

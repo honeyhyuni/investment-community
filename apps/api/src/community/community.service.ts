@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, MoreThanOrEqual, Repository } from 'typeorm';
+import { FindOptionsWhere, In, MoreThanOrEqual, Repository } from 'typeorm';
 import { User } from '../users/user.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UserStatus } from '../users/user-status.enum';
@@ -27,6 +27,7 @@ type CreatePostInput = {
   contentBlocks?: CommunityContentBlock[];
   caption?: string;
   stockTags?: StockTag[];
+  isPublic?: boolean;
 };
 
 type CreateCommentInput = {
@@ -61,6 +62,7 @@ export type CommunityPostDto = {
   imageUrls: string[];
   caption: string;
   stockTags: StockTag[];
+  isPublic: boolean;
   author: Pick<CommunityUserDto, 'id' | 'nickname'>;
   createdAt: Date;
   updatedAt: Date;
@@ -123,7 +125,7 @@ export class CommunityService {
           relations: { post: true },
         })).map((bookmark) => bookmark.post.id)
       : undefined;
-    if (authorIds.length === 0) {
+    if (authorIds.length === 0 || bookmarkedPostIds?.length === 0) {
       return [];
     }
 
@@ -140,11 +142,14 @@ export class CommunityService {
       // 인기순은 점수 기반 정렬이라 후보를 모아 정렬한 뒤 페이지 구간을 잘라낸다.
       const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
       const posts = await this.postsRepository.find({
-        where: {
-          author: { id: In(authorIds) },
-          ...(bookmarkedPostIds ? { id: In(bookmarkedPostIds) } : {}),
-          createdAt: MoreThanOrEqual(new Date(cutoff)),
-        },
+        where: this.buildFeedWhere(
+          currentUserId,
+          authorIds,
+          scope,
+          userId,
+          bookmarkedPostIds,
+          { createdAt: MoreThanOrEqual(new Date(cutoff)) },
+        ),
         order: { createdAt: 'DESC' },
         take: 500,
       });
@@ -164,10 +169,13 @@ export class CommunityService {
 
     // 최신순은 DB 레벨에서 skip/take로 페이지네이션한다.
     const posts = await this.postsRepository.find({
-      where: {
-        author: { id: In(authorIds) },
-        ...(bookmarkedPostIds ? { id: In(bookmarkedPostIds) } : {}),
-      },
+      where: this.buildFeedWhere(
+        currentUserId,
+        authorIds,
+        scope,
+        userId,
+        bookmarkedPostIds,
+      ),
       order: { createdAt: 'DESC' },
       ...(limit !== undefined ? { skip: offset, take: limit } : { take: 100 }),
     });
@@ -189,6 +197,7 @@ export class CommunityService {
     const uploadedImages = await this.communityImages.validateOwnedUrls(currentUserId, imageUrls);
     const caption = input.caption?.trim().slice(0, 2000) ?? '';
     const stockTags = this.normalizeStockTags(input.stockTags ?? []);
+    const isPublic = input.isPublic ?? true;
 
     if (
       !title &&
@@ -210,12 +219,15 @@ export class CommunityService {
         imageUrls,
         caption,
         stockTags,
+        isPublic,
       }),
     );
     await this.communityImages.attach(post, uploadedImages);
-    void this.notifySubscribers(post).catch((error) =>
-      this.logNotificationFailure('new post', error),
-    );
+    if (post.isPublic) {
+      void this.notifySubscribers(post).catch((error) =>
+        this.logNotificationFailure('new post', error),
+      );
+    }
 
     return (await this.toPostDtos([post], currentUserId))[0];
   }
@@ -225,6 +237,7 @@ export class CommunityService {
     postId: string,
   ): Promise<CommunityPostDto> {
     const post = await this.findPost(postId);
+    this.assertVisible(post, currentUserId);
     return (await this.toPostDtos([post], currentUserId))[0];
   }
 
@@ -248,6 +261,7 @@ export class CommunityService {
     post.imageUrls = imageUrls;
     post.caption = input.caption?.trim().slice(0, 2000) ?? '';
     post.stockTags = this.normalizeStockTags(input.stockTags ?? []);
+    post.isPublic = input.isPublic ?? true;
     await this.postsRepository.save(post);
     await this.communityImages.attach(post, uploadedImages);
     await this.communityImages.removeDetached(post.id, imageUrls);
@@ -279,6 +293,7 @@ export class CommunityService {
       .where(`post.stock_tags::jsonb @> :tag::jsonb`, {
         tag: JSON.stringify([{ symbol: normalizedSymbol }]),
       })
+      .andWhere('post.is_public = true')
       .orderBy('post.created_at', 'DESC')
       .take(3)
       .getMany();
@@ -293,6 +308,7 @@ export class CommunityService {
       this.findApprovedUser(currentUserId),
       this.findPost(postId),
     ]);
+    this.assertVisible(post, currentUserId);
     const existing = await this.likesRepository.findOne({
       where: { post: { id: post.id }, user: { id: user.id } },
     });
@@ -321,6 +337,7 @@ export class CommunityService {
       this.findApprovedUser(currentUserId),
       this.findPost(postId),
     ]);
+    this.assertVisible(post, currentUserId);
     const existing = await this.bookmarksRepository.findOne({
       where: { post: { id: post.id }, user: { id: user.id } },
     });
@@ -342,6 +359,7 @@ export class CommunityService {
       this.findApprovedUser(currentUserId),
       this.findPost(postId),
     ]);
+    this.assertVisible(post, currentUserId);
     const parent = input.parentId
       ? await this.commentsRepository.findOne({
           where: { id: input.parentId, post: { id: post.id } },
@@ -424,7 +442,7 @@ export class CommunityService {
             where: { subscriber: { id: user.id } },
           }),
           postCount: await this.postsRepository.count({
-            where: { author: { id: user.id } },
+            where: { author: { id: user.id }, isPublic: true },
           }),
         })),
     );
@@ -457,7 +475,10 @@ export class CommunityService {
         where: { subscriber: { id: targetId } },
       }),
       postCount: await this.postsRepository.count({
-        where: { author: { id: targetId } },
+        where: {
+          author: { id: targetId },
+          ...(targetId === currentUserId ? {} : { isPublic: true }),
+        },
       }),
     };
   }
@@ -571,6 +592,36 @@ export class CommunityService {
     return users.map((user) => user.id);
   }
 
+  private buildFeedWhere(
+    currentUserId: string,
+    authorIds: string[],
+    scope: FeedScope,
+    userId?: string,
+    bookmarkedPostIds?: string[],
+    extra: FindOptionsWhere<CommunityPost> = {},
+  ): FindOptionsWhere<CommunityPost> | FindOptionsWhere<CommunityPost>[] {
+    const base: FindOptionsWhere<CommunityPost> = {
+      author: { id: In(authorIds) },
+      ...(bookmarkedPostIds ? { id: In(bookmarkedPostIds) } : {}),
+      ...extra,
+    };
+    const canSeePrivate =
+      scope === 'mine' || (scope === 'user' && userId === currentUserId);
+
+    if (canSeePrivate) {
+      return base;
+    }
+
+    if (scope === 'bookmarks') {
+      return [
+        { ...base, isPublic: true },
+        { ...base, author: { id: currentUserId } },
+      ];
+    }
+
+    return { ...base, isPublic: true };
+  }
+
   private async toPostDtos(
     posts: CommunityPost[],
     currentUserId: string,
@@ -619,6 +670,7 @@ export class CommunityService {
         imageUrls: post.imageUrls ?? [],
         caption: post.caption ?? '',
         stockTags: post.stockTags ?? [],
+        isPublic: post.isPublic,
         author: {
           id: post.author.id,
           nickname: post.author.nickname,
@@ -767,6 +819,12 @@ export class CommunityService {
     }
 
     return post;
+  }
+
+  private assertVisible(post: CommunityPost, currentUserId: string): void {
+    if (!post.isPublic && post.author.id !== currentUserId) {
+      throw new NotFoundException('Post not found.');
+    }
   }
 
   private async findComment(id: string): Promise<PostComment> {

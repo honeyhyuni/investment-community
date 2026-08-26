@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { IsArray, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsArray, IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthUser } from '../auth/auth-user.type';
@@ -59,6 +59,10 @@ class CreatePostDto {
     name: string;
     market: 'US' | 'KR';
   }>;
+
+  @IsOptional()
+  @IsBoolean()
+  isPublic?: boolean;
 }
 
 class CreateCommentDto {

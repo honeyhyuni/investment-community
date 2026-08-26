@@ -45,6 +45,9 @@ export class CommunityPost {
     market: 'US' | 'KR';
   }>;
 
+  @Column({ name: 'is_public', type: 'boolean', default: true })
+  isPublic: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

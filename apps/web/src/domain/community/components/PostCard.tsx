@@ -1,7 +1,7 @@
 "use client";
 
 import { Dispatch, MouseEvent, SetStateAction, useState } from "react";
-import { Bookmark, ChevronRight, Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
+import { Bookmark, ChevronRight, Heart, Lock, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { RichContent } from "@/common/components/RichContent";
 import { Button } from "@/common/components/Button";
 import { cn } from "@/common/utils/cn";
@@ -114,6 +114,12 @@ export function PostCard({
           <h3 className="line-clamp-2 text-xl font-semibold leading-snug text-foreground sm:truncate sm:text-2xl">
             {post.title || (ko ? "제목없음" : "Untitled")}
           </h3>
+          {!post.isPublic ? (
+            <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] font-semibold text-muted">
+              <Lock className="size-3" />
+              {ko ? "비공개" : "Private"}
+            </span>
+          ) : null}
           {forceExpanded ? (
             <>
               {/* 상세: 제목 아래 날짜, 그리고 프로필+이름은 별도 버튼으로 분리(유저 피드로 이동) */}

@@ -45,6 +45,7 @@ export type CommunityPost = {
   imageUrls: string[];
   caption: string;
   stockTags: StockTag[];
+  isPublic: boolean;
   author: {
     id: string;
     nickname: string;

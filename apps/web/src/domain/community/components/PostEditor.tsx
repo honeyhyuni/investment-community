@@ -1,7 +1,7 @@
 "use client";
 
 import { Dispatch, SetStateAction, useEffect, useMemo, useRef, useState } from "react";
-import { Image as ImageIcon, Save, X } from "lucide-react";
+import { Eye, EyeOff, Image as ImageIcon, Save, X } from "lucide-react";
 import { useEditor, EditorContent, useEditorState } from "@tiptap/react";
 import { Mark, mergeAttributes } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
@@ -14,6 +14,7 @@ import { CommunityContentBlock, StockTag } from "@/domain/community/types";
 import { MarketQuote, StockSymbol, TradeTick } from "@/common/types";
 import { StockTagQuote } from "@/domain/community/components/StockTagQuote";
 import { Button } from "@/common/components/Button";
+import { Switch } from "@/common/components/Switch";
 import { cn } from "@/common/utils/cn";
 import { usePreferencesStore } from "@/common/stores/preferences";
 
@@ -54,6 +55,8 @@ export function PostEditor({
   setTagQuery,
   tags,
   setTags,
+  isPublic,
+  setIsPublic,
   stockSymbols,
   usStocks,
   krStocks,
@@ -79,6 +82,8 @@ export function PostEditor({
   setTagQuery: (value: string) => void;
   tags: StockTag[];
   setTags: Dispatch<SetStateAction<StockTag[]>>;
+  isPublic: boolean;
+  setIsPublic: (value: boolean) => void;
   stockSymbols: StockSymbol[];
   usStocks: MarketQuote[];
   krStocks: MarketQuote[];
@@ -261,6 +266,35 @@ export function PostEditor({
           editingPostId ? "" : "mt-4",
         )}
       />
+      <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-border bg-surface-muted px-3 py-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {isPublic ? (
+            <Eye className="size-4 shrink-0 text-primary" aria-hidden />
+          ) : (
+            <EyeOff className="size-4 shrink-0 text-muted" aria-hidden />
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-foreground">
+              {isPublic ? (ko ? "공개" : "Public") : ko ? "비공개" : "Private"}
+            </p>
+            <p className="truncate text-xs text-muted">
+              {isPublic
+                ? ko
+                  ? "피드와 종목 관련 글에 표시됩니다."
+                  : "Visible in feeds and related stock posts."
+                : ko
+                  ? "내 피드와 직접 상세에서만 볼 수 있습니다."
+                  : "Only visible in your feed and direct detail view."}
+            </p>
+          </div>
+        </div>
+        <Switch
+          checked={isPublic}
+          onChange={setIsPublic}
+          disabled={loading}
+          aria-label={ko ? "게시글 공개 여부" : "Post visibility"}
+        />
+      </div>
       <div className="mt-4 rounded-md border border-[#d9dee8] bg-white">
         <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-30 flex items-center gap-1 overflow-x-auto rounded-t-md border-b border-[#d9dee8] bg-[#f9fafc]/95 p-2 shadow-sm backdrop-blur sm:top-[4.5rem]">
           {editor ? (
