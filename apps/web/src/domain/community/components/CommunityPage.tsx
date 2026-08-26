@@ -9,6 +9,7 @@ import { SegmentedControl } from "@/common/components/SegmentedControl";
 import { Skeleton } from "@/common/components/Skeleton";
 import { cn } from "@/common/utils/cn";
 import { apiRequest } from "@/common/lib/api";
+import { isDemoUser } from "@/common/lib/demo-user";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
@@ -21,10 +22,8 @@ import {
 import { PostCard } from "@/domain/community/components/PostCard";
 import { useCommunityPosts } from "@/domain/community/hooks/useCommunityPosts";
 
-// 무한스크롤 페이지 크기: 처음 3개, 끝에 닿을 때마다 3개씩 추가.
 const FEED_PAGE_SIZE = 3;
 
-// 피드 로딩 중 게시글 카드 자리를 잡아주는 스켈레톤.
 function PostCardSkeleton() {
   return (
     <div className="rounded-lg border border-[#d9dee8] bg-white p-4 shadow-sm">
@@ -84,12 +83,11 @@ export function CommunityPage({ userId }: { userId?: string }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
+  const readOnly = isDemoUser(user);
   const effectiveScope: CommunityScope | "user" = userId ? "user" : scope;
-
   const offsetRef = useRef(0);
   const hasMoreRef = useRef(true);
   const loadingRef = useRef(false);
-  // 진행 중인 요청을 식별해 scope/sort 전환 시 늦게 온 응답이 덮어쓰지 않게 한다.
   const reqIdRef = useRef(0);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -102,20 +100,17 @@ export function CommunityPage({ userId }: { userId?: string }) {
   );
 
   const loadUsers = useCallback(async () => {
-    if (!accessToken) {
-      return;
-    }
+    if (!accessToken) return;
     try {
-      const usersResult = await apiRequest<CommunityUser[]>("/community/users", "GET", {
+      const result = await apiRequest<CommunityUser[]>("/community/users", "GET", {
         accessToken,
       });
-      setUsers(usersResult);
+      setUsers(result);
     } catch {
-      // 사이드바 멤버 목록 실패는 피드 자체를 막지 않는다.
+      // 사이드바 실패는 피드 사용을 막지 않는다.
     }
   }, [accessToken]);
 
-  // 유저 피드: 추천 목록이 아닌 단일 프로필을 직접 조회한다(본인/구독 여부·구독자 수 정확).
   const loadUserProfile = useCallback(async () => {
     if (!accessToken || !userId) {
       setUserProfile(null);
@@ -123,12 +118,12 @@ export function CommunityPage({ userId }: { userId?: string }) {
     }
     setProfileLoading(true);
     try {
-      const profileResult = await apiRequest<CommunityUser>(
+      const result = await apiRequest<CommunityUser>(
         `/community/users/${encodeURIComponent(userId)}`,
         "GET",
         { accessToken },
       );
-      setUserProfile(profileResult);
+      setUserProfile(result);
     } catch {
       setUserProfile(null);
     } finally {
@@ -136,11 +131,8 @@ export function CommunityPage({ userId }: { userId?: string }) {
     }
   }, [accessToken, userId]);
 
-  // 처음부터 다시 로드 (scope/sort/userId 변경, 구독 토글 시).
   const reloadFeed = useCallback(async () => {
-    if (!accessToken) {
-      return;
-    }
+    if (!accessToken) return;
     const reqId = ++reqIdRef.current;
     loadingRef.current = true;
     offsetRef.current = 0;
@@ -149,10 +141,10 @@ export function CommunityPage({ userId }: { userId?: string }) {
     setLoading(true);
     setError("");
     try {
-      const result = await apiRequest<CommunityPost[]>(feedUrl(0), "GET", { accessToken });
-      if (reqId !== reqIdRef.current) {
-        return;
-      }
+      const result = await apiRequest<CommunityPost[]>(feedUrl(0), "GET", {
+        accessToken,
+      });
+      if (reqId !== reqIdRef.current) return;
       offsetRef.current = result.length;
       hasMoreRef.current = result.length === FEED_PAGE_SIZE;
       setHasMore(hasMoreRef.current);
@@ -160,7 +152,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
     } catch (feedError) {
       if (reqId === reqIdRef.current) {
         setError(
-          feedError instanceof Error ? feedError.message : "Could not load community.",
+          feedError instanceof Error ? feedError.message : "피드를 불러오지 못했습니다.",
         );
       }
     } finally {
@@ -171,11 +163,8 @@ export function CommunityPage({ userId }: { userId?: string }) {
     }
   }, [accessToken, feedUrl, setPosts, setError]);
 
-  // 끝에 닿으면 다음 페이지를 이어 붙인다.
   const loadMore = useCallback(async () => {
-    if (!accessToken || loadingRef.current || !hasMoreRef.current) {
-      return;
-    }
+    if (!accessToken || loadingRef.current || !hasMoreRef.current) return;
     const reqId = reqIdRef.current;
     loadingRef.current = true;
     setLoadingMore(true);
@@ -185,9 +174,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
         "GET",
         { accessToken },
       );
-      if (reqId !== reqIdRef.current) {
-        return;
-      }
+      if (reqId !== reqIdRef.current) return;
       offsetRef.current += result.length;
       hasMoreRef.current = result.length === FEED_PAGE_SIZE;
       setHasMore(hasMoreRef.current);
@@ -195,44 +182,35 @@ export function CommunityPage({ userId }: { userId?: string }) {
     } catch (feedError) {
       if (reqId === reqIdRef.current) {
         setError(
-          feedError instanceof Error ? feedError.message : "Could not load more posts.",
+          feedError instanceof Error
+            ? feedError.message
+            : "추가 피드를 불러오지 못했습니다.",
         );
       }
     } finally {
-      if (reqId === reqIdRef.current) {
-        loadingRef.current = false;
-      }
+      if (reqId === reqIdRef.current) loadingRef.current = false;
       setLoadingMore(false);
     }
   }, [accessToken, feedUrl, setPosts, setError]);
 
-  // 데이터 로딩(fetch-on-mount) effect — 내부에서 로딩 상태를 setState 한다.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void reloadFeed();
   }, [reloadFeed]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadUsers();
   }, [loadUsers]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadUserProfile();
   }, [loadUserProfile]);
 
-  // 리스트 끝 센티넬이 보이면 다음 페이지 로드.
   useEffect(() => {
     const node = sentinelRef.current;
-    if (!node) {
-      return;
-    }
+    if (!node) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) {
-          void loadMore();
-        }
+        if (entries[0]?.isIntersecting) void loadMore();
       },
       { rootMargin: "240px" },
     );
@@ -241,9 +219,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
   }, [loadMore, hasMore, posts.length]);
 
   async function toggleSubscription(targetUserId: string) {
-    if (!accessToken) {
-      return;
-    }
+    if (!accessToken || readOnly) return;
     try {
       await apiRequest<{ subscribed: boolean }>(
         `/community/users/${targetUserId}/subscribe`,
@@ -255,16 +231,13 @@ export function CommunityPage({ userId }: { userId?: string }) {
       setError(
         subscribeError instanceof Error
           ? subscribeError.message
-          : "Could not update subscription.",
+          : "구독 상태를 변경하지 못했습니다.",
       );
     }
   }
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
-  // 정렬 필터 버튼 (최신순/인기순) — 데스크톱은 툴바 안, 모바일은 툴바 아래에서 재사용.
   const sortButtons = (["latest", "popular"] as FeedSort[]).map((item) => {
     const active = sort === item;
     return (
@@ -288,6 +261,13 @@ export function CommunityPage({ userId }: { userId?: string }) {
 
   const feedList = (
     <div className="grid gap-4">
+      {readOnly ? (
+        <p className="rounded-lg border border-border bg-surface-muted px-4 py-3 text-sm font-semibold text-muted">
+          {ko
+            ? "테스트 계정은 피드를 읽을 수 있지만 글쓰기, 댓글, 좋아요, 저장, 구독은 제한됩니다."
+            : "The demo account can read the feed, but writing and reactions are disabled."}
+        </p>
+      ) : null}
       {loading && posts.length === 0 ? (
         <>
           <PostCardSkeleton />
@@ -325,6 +305,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
           enableImagePreview={false}
           onOpenPost={(nextPostId) => router.push(`/community/${nextPostId}`)}
           canModerate={user.role === "ADMIN"}
+          readOnly={readOnly}
           onAuthorClick={(nextUserId) => router.push(`/community/users/${nextUserId}`)}
         />
       ))}
@@ -335,7 +316,6 @@ export function CommunityPage({ userId }: { userId?: string }) {
     </div>
   );
 
-  // 유저 피드 — scope 탭/사이드바 없이 해당 유저 글 목록만
   if (userId) {
     const profile = userProfile;
     const profileName = profile?.nickname ?? posts[0]?.author.nickname ?? "";
@@ -356,7 +336,6 @@ export function CommunityPage({ userId }: { userId?: string }) {
               {ko ? "뒤로" : "Back"}
             </Button>
 
-            {/* 이름 섹션 — 뒤로 버튼과 높이 동일(h-11/sm:h-10) */}
             <div className="flex h-11 min-w-0 flex-1 items-center gap-2.5 rounded-md border border-border bg-white px-3 shadow-sm sm:h-10 sm:px-4">
               <span
                 aria-hidden
@@ -397,7 +376,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
               >
                 {ko ? "내 피드" : "My feed"}
               </Button>
-            ) : profile ? (
+            ) : profile && !readOnly ? (
               <Button
                 variant={profile.isSubscribed ? "secondary" : "primary"}
                 onClick={() => toggleSubscription(profile.id)}
@@ -408,7 +387,6 @@ export function CommunityPage({ userId }: { userId?: string }) {
             ) : null}
           </div>
 
-          {/* 모바일: 구독자 수를 헤더 아래에 따로 노출 */}
           {profile ? (
             <p className="mb-4 flex items-center gap-1.5 text-xs font-semibold text-muted sm:hidden">
               <FileText size={13} className="text-primary" />
@@ -433,9 +411,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
 
       <div className="grid flex-1 gap-4 py-4 sm:gap-5 sm:py-6 lg:grid-cols-[1fr_320px]">
         <div className="flex flex-col gap-4">
-          {/* 피드 툴바 (탭 + 정렬 + 글쓰기) */}
           <div className="-mx-4 flex items-center gap-2 border-y border-[#d9dee8] bg-surface p-3 shadow-sm sm:mx-0 sm:rounded-lg sm:border">
-            {/* 스코프 탭 (세그먼티드 컨트롤) */}
             <SegmentedControl
               className="flex-1 sm:inline-flex sm:flex-none"
               aria-label={ko ? "피드 범위" : "Feed scope"}
@@ -462,33 +438,42 @@ export function CommunityPage({ userId }: { userId?: string }) {
               onChange={setScope}
             />
 
-            {/* 정렬 필터 (최신순 / 인기순) — 데스크톱에서만 툴바 안에 표시 */}
             <div className="hidden shrink-0 gap-1.5 sm:flex">{sortButtons}</div>
 
-            {/* 글 쓰기 — 데스크톱에서만 툴바 안에 표시 */}
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<Plus />}
-              onClick={() => router.push("/community/new")}
-              className="ml-auto hidden shrink-0 sm:inline-flex"
-            >
-              {ko ? "글 쓰기" : "New post"}
-            </Button>
+            {!readOnly ? (
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Plus />}
+                onClick={() => router.push("/community/new")}
+                className="ml-auto hidden shrink-0 sm:inline-flex"
+              >
+                {ko ? "글쓰기" : "New post"}
+              </Button>
+            ) : (
+              <span className="ml-auto hidden rounded-md border border-border bg-surface-muted px-2.5 py-1.5 text-xs font-semibold text-muted sm:inline-flex">
+                {ko ? "읽기 전용" : "Read-only"}
+              </span>
+            )}
           </div>
 
-          {/* 모바일: 정렬 필터(왼쪽) + 글 쓰기(오른쪽 끝)를 툴바 아래·피드 위에 표시 */}
           <div className="flex items-center gap-1.5 sm:hidden">
             {sortButtons}
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<Plus />}
-              onClick={() => router.push("/community/new")}
-              className="ml-auto shrink-0"
-            >
-              {ko ? "글 쓰기" : "New post"}
-            </Button>
+            {!readOnly ? (
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Plus />}
+                onClick={() => router.push("/community/new")}
+                className="ml-auto shrink-0"
+              >
+                {ko ? "글쓰기" : "New post"}
+              </Button>
+            ) : (
+              <span className="ml-auto rounded-md border border-border bg-surface-muted px-2.5 py-1.5 text-xs font-semibold text-muted">
+                {ko ? "읽기 전용" : "Read-only"}
+              </span>
+            )}
           </div>
 
           {feedList}
@@ -503,7 +488,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
             {users.length === 0 ? (
               <div className="py-6 text-center">
                 <p className="text-xs text-muted">
-                  {ko ? "아직 표시할 멤버가 없어요." : "No members to show yet."}
+                  {ko ? "아직 표시할 멤버가 없습니다." : "No members to show yet."}
                 </p>
               </div>
             ) : null}
@@ -525,7 +510,7 @@ export function CommunityPage({ userId }: { userId?: string }) {
                         : `${communityUser.subscriberCount} followers · ${communityUser.followingCount} following`}
                     </p>
                   </div>
-                  {!communityUser.isMe ? (
+                  {!communityUser.isMe && !readOnly ? (
                     <Button
                       variant={communityUser.isSubscribed ? "secondary" : "primary"}
                       size="sm"

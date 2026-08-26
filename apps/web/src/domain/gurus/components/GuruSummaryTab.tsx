@@ -2,10 +2,13 @@
 
 import { ListChecks, Percent, Repeat2 } from "lucide-react";
 
-import type { GuruDetail } from "@/domain/gurus/types";
+import type { GuruDetail, GuruHolding } from "@/domain/gurus/types";
 import {
   DetailInfoBlock,
+  formatMoney,
+  formatPercent,
   formatGuruCardMoney,
+  holdingLabel,
   HoldingRows,
   localizedQuarterLabel,
   number,
@@ -18,6 +21,11 @@ export function GuruSummaryTab({
   detail: GuruDetail;
   ko: boolean;
 }) {
+  const topHoldings = [...detail.holdings]
+    .filter((holding) => holding.weight > 0)
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 10);
+
   return (
     <>
       <section className="grid gap-3 lg:grid-cols-[1.15fr_1fr]">
@@ -133,6 +141,152 @@ export function GuruSummaryTab({
           ko={ko}
         />
       </div>
+
+      <TopHoldingsList holdings={topHoldings} ko={ko} />
     </>
+  );
+}
+
+function TopHoldingsList({
+  holdings,
+  ko,
+}: {
+  holdings: GuruHolding[];
+  ko: boolean;
+}) {
+  return (
+    <section className="rounded-lg bg-surface-muted p-4">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h3 className="text-base font-semibold">
+            {ko ? "보유종목 Top 10" : "Top 10 holdings"}
+          </h3>
+          <p className="mt-1 text-xs text-muted">
+            {ko
+              ? "최근 13F 기준 현재 비중이 높은 종목입니다."
+              : "Largest current positions from the latest 13F filing."}
+          </p>
+        </div>
+        <p className="text-xs font-semibold text-muted">
+          {ko ? "비중순" : "Sorted by weight"}
+        </p>
+      </div>
+
+      {holdings.length ? (
+        <>
+          <div className="mt-4 grid gap-2 md:hidden">
+            {holdings.map((item, index) => (
+              <article
+                key={item.id}
+                className="rounded-md border border-border bg-surface p-3"
+              >
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-primary">
+                      #{index + 1}
+                    </p>
+                    <p className="mt-1 truncate font-semibold">
+                      {holdingLabel(item)}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      {item.issuerName}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-semibold text-foreground">
+                      {item.weight.toFixed(2)}%
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      {formatMoney(item.value)}
+                    </p>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="mt-4 hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead className="border-b border-border text-xs text-muted">
+                <tr>
+                  <th className="px-2 py-3">{ko ? "순위" : "Rank"}</th>
+                  <th className="px-2 py-3">{ko ? "종목" : "Holding"}</th>
+                  <th className="px-2 py-3 text-right">
+                    {ko ? "보유량" : "Shares"}
+                  </th>
+                  <th className="px-2 py-3 text-right">
+                    {ko ? "평가액" : "Value"}
+                  </th>
+                  <th className="px-2 py-3 text-right">
+                    {ko ? "비중" : "Weight"}
+                  </th>
+                  <th className="px-2 py-3 text-right">
+                    {ko ? "비중 변화" : "Change"}
+                  </th>
+                  <th className="px-2 py-3 text-right">
+                    {ko ? "수익률" : "Return"}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {holdings.map((item, index) => (
+                  <tr key={item.id} className="hover:bg-surface">
+                    <td className="px-2 py-3 font-semibold text-primary">
+                      #{index + 1}
+                    </td>
+                    <td className="px-2 py-3">
+                      <p className="font-semibold">
+                        {holdingLabel(item)}
+                        {item.putCall
+                          ? ` ${item.putCall.toUpperCase()}`
+                          : ""}
+                      </p>
+                      <p className="max-w-72 truncate text-xs text-muted">
+                        {item.issuerName}
+                      </p>
+                    </td>
+                    <td className="px-2 py-3 text-right">
+                      {number.format(item.shares)}
+                    </td>
+                    <td className="px-2 py-3 text-right">
+                      {formatMoney(item.value)}
+                    </td>
+                    <td className="px-2 py-3 text-right font-semibold">
+                      {item.weight.toFixed(2)}%
+                    </td>
+                    <td
+                      className={`px-2 py-3 text-right font-semibold ${
+                        item.weightChange >= 0
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      {formatPercent(item.weightChange)}
+                    </td>
+                    <td
+                      className={`px-2 py-3 text-right font-semibold ${
+                        item.returnPercent === null
+                          ? "text-muted"
+                          : item.returnPercent >= 0
+                            ? "text-green-600"
+                            : "text-red-600"
+                      }`}
+                    >
+                      {item.returnPercent === null
+                        ? "-"
+                        : formatPercent(item.returnPercent)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <p className="mt-4 rounded-md border border-border bg-surface px-3 py-8 text-center text-sm font-semibold text-muted">
+          {ko ? "보유종목 데이터가 없습니다." : "No holdings available."}
+        </p>
+      )}
+    </section>
   );
 }

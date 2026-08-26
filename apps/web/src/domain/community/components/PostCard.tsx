@@ -1,7 +1,15 @@
 "use client";
 
 import { Dispatch, MouseEvent, SetStateAction, useState } from "react";
-import { Bookmark, ChevronRight, Heart, Lock, MessageCircle, Pencil, Trash2 } from "lucide-react";
+import {
+  Bookmark,
+  ChevronRight,
+  Heart,
+  Lock,
+  MessageCircle,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { RichContent } from "@/common/components/RichContent";
 import { Button } from "@/common/components/Button";
 import { cn } from "@/common/utils/cn";
@@ -37,6 +45,7 @@ export function PostCard({
   onOpenPost,
   onAuthorClick,
   canModerate = false,
+  readOnly = false,
 }: {
   post: CommunityPost;
   currentUserId: string;
@@ -62,13 +71,12 @@ export function PostCard({
   onOpenPost?: (postId: string) => void;
   onAuthorClick?: (userId: string) => void;
   canModerate?: boolean;
+  readOnly?: boolean;
 }) {
   const ko = usePreferencesStore((s) => s.language) === "ko";
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const html = getPostHtml(post);
   const showFull = forceExpanded || html.length < 1200;
-  // 리스트(카드) 모드에서는 onOpenPost가 있어 카운트만 보여주고,
-  // 상세 모드(onOpenPost 없음)에서만 좋아요/댓글 인터랙션을 허용한다.
   const interactive = !onOpenPost;
   const edited =
     new Date(post.updatedAt).getTime() - new Date(post.createdAt).getTime() > 1000;
@@ -112,7 +120,7 @@ export function PostCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="line-clamp-2 text-xl font-semibold leading-snug text-foreground sm:truncate sm:text-2xl">
-            {post.title || (ko ? "제목없음" : "Untitled")}
+            {post.title || (ko ? "제목 없음" : "Untitled")}
           </h3>
           {!post.isPublic ? (
             <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-surface-subtle px-2 py-0.5 text-[11px] font-semibold text-muted">
@@ -122,7 +130,6 @@ export function PostCard({
           ) : null}
           {forceExpanded ? (
             <>
-              {/* 상세: 제목 아래 날짜, 그리고 프로필+이름은 별도 버튼으로 분리(유저 피드로 이동) */}
               <p className="mt-1.5 text-[11px] font-semibold text-muted sm:text-xs">
                 {dateLabel}
                 {edited ? (
@@ -180,7 +187,8 @@ export function PostCard({
             </div>
           )}
         </div>
-        {post.author.id === currentUserId || canModerate ? (
+
+        {!readOnly && (post.author.id === currentUserId || canModerate) ? (
           <div className="flex gap-1">
             {post.author.id === currentUserId ? (
               <Button
@@ -253,7 +261,7 @@ export function PostCard({
       ) : null}
 
       <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
-        {interactive ? (
+        {interactive && !readOnly ? (
           <Button
             variant="secondary"
             size="sm"
@@ -281,7 +289,7 @@ export function PostCard({
             {post.likeCount}
           </span>
         )}
-        {onBookmark ? (
+        {onBookmark && !readOnly ? (
           <Button
             variant="secondary"
             size="sm"
@@ -294,7 +302,8 @@ export function PostCard({
           >
             {ko ? "저장" : "Save"}
           </Button>
-        ) : null}        <span className="inline-flex h-9 items-center gap-1.5 text-sm font-semibold text-muted [&_svg]:size-[1.15em]">
+        ) : null}
+        <span className="inline-flex h-9 items-center gap-1.5 text-sm font-semibold text-muted [&_svg]:size-[1.15em]">
           <MessageCircle />
           {post.commentCount}
         </span>
@@ -307,32 +316,40 @@ export function PostCard({
             <span className="text-muted">{post.commentCount}</span>
           </h4>
 
-          <div className="mt-4 flex gap-2">
-            <input
-              value={commentDrafts[post.id] ?? ""}
-              onChange={(event) =>
-                setCommentDrafts((drafts) => ({
-                  ...drafts,
-                  [post.id]: event.target.value,
-                }))
-              }
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  onComment(post.id);
+          {readOnly ? (
+            <p className="mt-3 rounded-md border border-border bg-surface-muted px-3 py-2 text-xs font-semibold text-muted">
+              {ko
+                ? "테스트 계정은 피드에서 댓글 작성 등 변경 작업이 제한됩니다."
+                : "The demo account can read the feed but cannot write comments."}
+            </p>
+          ) : (
+            <div className="mt-4 flex gap-2">
+              <input
+                value={commentDrafts[post.id] ?? ""}
+                onChange={(event) =>
+                  setCommentDrafts((drafts) => ({
+                    ...drafts,
+                    [post.id]: event.target.value,
+                  }))
                 }
-              }}
-              placeholder={ko ? "댓글을 남겨보세요" : "Write a comment"}
-              className="h-11 flex-1 rounded-md border border-border-strong bg-surface px-3 text-base outline-none transition-colors focus:border-primary sm:h-10 sm:text-sm"
-            />
-            <Button
-              variant="primary"
-              onClick={() => onComment(post.id)}
-              className="shrink-0"
-            >
-              {ko ? "등록" : "Post"}
-            </Button>
-          </div>
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    onComment(post.id);
+                  }
+                }}
+                placeholder={ko ? "댓글을 남겨보세요" : "Write a comment"}
+                className="h-11 flex-1 rounded-md border border-border-strong bg-surface px-3 text-base outline-none transition-colors focus:border-primary sm:h-10 sm:text-sm"
+              />
+              <Button
+                variant="primary"
+                onClick={() => onComment(post.id)}
+                className="shrink-0"
+              >
+                {ko ? "등록" : "Post"}
+              </Button>
+            </div>
+          )}
 
           {post.comments.length ? (
             <div className="mt-5 space-y-5">
@@ -348,6 +365,7 @@ export function PostCard({
                   onEditComment={onEditComment}
                   onDeleteComment={onDeleteComment}
                   canModerate={canModerate}
+                  readOnly={readOnly}
                   onAuthorClick={onAuthorClick}
                 />
               ))}

@@ -44,7 +44,7 @@ export function AuthForm({
           }`}
         >
           <ShieldCheck size={15} />
-          Sign in
+          로그인
         </button>
         <button
           type="button"
@@ -56,17 +56,17 @@ export function AuthForm({
           }`}
         >
           <UserPlus size={15} />
-          Request
+          가입 요청
         </button>
       </div>
 
       <form onSubmit={submitAuth} className="mt-4 space-y-3">
         {mode === "register" ? (
-          <TextInput label="Nickname" value={nickname} setValue={setNickname} />
+          <TextInput label="닉네임" value={nickname} setValue={setNickname} />
         ) : null}
-        <TextInput label="Email" value={email} setValue={setEmail} type="email" />
+        <TextInput label="이메일" value={email} setValue={setEmail} type="email" />
         <TextInput
-          label="Password"
+          label="비밀번호"
           value={password}
           setValue={setPassword}
           type="password"
@@ -80,7 +80,7 @@ export function AuthForm({
               onChange={(event) => setRememberEmail(event.target.checked)}
               className="size-3.5 cursor-pointer accent-primary"
             />
-            <span>email 기억</span>
+            <span>이메일 기억</span>
           </label>
         ) : null}
         <Button
@@ -90,7 +90,7 @@ export function AuthForm({
           loading={loading}
           leftIcon={mode === "register" ? <UserPlus /> : <ShieldCheck />}
         >
-          {mode === "register" ? "Request access" : "Sign in"}
+          {mode === "register" ? "가입 요청" : "로그인"}
         </Button>
       </form>
     </>

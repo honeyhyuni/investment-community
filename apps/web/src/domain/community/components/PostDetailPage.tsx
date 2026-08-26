@@ -6,6 +6,7 @@ import { ChevronLeft } from "lucide-react";
 import { Notice } from "@/common/components/Notice";
 import { Button } from "@/common/components/Button";
 import { apiRequest } from "@/common/lib/api";
+import { isDemoUser } from "@/common/lib/demo-user";
 import { useMarketDataStore } from "@/common/stores/market-data";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
@@ -80,6 +81,7 @@ export function PostDetailPage({ postId }: { postId: string }) {
   }
 
   const post = posts[0];
+  const readOnly = isDemoUser(user);
 
   return (
     <>
@@ -137,6 +139,7 @@ export function PostDetailPage({ postId }: { postId: string }) {
               forceExpanded
               enableImagePreview
               canModerate={user.role === "ADMIN"}
+              readOnly={readOnly}
               onAuthorClick={(nextUserId) => router.push(`/community/users/${nextUserId}`)}
             />
           ) : null}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Notice } from "@/common/components/Notice";
 import { apiRequest, CommunityImageUpload, deleteCommunityImage } from "@/common/lib/api";
+import { isDemoUser } from "@/common/lib/demo-user";
 import {
   NEW_POST_TEMPLATE,
   getPostHtml,
@@ -54,6 +55,7 @@ export function PostEditorPage({ postId }: { postId?: string }) {
   const router = useRouter();
   const accessToken = useSessionStore((s) => s.accessToken);
   const userId = useSessionStore((s) => s.user?.id ?? null);
+  const user = useSessionStore((s) => s.user);
   const usStocks = useMarketDataStore((s) => s.usStocks);
   const usSymbols = useMarketDataStore((s) => s.usSymbols);
   const krStocks = useMarketDataStore((s) => s.krStocks);
@@ -78,6 +80,7 @@ export function PostEditorPage({ postId }: { postId?: string }) {
   const [draftRestored, setDraftRestored] = useState(false);
   const [draftError, setDraftError] = useState("");
   const [uploadedImages, setUploadedImages] = useState<CommunityImageUpload[]>([]);
+  const readOnly = isDemoUser(user);
 
   const stockSymbols = useMemo(() => [...krSymbols, ...usSymbols], [krSymbols, usSymbols]);
   const draftKey = useMemo(
@@ -102,10 +105,14 @@ export function PostEditorPage({ postId }: { postId?: string }) {
   }, []);
 
   useEffect(() => {
+    if (readOnly) {
+      router.replace("/community");
+      return;
+    }
     if (accessToken) {
       void loadStockSymbols(accessToken);
     }
-  }, [accessToken, loadStockSymbols]);
+  }, [accessToken, loadStockSymbols, readOnly, router]);
 
   // 수정 모드: 기존 글을 불러와 에디터에 prefill
   const loadExistingPost = useCallback(async (token: string, targetId: string, key: string) => {
@@ -216,7 +223,7 @@ export function PostEditorPage({ postId }: { postId?: string }) {
       : [];
     const plainContent = htmlToPlainText(html).slice(0, 50000);
 
-    if (!accessToken || (!title.trim() && contentBlocks.length === 0)) {
+    if (readOnly || !accessToken || (!title.trim() && contentBlocks.length === 0)) {
       return;
     }
 
