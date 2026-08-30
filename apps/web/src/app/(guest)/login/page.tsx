@@ -13,10 +13,6 @@ import {
   X,
 } from "lucide-react";
 import { SessionLoading } from "@/common/components/SessionLoading";
-import {
-  DEMO_LOGIN_EMAIL,
-  DEMO_LOGIN_PASSWORD,
-} from "@/common/lib/demo-user";
 import { useSessionStore } from "@/common/stores/session";
 import { AuthPanel } from "@/domain/auth/components/AuthPanel";
 import { AuthMode } from "@/domain/auth/types";
@@ -394,15 +390,6 @@ function LoginIntro() {
             </button>
           );
         })}
-      </div>
-
-      <div className="mt-4 rounded-lg border border-border bg-surface-muted p-3 text-sm text-muted">
-        <span className="font-semibold text-foreground">테스트 계정</span>{" "}
-        {DEMO_LOGIN_EMAIL} / {DEMO_LOGIN_PASSWORD}
-        <p className="mt-1 text-xs leading-5">
-          테스트 계정은 포트폴리오 확인용이며, 피드에서는 읽기 전용으로
-          동작합니다.
-        </p>
       </div>
 
       {modalFeature ? (
