@@ -7,6 +7,7 @@ import { Notice } from "@/common/components/Notice";
 import { Button } from "@/common/components/Button";
 import { SectionHeader } from "@/common/components/SectionHeader";
 import { TextInput } from "@/common/components/TextInput";
+import { isDemoUser } from "@/common/lib/demo-user";
 import { useSessionStore } from "@/common/stores/session";
 import { usePreferencesStore } from "@/common/stores/preferences";
 import { apiRequest, User, UserRole, UserStatus } from "@/common/lib/api";
@@ -18,6 +19,7 @@ export function ProfilePage() {
   const user = useSessionStore((s) => s.user);
   const setUser = useSessionStore((s) => s.setUser);
   const ko = usePreferencesStore((s) => s.language) === "ko";
+  const readOnly = isDemoUser(user);
 
   const [nicknameDraft, setNicknameDraft] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -37,6 +39,14 @@ export function ProfilePage() {
     event.preventDefault();
 
     if (!accessToken) {
+      return;
+    }
+    if (readOnly) {
+      setError(
+        ko
+          ? "테스트 계정은 프로필을 수정할 수 없습니다."
+          : "The demo account cannot edit its profile.",
+      );
       return;
     }
 
@@ -67,6 +77,14 @@ export function ProfilePage() {
   async function changePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!accessToken) {
+      return;
+    }
+    if (readOnly) {
+      setError(
+        ko
+          ? "테스트 계정은 비밀번호를 변경할 수 없습니다."
+          : "The demo account cannot change its password.",
+      );
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -118,6 +136,7 @@ export function ProfilePage() {
         loading={loading}
         message={message}
         error={error}
+        readOnly={readOnly}
         onSubmit={updateProfile}
         currentPassword={currentPassword}
         setCurrentPassword={setCurrentPassword}
@@ -141,6 +160,7 @@ function ProfilePanel({
   loading,
   message,
   error,
+  readOnly,
   onSubmit,
   currentPassword,
   setCurrentPassword,
@@ -159,6 +179,7 @@ function ProfilePanel({
   loading: boolean;
   message: string;
   error: string;
+  readOnly: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   currentPassword: string;
   setCurrentPassword: (value: string) => void;
@@ -182,6 +203,16 @@ function ProfilePanel({
       />
 
       <form onSubmit={onSubmit} className="mt-5 space-y-4">
+        {readOnly ? (
+          <Notice
+            info={
+              ko
+                ? "테스트 계정은 포트폴리오 확인용 계정으로, 프로필 수정과 비밀번호 변경이 제한됩니다."
+                : "The demo account is read-only for profile and password changes."
+            }
+          />
+        ) : null}
+
         <label className="block">
           <span className="text-sm font-medium text-foreground">
             {ko ? "닉네임" : "Nickname"}
@@ -193,7 +224,8 @@ function ProfilePanel({
             minLength={2}
             maxLength={24}
             required
-            className="mt-1 h-11 w-full rounded-md border border-border-strong bg-surface px-3 text-foreground outline-none transition-colors focus:border-primary"
+            disabled={readOnly}
+            className="mt-1 h-11 w-full rounded-md border border-border-strong bg-surface px-3 text-foreground outline-none transition-colors focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
           />
         </label>
 
@@ -207,7 +239,13 @@ function ProfilePanel({
           />
         </div>
 
-        <Button type="submit" variant="primary" leftIcon={<UserPen />} loading={loading}>
+        <Button
+          type="submit"
+          variant="primary"
+          leftIcon={<UserPen />}
+          loading={loading}
+          disabled={readOnly}
+        >
           {ko ? "프로필 저장" : "Save profile"}
         </Button>
       </form>
@@ -225,6 +263,7 @@ function ProfilePanel({
           setValue={setCurrentPassword}
           type="password"
           minLength={8}
+          disabled={readOnly}
         />
         <TextInput
           label={ko ? "새 비밀번호" : "New password"}
@@ -232,6 +271,7 @@ function ProfilePanel({
           setValue={setNewPassword}
           type="password"
           minLength={8}
+          disabled={readOnly}
         />
         <TextInput
           label={ko ? "새 비밀번호 확인" : "Confirm new password"}
@@ -239,8 +279,9 @@ function ProfilePanel({
           setValue={setConfirmPassword}
           type="password"
           minLength={8}
+          disabled={readOnly}
         />
-        <Button type="submit" variant="primary" loading={loading}>
+        <Button type="submit" variant="primary" loading={loading} disabled={readOnly}>
           {ko ? "비밀번호 변경" : "Change password"}
         </Button>
       </form>

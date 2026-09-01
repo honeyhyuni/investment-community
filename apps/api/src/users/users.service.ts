@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -18,6 +19,8 @@ type CreateUserInput = {
   passwordHash: string;
   nickname: string;
 };
+
+const DEMO_READONLY_EMAIL = 'test@test.com';
 
 @Injectable()
 export class UsersService {
@@ -138,6 +141,7 @@ export class UsersService {
 
   async updateNickname(id: string, nickname: string): Promise<User> {
     const user = await this.findById(id);
+    this.assertMutableUser(user);
     user.nickname = nickname.trim();
     return this.usersRepository.save(user);
   }
@@ -148,6 +152,7 @@ export class UsersService {
     newPassword: string,
   ): Promise<void> {
     const user = await this.findById(id);
+    this.assertMutableUser(user);
     const matches = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!matches) {
       throw new UnauthorizedException('Current password is incorrect.');
@@ -163,5 +168,11 @@ export class UsersService {
     refreshTokenHash: string | null,
   ): Promise<void> {
     await this.usersRepository.update(id, { refreshTokenHash });
+  }
+
+  private assertMutableUser(user: Pick<User, 'email'>): void {
+    if (user.email.toLowerCase() === DEMO_READONLY_EMAIL) {
+      throw new ForbiddenException('Demo account profile is read-only.');
+    }
   }
 }

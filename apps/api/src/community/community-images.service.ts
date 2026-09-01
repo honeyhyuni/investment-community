@@ -15,6 +15,7 @@ import { UserStatus } from '../users/user-status.enum';
 import { User } from '../users/user.entity';
 import { CommunityImage } from './community-image.entity';
 import { CommunityPost } from './community-post.entity';
+import { assertNotDemoReadonlyUser } from './demo-readonly';
 
 export const COMMUNITY_IMAGE_URL_PREFIX = '/uploads/community/';
 export const MAX_COMMUNITY_IMAGES = 20;
@@ -59,6 +60,7 @@ export class CommunityImagesService {
     if (!owner || owner.status !== UserStatus.Approved) {
       throw new NotFoundException('Approved user not found.');
     }
+    assertNotDemoReadonlyUser(owner);
 
     const extension = extname(file.originalname).toLowerCase();
     let metadata: sharp.Metadata;
@@ -116,6 +118,7 @@ export class CommunityImagesService {
     if (image.owner.id !== userId) {
       throw new ForbiddenException('You do not own this image.');
     }
+    assertNotDemoReadonlyUser(image.owner);
     await this.imagesRepository.remove(image);
     await this.removeFile(image.filename);
     return { ok: true };

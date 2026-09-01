@@ -35,6 +35,7 @@ function CommentRow({
   small = false,
   currentUserId,
   canModerate,
+  readOnly,
   onEditComment,
   onDeleteComment,
   onAuthorClick,
@@ -44,6 +45,7 @@ function CommentRow({
   small?: boolean;
   currentUserId: string;
   canModerate: boolean;
+  readOnly: boolean;
   onEditComment: (commentId: string, content: string) => void;
   onDeleteComment: (commentId: string) => void;
   onAuthorClick?: (userId: string) => void;
@@ -68,7 +70,7 @@ function CommentRow({
               {formatCommentTime(comment.createdAt, ko)}
             </span>
           </div>
-          {isOwn || canModerate ? (
+          {!readOnly && (isOwn || canModerate) ? (
             <div className="flex shrink-0 gap-0.5">
               {isOwn ? (
                 <Button
@@ -112,6 +114,7 @@ export function CommentThread({
   onEditComment,
   onDeleteComment,
   canModerate = false,
+  readOnly = false,
   onAuthorClick,
 }: {
   postId: string;
@@ -123,6 +126,7 @@ export function CommentThread({
   onEditComment: (commentId: string, content: string) => void;
   onDeleteComment: (commentId: string) => void;
   canModerate?: boolean;
+  readOnly?: boolean;
   onAuthorClick?: (userId: string) => void;
 }) {
   const ko = usePreferencesStore((s) => s.language) === "ko";
@@ -138,20 +142,23 @@ export function CommentThread({
       comment={comment}
       currentUserId={currentUserId}
       canModerate={canModerate}
+      readOnly={readOnly}
       onEditComment={onEditComment}
       onDeleteComment={onDeleteComment}
       onAuthorClick={onAuthorClick}
     >
-      <div className="mt-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setReplying((value) => !value)}
-          className="h-7 px-2.5 text-xs text-muted sm:h-7"
-        >
-          {replying ? (ko ? "취소" : "Cancel") : ko ? "답글 달기" : "Reply"}
-        </Button>
-      </div>
+      {!readOnly ? (
+        <div className="mt-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setReplying((value) => !value)}
+            className="h-7 px-2.5 text-xs text-muted sm:h-7"
+          >
+            {replying ? (ko ? "취소" : "Cancel") : ko ? "답글 쓰기" : "Reply"}
+          </Button>
+        </div>
+      ) : null}
 
       {comment.replies.length > 0 ? (
         <div className="mt-3 space-y-3 border-l border-border pl-3">
@@ -162,6 +169,7 @@ export function CommentThread({
               small
               currentUserId={currentUserId}
               canModerate={canModerate}
+              readOnly={readOnly}
               onEditComment={onEditComment}
               onDeleteComment={onDeleteComment}
               onAuthorClick={onAuthorClick}
@@ -170,7 +178,7 @@ export function CommentThread({
         </div>
       ) : null}
 
-      {replying ? (
+      {!readOnly && replying ? (
         <div className="mt-3 flex gap-2">
           <input
             autoFocus

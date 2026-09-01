@@ -17,6 +17,7 @@ import { PostLike } from './post-like.entity';
 import { PostBookmark } from './post-bookmark.entity';
 import { UserSubscription } from './user-subscription.entity';
 import { COMMUNITY_IMAGE_URL_PREFIX, CommunityImagesService } from './community-images.service';
+import { assertNotDemoReadonlyUser } from './demo-readonly';
 
 type FeedScope = 'all' | 'subscribed' | 'mine' | 'bookmarks' | 'user';
 
@@ -210,6 +211,7 @@ export class CommunityService {
     }
 
     const author = await this.findApprovedUser(currentUserId);
+    assertNotDemoReadonlyUser(author);
     const post = await this.postsRepository.save(
       this.postsRepository.create({
         author,
@@ -248,6 +250,7 @@ export class CommunityService {
   ): Promise<CommunityPostDto> {
     const post = await this.findPost(postId);
     this.assertOwner(post.author.id, currentUserId);
+    assertNotDemoReadonlyUser(post.author);
     const previousHtml = this.resolveContentBlocks(post).map((block) => block.text ?? '').join('');
     const contentBlocks = this.normalizeContentBlocks(input.contentBlocks ?? []);
     const html = contentBlocks.map((block) => block.text ?? '').join('');
@@ -273,6 +276,8 @@ export class CommunityService {
     postId: string,
   ): Promise<{ ok: true }> {
     const post = await this.findPost(postId);
+    const currentUser = await this.findApprovedUser(currentUserId);
+    assertNotDemoReadonlyUser(currentUser);
     await this.assertOwnerOrAdmin(post.author.id, currentUserId);
     await this.communityImages.removeForPost(post.id);
     await this.postsRepository.remove(post);
@@ -308,6 +313,7 @@ export class CommunityService {
       this.findApprovedUser(currentUserId),
       this.findPost(postId),
     ]);
+    assertNotDemoReadonlyUser(user);
     this.assertVisible(post, currentUserId);
     const existing = await this.likesRepository.findOne({
       where: { post: { id: post.id }, user: { id: user.id } },
@@ -337,6 +343,7 @@ export class CommunityService {
       this.findApprovedUser(currentUserId),
       this.findPost(postId),
     ]);
+    assertNotDemoReadonlyUser(user);
     this.assertVisible(post, currentUserId);
     const existing = await this.bookmarksRepository.findOne({
       where: { post: { id: post.id }, user: { id: user.id } },
@@ -359,6 +366,7 @@ export class CommunityService {
       this.findApprovedUser(currentUserId),
       this.findPost(postId),
     ]);
+    assertNotDemoReadonlyUser(author);
     this.assertVisible(post, currentUserId);
     const parent = input.parentId
       ? await this.commentsRepository.findOne({
@@ -391,6 +399,8 @@ export class CommunityService {
     content: string,
   ): Promise<CommunityPostDto> {
     const comment = await this.findComment(commentId);
+    const currentUser = await this.findApprovedUser(currentUserId);
+    assertNotDemoReadonlyUser(currentUser);
     this.assertOwner(comment.author.id, currentUserId);
     if (!content?.trim()) {
       throw new BadRequestException('Comment content is required.');
@@ -405,6 +415,8 @@ export class CommunityService {
     commentId: string,
   ): Promise<CommunityPostDto> {
     const comment = await this.findComment(commentId);
+    const currentUser = await this.findApprovedUser(currentUserId);
+    assertNotDemoReadonlyUser(currentUser);
     await this.assertOwnerOrAdmin(comment.author.id, currentUserId);
     const post = comment.post;
     await this.commentsRepository.remove(comment);
@@ -495,6 +507,7 @@ export class CommunityService {
       this.findApprovedUser(currentUserId),
       this.findApprovedUser(creatorId),
     ]);
+    assertNotDemoReadonlyUser(subscriber);
     const existing = await this.subscriptionsRepository.findOne({
       where: { subscriber: { id: subscriber.id }, creator: { id: creator.id } },
     });

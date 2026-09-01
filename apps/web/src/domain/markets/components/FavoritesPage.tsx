@@ -537,7 +537,8 @@ function PortfolioSection({
   const totalProfitAmount = totalValue - totalCost;
   const totalProfitRate =
     totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : null;
-  const comparisonPortfolio = portfolios[0] ?? null;
+  const comparisonPortfolio = selectedPortfolios[0] ?? null;
+  const selectedPortfolioParam = useMemo(() => selectedIds.join(','), [selectedIds]);
   const emptyPortfolioTitle =
     selectedPortfolios.length === 0
       ? language === 'ko'
@@ -600,6 +601,9 @@ function PortfolioSection({
     }
 
     const params = new URLSearchParams({ period: performancePeriod });
+    if (selectedPortfolioParam) {
+      params.set('portfolioIds', selectedPortfolioParam);
+    }
     if (customCompareSymbols.length) {
       params.set('symbols', customCompareSymbols.map((item) => item.key).join(','));
     }
@@ -624,7 +628,7 @@ function PortfolioSection({
     return () => {
       cancelled = true;
     };
-  }, [accessToken, comparisonPortfolio, customCompareSymbols, performancePeriod]);
+  }, [accessToken, comparisonPortfolio, customCompareSymbols, performancePeriod, selectedPortfolioParam]);
 
   function addCompareSymbol(symbol: StockSymbol) {
     const normalized = normalizeCompareSymbol(symbol);
@@ -1388,6 +1392,7 @@ function PortfolioPerformanceChart({
 }) {
   const customColors = ['#0ea5e9', '#ec4899', '#84cc16', '#14b8a6', '#f97316', '#64748b'];
   const series = [
+    { key: 'portfolio', label: language === 'ko' ? '내 포트폴리오' : 'My portfolio', color: '#2563eb', removable: false },
     { key: 'sp500', label: 'S&P 500', color: '#16a34a', removable: false },
     { key: 'nasdaq', label: 'Nasdaq', color: '#f59e0b', removable: false },
     { key: 'nasdaq100', label: 'Nasdaq 100', color: '#9333ea', removable: false },
@@ -1448,7 +1453,7 @@ function PortfolioPerformanceChart({
             {language === 'ko' ? '\uC131\uACFC \uC9C0\uD45C' : 'Performance indicators'}
           </h3>
           <p className="mt-1 text-xs text-muted">
-            {portfolioName || (language === 'ko' ? '\uAE30\uBCF8 \uC9C0\uC218\uC640 \uC120\uD0DD\uD55C \uD2F0\uCEE4\uB97C \uBE44\uAD50\uD569\uB2C8\uB2E4.' : 'Compare default indices with selected tickers.')}
+            {portfolioName || (language === 'ko' ? '내 포트폴리오와 주요 지수/종목을 비교합니다.' : 'Compare my portfolio with major indices and selected tickers.')}
           </p>
         </div>
         <SegmentedControl<string>

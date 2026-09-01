@@ -153,8 +153,9 @@ export class MarketsController {
     @Param('id') id: string,
     @Query('period') period = '1M',
     @Query('symbols') symbols = '',
+    @Query('portfolioIds') portfolioIds = '',
   ): Promise<PortfolioPerformancePoint[]> {
-    return this.marketsService.getPortfolioPerformance(user.sub, id, period, symbols);
+    return this.marketsService.getPortfolioPerformance(user.sub, id, period, symbols, portfolioIds);
   }
 
   @Post('portfolios')
